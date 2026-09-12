@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Epiphany",
+  "version": "0.1",
+  "permissions": [
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:7777/"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Pull into Epiphany"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.donmai.us/*",
+        "*://gelbooru.com/*",
+        "*://safebooru.org/*",
+        "*://yande.re/*",
+        "*://konachan.com/*",
+        "*://konachan.net/*",
+        "*://*.sankakucomplex.com/*",
+        "*://e621.net/*",
+        "*://e926.net/*",
+        "*://rule34.xxx/*",
+        "*://*.zerochan.net/*",
+        "*://anime-pictures.net/*",
+        "*://*.pixiv.net/*",
+        "*://x.com/*",
+        "*://twitter.com/*",
+        "*://*.deviantart.com/*",
+        "*://*.artstation.com/*",
+        "*://*.fanbox.cc/*",
+        "*://fantia.jp/*",
+        "*://bsky.app/*"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
+  ]
+}

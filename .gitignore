@@ -1,0 +1,5 @@
+node_modules/
+project/
+settings.json
+electron.log
+design/epiphany.html

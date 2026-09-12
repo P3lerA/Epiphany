@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #8C5A2B; } a:hover { color: #1A1A2E; }
+  </style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; padding: 44px 64px; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Instrument Sans', 'Segoe UI', 'Noto Sans SC', sans-serif; font-size: 14px; line-height: 1.5; overflow: hidden; display: flex; flex-direction: column; gap: 28px;">
+  <div style="display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 18px; border-bottom: 1px solid {{t.rule}};">
+    <div style="display: flex; align-items: baseline; gap: 10px;">
+      <div style="font-family: 'Instrument Serif', Georgia, serif; font-size: 46px; line-height: 1; letter-spacing: -0.01em;">Epiphany</div>
+      <div style="width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid {{t.fg}}; background: {{t.dot}};"></div>
+    </div>
+    <div style="display: flex; gap: 32px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500;">
+      <div style="padding-bottom: 3px; border-bottom: 1.5px solid {{t.link}};">Lobby</div>
+      <div style="color: {{t.muted}};">Settings</div>
+    </div>
+  </div>
+  <div style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 20px; color: {{t.muted}};">12 pictures</div>
+  <div style="columns: 4; column-gap: 18px;">
+    <sc-for list="{{items}}" as="item" hint-placeholder-count="12">
+      <div style="break-inside: avoid; margin-bottom: 18px; height: {{item.h}}px; background: {{item.c}};"></div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? false
+    const t = dark
+      ? { bg: '#0F0F1A', fg: '#EDE5D6', muted: '#8B7E5E', rule: '#2A2A3E', link: '#A48D6F', dot: '#EDE5D6' }
+      : { bg: '#F4ECD8', fg: '#1A1A2E', muted: '#7A6F5C', rule: '#D4CCB8', link: '#8C5A2B', dot: 'transparent' }
+    const tones = ['#C9B79C', '#5B6B7A', '#8C5A2B', '#A48D6F', '#3E4A5C', '#7A6F5C', '#D4CCB8', '#2A2A3E', '#B08968', '#6B7B8C', '#9C8C74', '#4A4A5E']
+    const hs = [130, 180, 100, 150, 190, 120, 140, 110, 170, 125, 100, 160]
+    return { t, items: tones.map((c, i) => ({ c, h: hs[i] })) }
+  }
+}
+</script>
+</body>
+</html>

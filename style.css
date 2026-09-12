@@ -1,0 +1,113 @@
+*, *::before, *::after { box-sizing: border-box }
+:where(h1, h2, p, ul) { margin: 0 }
+button { font: inherit; cursor: pointer }
+img { max-width: 100%; display: block }
+[hidden] { display: none !important }
+
+:root {
+  font: 14px/1.5 'Segoe UI Variable Text', 'Segoe UI', system-ui, 'Noto Sans SC', sans-serif;
+  color-scheme: light;
+  --bg: #F4ECD8; --fg: #1A1A2E; --muted: #7A6F5C; --rule: #D4CCB8; --link: #8C5A2B;
+  --toggle-fill: transparent; --toggle-preview: var(--fg);
+  --surface: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  --hover: color-mix(in srgb, var(--fg) 8%, transparent);
+  --tonal: color-mix(in srgb, var(--link) 22%, var(--bg));
+  --field: color-mix(in srgb, var(--fg) 7%, var(--bg));
+  --ease: cubic-bezier(0, 0, 0, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0F0F1A; --fg: #EDE5D6; --muted: #8B7E5E; --rule: #2A2A3E; --link: #A48D6F;
+    --toggle-fill: var(--fg); --toggle-preview: transparent;
+  }
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0F0F1A; --fg: #EDE5D6; --muted: #8B7E5E; --rule: #2A2A3E; --link: #A48D6F;
+  --toggle-fill: var(--fg); --toggle-preview: transparent;
+}
+
+body { background: var(--bg); color: var(--fg); margin: 0; height: 100vh; display: flex; flex-direction: column }
+html, body { overflow: hidden }
+a { color: inherit; text-decoration: none }
+
+header { display: flex; align-items: center; height: 4rem; flex: none; padding: 0 1.5rem }
+h1, h2 { font-family: 'Segoe UI Variable Display', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: -.01em }
+h1 { font-size: 1.5rem; font-weight: 700 }
+h1::before { content: 'Lobby' }
+h1[data-quote]::before { content: attr(data-quote); cursor: pointer }
+body:has(#lobby:target) h1[data-quote]::before { font: 500 1.15rem/1.4 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0 }
+body:has(#projects:target) h1::before { content: 'Projects' }
+body:has(#settings :target) h1::before { content: 'Settings' }
+nav { display: flex; gap: .25rem; margin-left: auto }
+nav a, main aside a { display: flex; align-items: center; gap: .75rem; padding: .5rem 1rem; border-radius: 6px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s, transform .1s }
+nav a:hover, main aside a:hover { color: var(--fg); background: var(--hover) }
+nav a:active, main aside a:active { transform: scale(.97) }
+body:has(#lobby:target) nav a[href="#lobby"], body:has(#projects:target) nav a[href="#projects"], main aside a.on { color: var(--fg); background: var(--tonal) }
+main aside a::before { content: ''; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; transition: background .15s }
+main aside a.on::before { background: currentColor }
+
+.fab { position: fixed; right: 1.5rem; bottom: 1.5rem; display: flex; gap: .5rem }
+.fab > * { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%; background: var(--surface); border: 1px solid var(--rule); color: var(--muted); transition: background .15s, color .15s, transform .1s }
+.fab > *:hover { color: var(--fg); background: var(--tonal) }
+.fab > *:active { transform: scale(.94) }
+body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var(--tonal); border-color: transparent }
+#filters { position: fixed; right: 1.5rem; bottom: 4.75rem; display: flex; flex-direction: column; gap: .5rem; min-width: 12rem; padding: .75rem 1rem; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; animation: rise .2s var(--ease) }
+#filters label { display: flex; align-items: center; gap: .6rem; cursor: pointer }
+.seg { display: flex; gap: 2px; padding: 2px; background: var(--field); border: 1px solid var(--rule); border-radius: 6px }
+.seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem; transition: background .15s, color .15s }
+.seg button:hover { color: var(--fg) }
+.seg button.on { color: var(--fg); background: var(--tonal) }
+.theme-toggle::before { content: ''; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--fg); background: var(--toggle-fill); transition: background .15s }
+.theme-toggle:hover::before { background: var(--toggle-preview) }
+
+main { flex: 1; min-height: 0; display: grid }
+section { grid-area: 1 / 1; display: none; opacity: 0; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-gutter: stable; scrollbar-color: var(--rule) transparent; padding: 0 1.5rem 1.5rem; transition: opacity .25s, transform .25s var(--ease), display .25s allow-discrete }
+section:target, #settings:has(:target) { opacity: 1; @starting-style { opacity: 0; transform: translateY(12px) } }
+section:hover { scrollbar-color: var(--muted) transparent }
+section:target { display: block }
+#settings:has(:target), #projects:target { display: grid }
+
+@keyframes rise { from { opacity: 0; transform: translateY(8px) scale(.98) } }
+#lobby h3, #pgrid h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 1rem 0 .5rem }
+#lobby > div:first-child h3, #pgrid > div:first-child h3 { margin-top: 0 }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem }
+.grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer; animation: rise .35s var(--ease) both; animation-delay: min(calc(var(--i, 0) * 20ms), 300ms); transition: transform .15s var(--ease) }
+.grid img:hover { transform: scale(1.02) }
+#lobby:empty::before, #pgrid:empty::before { content: 'Nothing here yet'; color: var(--muted) }
+#lobby > div:not(:has(img:not([hidden]))), #pgrid > div:not(:has(img:not([hidden]))) { display: none }
+
+dialog { width: min(92vw, 1100px); height: min(86vh, 760px); padding: 1rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); grid-template-columns: minmax(0, 1fr) 20rem; gap: 1rem; opacity: 0; transform: scale(.97); transition: opacity .2s, transform .2s var(--ease), display .2s allow-discrete, overlay .2s allow-discrete }
+dialog[open] { display: grid; opacity: 1; transform: none; @starting-style { opacity: 0; transform: scale(.97) } }
+dialog::backdrop { background: rgb(0 0 0 / .45); opacity: 0; transition: opacity .2s, display .2s allow-discrete, overlay .2s allow-discrete }
+dialog[open]::backdrop { opacity: 1; @starting-style { opacity: 0 } }
+dialog img { width: 100%; height: 100%; min-height: 0; object-fit: contain; border-radius: 4px }
+dialog aside { display: flex; flex-direction: column; gap: .75rem; min-height: 0 }
+dialog textarea { flex: 1; resize: none; line-height: 1.6 }
+.meta { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); overflow-wrap: anywhere }
+.meta a { color: var(--link) }
+.meta .src { color: var(--muted) }
+.meta .src b { color: var(--link); font-weight: 500 }
+
+#settings, #projects { gap: 2rem; align-content: start }
+#settings { grid-template-columns: 13rem minmax(0, 40rem) }
+#projects { grid-template-columns: 13rem minmax(0, 1fr) }
+main aside { display: flex; flex-direction: column; gap: .25rem; position: sticky; top: 0 }
+#plist input { margin-top: .5rem }
+#settings > div { display: none }
+#settings > div:target { display: block }
+h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem }
+.panel { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px }
+.panel li { display: flex; align-items: center; justify-content: space-between; min-height: 3.25rem; padding: .5rem 1rem .5rem 1.25rem; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; animation: rise .3s var(--ease) both; animation-delay: calc(var(--i, 0) * 25ms); transition: background .15s }
+#sites li:hover { background: var(--hover) }
+#sites label { display: flex; align-items: center; justify-content: space-between; flex: 1; cursor: pointer }
+input[type="checkbox"] { accent-color: var(--link); width: 1.1rem; height: 1.1rem; margin: 0 }
+.status, .hint { color: var(--muted); font-size: .85rem }
+.hint { margin-top: .75rem; font-family: Consolas, monospace }
+select, .panel input[type="text"], #plist input, #filters input[type="search"], textarea { font: inherit; color: inherit; background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: .4rem .75rem; outline: none; transition: border-color .15s, box-shadow .15s }
+select:hover, .panel input[type="text"]:hover, #plist input:hover, #filters input[type="search"]:hover, textarea:hover { border-color: var(--muted) }
+select:focus, .panel input[type="text"]:focus, #plist input:focus, #filters input[type="search"]:focus, textarea:focus { box-shadow: inset 0 -2px 0 var(--link) }
+#profile select { margin-bottom: 1rem }
+.panel input[type="text"] { flex: 1; max-width: 30rem; margin-left: 2rem }
+.panel span a { color: var(--link); font-size: .85rem; margin-left: .5rem }

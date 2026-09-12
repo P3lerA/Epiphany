@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #A48D6F; } a:hover { color: #EDE5D6; }
+  </style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; background: {{t.bg}}; color: {{t.fg}}; font-family: 'IBM Plex Sans', 'Segoe UI', 'Noto Sans SC', sans-serif; font-size: 13px; line-height: 1.5; overflow: hidden; display: flex; flex-direction: column;">
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 20px; border-bottom: 1px solid {{t.rule}}; font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="font-weight: 500;">Epiphany</div>
+      <div style="width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid {{t.fg}}; background: {{t.dot}};"></div>
+    </div>
+    <div style="display: flex; height: 44px;">
+      <div style="display: flex; align-items: center; padding: 0 16px; border-bottom: 2px solid {{t.link}};">Lobby</div>
+      <div style="display: flex; align-items: center; padding: 0 16px; color: {{t.muted}};">Settings</div>
+    </div>
+  </div>
+  <div style="flex: 1; padding: 20px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-content: start;">
+    <sc-for list="{{items}}" as="item" hint-placeholder-count="14">
+      <div style="aspect-ratio: 1; box-sizing: border-box; border: 1px solid {{t.rule}}; background: {{item.c}};"></div>
+    </sc-for>
+  </div>
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 28px; padding: 0 20px; border-top: 1px solid {{t.rule}}; font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 11px; color: {{t.muted}};">
+    <div style="display: flex; gap: 24px;">
+      <div>14 items</div>
+      <div>profile anima</div>
+    </div>
+    <div>127.0.0.1:7777</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true},"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true
+    const t = dark
+      ? { bg: '#0F0F1A', fg: '#EDE5D6', muted: '#8B7E5E', rule: '#2A2A3E', link: '#A48D6F', dot: '#EDE5D6' }
+      : { bg: '#F4ECD8', fg: '#1A1A2E', muted: '#7A6F5C', rule: '#D4CCB8', link: '#8C5A2B', dot: 'transparent' }
+    const tones = ['#C9B79C', '#5B6B7A', '#8C5A2B', '#A48D6F', '#3E4A5C', '#7A6F5C', '#D4CCB8', '#2A2A3E', '#B08968', '#6B7B8C', '#9C8C74', '#4A4A5E', '#C9B79C', '#3E4A5C']
+    return { t, items: tones.map(c => ({ c })) }
+  }
+}
+</script>
+</body>
+</html>

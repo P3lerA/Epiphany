@@ -1,0 +1,19 @@
+{
+  "artboards": [
+    { "file": "PaperLobby.dc.html", "title": "A · Paper — Lobby", "x": 0, "y": 0, "w": 1200, "h": 760 },
+    { "file": "DarkroomLobby.dc.html", "title": "B · Darkroom — Lobby", "x": 1320, "y": 0, "w": 1200, "h": 760 },
+    { "file": "Main.dc.html", "title": "C · Tonal — Lobby", "x": 2640, "y": 0, "w": 1200, "h": 760 },
+    { "file": "PosterLobby.dc.html", "title": "D · Poster — Lobby", "x": 3960, "y": 0, "w": 1200, "h": 760 },
+    { "file": "PaperSettings.dc.html", "title": "A · Paper — Settings", "x": 0, "y": 900, "w": 1200, "h": 760 },
+    { "file": "DarkroomSettings.dc.html", "title": "B · Darkroom — Settings", "x": 1320, "y": 900, "w": 1200, "h": 760 },
+    { "file": "TonalSettings.dc.html", "title": "C · Tonal — Settings", "x": 2640, "y": 900, "w": 1200, "h": 760 },
+    { "file": "PosterSettings.dc.html", "title": "D · Poster — Settings", "x": 3960, "y": 900, "w": 1200, "h": 760 }
+  ],
+  "annotations": [
+    { "id": "note-a", "x": 0, "y": -150, "w": 360, "text": "A · Paper\nShell 原味：衬线标题、细线、留白、不裁切的瀑布流。\n代价：Lobby 图多了会显得松。" },
+    { "id": "note-b", "x": 1320, "y": -150, "w": 360, "text": "B · Darkroom\n工具感：等宽字、细线格、底部状态栏、密网格。\n代价：冷，Shell 的温度没了。" },
+    { "id": "note-c", "x": 2640, "y": -150, "w": 360, "text": "C · Tonal\n现在这版修好层级：400 正文 / 500 标签 / 700 标题，圆点做侧栏指示。\n代价：还是 Material 的骨架。" },
+    { "id": "note-d", "x": 3960, "y": -150, "w": 360, "text": "D · Poster\n把「全部粗体」做到底：巨大字标、硬边、2px 黑线、图片无缝拼。\n代价：盯一天会累。" }
+  ],
+  "launch": { "view": "canvas" }
+}
