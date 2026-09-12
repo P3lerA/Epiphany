@@ -30,6 +30,10 @@ img { max-width: 100%; display: block }
 
 body { background: var(--bg); color: var(--fg); margin: 0; height: 100vh; display: flex; flex-direction: column }
 html, body { overflow: hidden }
+::-webkit-scrollbar { width: 10px; height: 10px }
+::-webkit-scrollbar-track { background: transparent }
+::-webkit-scrollbar-thumb { background: var(--rule); border: 2px solid transparent; background-clip: content-box; border-radius: 999px }
+::-webkit-scrollbar-thumb:hover { background-color: var(--muted) }
 a { color: inherit; text-decoration: none }
 
 header { display: flex; align-items: center; height: 4rem; flex: none; padding: 0 1.5rem }
@@ -55,6 +59,7 @@ main aside a.on::before { background: currentColor }
 body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var(--tonal); border-color: transparent }
 #filters { position: fixed; right: 1.5rem; bottom: 4.75rem; display: flex; flex-direction: column; gap: .5rem; min-width: 12rem; padding: .75rem 1rem; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; animation: rise .2s var(--ease) }
 #filters label { display: flex; align-items: center; gap: .6rem; cursor: pointer }
+#toast { position: fixed; left: 1.5rem; bottom: 1.5rem; padding: .5rem .9rem; background: var(--tonal); color: var(--fg); border-radius: 6px; font-size: .85rem; animation: rise .2s var(--ease) }
 .seg { display: flex; gap: 2px; padding: 2px; background: var(--field); border: 1px solid var(--rule); border-radius: 6px }
 .seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem; transition: background .15s, color .15s }
 .seg button:hover { color: var(--fg) }
@@ -63,9 +68,8 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .theme-toggle:hover::before { background: var(--toggle-preview) }
 
 main { flex: 1; min-height: 0; display: grid }
-section { grid-area: 1 / 1; display: none; opacity: 0; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-gutter: stable; scrollbar-color: var(--rule) transparent; padding: 0 1.5rem 1.5rem; transition: opacity .25s, transform .25s var(--ease), display .25s allow-discrete }
+section { grid-area: 1 / 1; display: none; opacity: 0; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 0 1.5rem 1.5rem; transition: opacity .25s, transform .25s var(--ease), display .25s allow-discrete }
 section:target, #settings:has(:target) { opacity: 1; @starting-style { opacity: 0; transform: translateY(12px) } }
-section:hover { scrollbar-color: var(--muted) transparent }
 section:target { display: block }
 #settings:has(:target), #projects:target { display: grid }
 
@@ -83,6 +87,12 @@ dialog[open] { display: grid; opacity: 1; transform: none; @starting-style { opa
 dialog::backdrop { background: rgb(0 0 0 / .45); opacity: 0; transition: opacity .2s, display .2s allow-discrete, overlay .2s allow-discrete }
 dialog[open]::backdrop { opacity: 1; @starting-style { opacity: 0 } }
 dialog img { width: 100%; height: 100%; min-height: 0; object-fit: contain; border-radius: 4px }
+dialog figure { position: relative; margin: 0; min-height: 0; display: flex }
+dialog { outline: none }
+.nav { position: absolute; top: 50%; transform: translateY(-50%); width: 2.25rem; height: 2.25rem; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid var(--rule); background: color-mix(in srgb, var(--bg) 85%, transparent); color: var(--fg); opacity: 0; transition: opacity .15s, background .15s }
+.prev { left: .5rem } .next { right: .5rem }
+figure:hover .nav { opacity: 1 }
+.nav:hover { background: var(--tonal) }
 dialog aside { display: flex; flex-direction: column; gap: .75rem; min-height: 0 }
 dialog textarea { flex: 1; resize: none; line-height: 1.6 }
 .meta { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); overflow-wrap: anywhere }

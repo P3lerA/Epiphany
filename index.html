@@ -30,7 +30,7 @@
     </aside>
     <div id="general">
       <h2>General</h2>
-      <ul class="panel"><li><span>quote</span><select></select></li></ul>
+      <ul class="panel"><li><span>quote</span><select name="quote"></select></li><li><span>lookup</span><input type="checkbox" name="lookup"></li></ul>
     </div>
     <div id="profile">
       <h2>Profile</h2>
@@ -59,8 +59,13 @@
     <div class="seg" data-name="rating"><button value="g">general</button><button value="gs">sensitive</button><button value="">any</button></div>
     <select name="site"><option value="">All sources</option></select>
   </div>
+  <div id="toast" hidden></div>
   <dialog id="preview">
-    <img>
+    <figure>
+      <button class="nav prev" aria-label="Previous"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <img>
+      <button class="nav next" aria-label="Next"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    </figure>
     <aside>
       <textarea spellcheck="false"></textarea>
       <div class="meta">

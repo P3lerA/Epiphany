@@ -23,18 +23,24 @@ const groupIn = (root, t, front) => {
 const add = (root, item, front) => {
   const grid = groupIn(root, item.time, front)
   const img = new Image()
-  img.src = item.url
+  img.src = item.thumb || item.url
+  img.loading = 'lazy'
+  img.decoding = 'async'
   img.title = item.src
   img.style.setProperty('--i', front ? 0 : grid.children.length)
-  img.onclick = () => preview(item)
+  img.onclick = () => preview(item, root)
   img.oncontextmenu = () => api.menu(item)
+  decorate(img, item)
+  grid[front ? 'prepend' : 'append'](img)
+}
+const decorate = (img, item) => {
+  img.item = item
   img.dataset.file = item.file
   img.dataset.q = `${item.artist || ''} ${item.tags || ''}`.toLowerCase()
   img.dataset.site = item.site
   if (item.ai) img.dataset.ai = 1
   img.dataset.rating = item.rating || 'g'
   hide(img)
-  grid[front ? 'prepend' : 'append'](img)
 }
 
 // View filters: never touch files, only what is shown. Kept per machine.
@@ -77,7 +83,26 @@ plist.onkeydown = e => {
 
 // Preview: big image + editable caption. Reusable for any item.
 const dlg = $('#preview')
-const preview = async item => {
+let cur // which grid the preview walks, and where it is
+const siblings = () => {
+  const imgs = [...cur.root.querySelectorAll('.grid img')].filter(i => !i.hidden)
+  const i = imgs.findIndex(x => x.dataset.file === cur.file)
+  return { prev: imgs[i - 1], next: imgs[i + 1] }
+}
+const step = d => { const n = d < 0 ? siblings().prev : siblings().next; if (n) preview(n.item) }
+dlg.querySelector('.prev').onclick = () => step(-1)
+dlg.querySelector('.next').onclick = () => step(1)
+dlg.tabIndex = -1
+dlg.onkeydown = e => {
+  if (e.target.tagName === 'TEXTAREA') return
+  if (e.key === 'ArrowLeft') step(-1)
+  if (e.key === 'ArrowRight') step(1)
+}
+const preview = async (item, root) => {
+  cur = { root: root ?? cur.root, file: item.file }
+  const { prev, next } = siblings()
+  dlg.querySelector('.prev').hidden = !prev
+  dlg.querySelector('.next').hidden = !next
   dlg.querySelector('img').src = item.url
   dlg.querySelector('.name').textContent = item.file.split(/[\\/]/).pop()
   dlg.querySelector('.time').textContent = new Date(item.time).toLocaleString()
@@ -92,7 +117,8 @@ const preview = async item => {
   const ta = dlg.querySelector('textarea')
   ta.value = await api.getCaption(item.file)
   ta.onchange = () => api.setCaption(item.file, ta.value)
-  dlg.showModal()
+  if (!dlg.open) dlg.showModal()
+  dlg.focus()
 }
 dlg.onclick = e => { if (e.target === dlg) dlg.close() }
 // Right-click a tag in the caption: the selection, or the comma-delimited piece under the caret.
@@ -113,11 +139,17 @@ api.onSearch(tag => {
 })
 
 const settingsUI = profiles => {
-  const qs = $('#general select')
+  const general = $('#general ul')
   api.quoteSources().then(names => {
-    qs.innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
+    general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
   })
-  qs.onchange = () => { s.quote = qs.value; save(); delete h1.dataset.quote; quote() }
+  general.querySelector('[name=lookup]').checked = s.lookup
+  general.onchange = e => {
+    s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value
+    save()
+    if (e.target.name === 'quote') { delete h1.dataset.quote; quote() }
+  }
+  stagger(general)
 
   const sites = $('#sites ul')
   sites.innerHTML = SITES.map(site =>
@@ -157,11 +189,19 @@ Promise.all([api.list(), api.projects(), api.getSettings(), api.profiles()]).the
   settingsUI(profiles)
 })
 api.onOpenProject(openProject)
+const toastEl = $('#toast')
+let toastTimer
+api.onToast(t => { toastEl.textContent = t; toastEl.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.hidden = true, 2500) })
 api.onRemoved(file => {
   items = items.filter(i => i.file !== file)
   document.querySelectorAll('.grid img').forEach(i => { if (i.dataset.file === file) i.remove() })
 })
 api.onSaved(i => {
+  if (i.replace) { // same picture, fresher facts (tags looked up)
+    items[items.findIndex(x => x.file === i.file)] = i
+    document.querySelectorAll('.grid img').forEach(img => { if (img.dataset.file === i.file) { decorate(img, i); img.onclick = () => preview(i, img.closest('section')); img.oncontextmenu = () => api.menu(i) } })
+    return
+  }
   items.unshift(i)
   drawSites()
   add($('#lobby'), i, true)

@@ -16,8 +16,10 @@ contextBridge.exposeInMainWorld('api', {
   quoteSources: () => ipcRenderer.invoke('quoteSources'),
   menu: item => ipcRenderer.invoke('menu', item),
   remove: item => ipcRenderer.invoke('remove', item),
+  lookup: item => ipcRenderer.invoke('lookup', item),
   onOpenProject: cb => ipcRenderer.on('openProject', (_, p) => cb(p)),
   onRemoved: cb => ipcRenderer.on('removed', (_, f) => cb(f)),
+  onToast: cb => ipcRenderer.on('toast', (_, t) => cb(t)),
   tagMenu: tag => ipcRenderer.invoke('tagMenu', tag),
   onSearch: cb => ipcRenderer.on('search', (_, t) => cb(t))
 })
