@@ -265,7 +265,7 @@ autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall())
 autoUpdater.on('download-progress', p => toast(`Downloading ${Math.round(p.percent)}%`))
 let latestRelease
 ipcMain.handle('checkUpdate', async () => {
-  const current = app.getVersion()
+  const current = require('./package.json').version // app.getVersion() is Electron's own when launched without a package.json
   latestRelease = await fetch(RELEASES, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null, () => null)
   const latest = latestRelease?.tag_name?.replace(/^v/, '') ?? null
   return { current, latest, how: PORTABLE ? 'portable' : app.isPackaged ? 'installed' : 'dev' }
