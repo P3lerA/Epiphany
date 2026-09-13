@@ -63,7 +63,6 @@ const drawSites = () => {
   sel.innerHTML = '<option value="">All sources</option>' + [...new Set(items.map(i => i.site).filter(Boolean))].sort()
     .map(x => `<option ${x === F.site ? 'selected' : ''}>${x}</option>`).join('')
 }
-$('.filter-toggle').onclick = () => filters.hidden = !filters.hidden
 // Search box: local scope filters the grid as you type; a site scope pulls that site's tag search on Enter.
 const search = $('.search input'), scope = $('.search select')
 const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters() }
