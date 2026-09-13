@@ -1,35 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-contextBridge.exposeInMainWorld('api', {
-  theme: t => ipcRenderer.send('theme', t),
-  list: () => ipcRenderer.invoke('list'),
-  onSaved: cb => ipcRenderer.on('saved', (_, item) => cb(item)),
-  getSettings: () => ipcRenderer.invoke('getSettings'),
-  setSettings: s => ipcRenderer.invoke('setSettings', s),
-  instruments: () => ipcRenderer.invoke('instruments'),
-  installGdl: () => ipcRenderer.invoke('installGdl'),
-  checkUpdate: () => ipcRenderer.invoke('checkUpdate'),
-  update: () => ipcRenderer.invoke('update'),
-  exportExtension: () => ipcRenderer.invoke('exportExtension'),
-  profiles: () => ipcRenderer.invoke('profiles'),
-  getCaption: file => ipcRenderer.invoke('getCaption', file),
-  setCaption: (file, text) => ipcRenderer.invoke('setCaption', file, text),
-  open: url => ipcRenderer.invoke('open', url),
-  projects: () => ipcRenderer.invoke('projects'),
-  newProject: name => ipcRenderer.invoke('newProject', name),
-  quote: () => ipcRenderer.invoke('quote'),
-  quoteSources: () => ipcRenderer.invoke('quoteSources'),
-  menu: item => ipcRenderer.invoke('menu', item),
-  remove: item => ipcRenderer.invoke('remove', item),
-  lookup: item => ipcRenderer.invoke('lookup', item),
-  getCreds: () => ipcRenderer.invoke('getCreds'),
-  setCred: (site, key, value) => ipcRenderer.invoke('setCred', site, key, value),
-  oauth: site => ipcRenderer.invoke('oauth', site),
-  onOpenProject: cb => ipcRenderer.on('openProject', (_, p) => cb(p)),
-  onRemoved: cb => ipcRenderer.on('removed', (_, f) => cb(f)),
-  onToast: cb => ipcRenderer.on('toast', (_, t) => cb(t)),
-  tagMenu: tag => ipcRenderer.invoke('tagMenu', tag),
-  searchSites: () => ipcRenderer.invoke('searchSites'),
-  search: (site, q) => ipcRenderer.invoke('search', site, q),
-  onSearch: cb => ipcRenderer.on('search', (_, t) => cb(t))
-})
+// One name per main.js handler; events the main side pushes get an on* listener.
+const CALLS = ['list', 'projects', 'newProject', 'getSettings', 'setSettings', 'profiles', 'getCaption', 'setCaption', 'open',
+  'searchSites', 'search', 'tagMenu', 'menu', 'quoteSources', 'quote', 'getCreds', 'setCred', 'oauth',
+  'checkUpdate', 'update', 'instruments', 'exportExtension', 'installGdl']
+const EVENTS = ['saved', 'removed', 'toast', 'search', 'openProject']
+const api = { theme: t => ipcRenderer.send('theme', t) }
+for (const n of CALLS) api[n] = (...a) => ipcRenderer.invoke(n, ...a)
+for (const n of EVENTS) api['on' + n[0].toUpperCase() + n.slice(1)] = cb => ipcRenderer.on(n, (_, v) => cb(v))
+contextBridge.exposeInMainWorld('api', api)

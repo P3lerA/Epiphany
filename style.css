@@ -89,13 +89,12 @@ section:target { display: block }
 #lobby:empty::before, #pgrid:empty::before { content: 'Nothing here yet'; color: var(--muted) }
 #lobby > div:not(:has(img:not([hidden]))), #pgrid > div:not(:has(img:not([hidden]))) { display: none }
 
-dialog { width: min(92vw, 1100px); height: min(86vh, 760px); padding: 1rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); grid-template-columns: minmax(0, 1fr) 20rem; gap: 1rem; opacity: 0; transform: scale(.97); transition: opacity .2s, transform .2s var(--ease), display .2s allow-discrete, overlay .2s allow-discrete }
+dialog { outline: none; width: min(92vw, 1100px); height: min(86vh, 760px); padding: 1rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); grid-template-columns: minmax(0, 1fr) 20rem; gap: 1rem; opacity: 0; transform: scale(.97); transition: opacity .2s, transform .2s var(--ease), display .2s allow-discrete, overlay .2s allow-discrete }
 dialog[open] { display: grid; opacity: 1; transform: none; @starting-style { opacity: 0; transform: scale(.97) } }
 dialog::backdrop { background: rgb(0 0 0 / .45); opacity: 0; transition: opacity .2s, display .2s allow-discrete, overlay .2s allow-discrete }
 dialog[open]::backdrop { opacity: 1; @starting-style { opacity: 0 } }
 dialog img { width: 100%; height: 100%; min-height: 0; object-fit: contain; border-radius: 4px }
 dialog figure { position: relative; margin: 0; min-height: 0; display: flex }
-dialog { outline: none }
 .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 2.25rem; height: 2.25rem; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid var(--rule); background: color-mix(in srgb, var(--bg) 85%, transparent); color: var(--fg); opacity: 0; transition: opacity .15s, background .15s }
 .prev { left: .5rem } .next { right: .5rem }
 figure:hover .nav { opacity: 1 }

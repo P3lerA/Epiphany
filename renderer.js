@@ -33,13 +33,13 @@ const add = (root, item, front) => {
   img.decoding = 'async'
   img.title = item.src
   img.style.setProperty('--i', front ? 0 : grid.children.length)
-  img.onclick = () => preview(item, root)
-  img.oncontextmenu = () => api.menu(item)
   decorate(img, item)
   grid[front ? 'prepend' : 'append'](img)
 }
 const decorate = (img, item) => {
   img.item = item
+  img.onclick = () => preview(item, img.closest('section'))
+  img.oncontextmenu = () => api.menu(item)
   img.dataset.file = item.file
   img.dataset.q = `${item.artist || ''} ${item.tags || ''}`.toLowerCase()
   img.dataset.site = item.site
@@ -52,10 +52,11 @@ const decorate = (img, item) => {
 // View filters: never touch files, only what is shown. Kept per machine.
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
 const filters = $('#filters')
+const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '' }) // the search box is not remembered
 const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && img.dataset.tagged !== F.tagged) || (F.site && img.dataset.site !== F.site) || (F.q && !img.dataset.q.includes(F.q)))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
-  $('.filter-toggle').classList.toggle('on', !F.ai || !!F.rating || !!F.tagged || !!F.site || !!F.q)
+  $('.filter-toggle').classList.toggle('on', Object.entries(F).some(([k, v]) => k === 'ai' ? !v : v))
 }
 const drawSites = () => {
   const sel = filters.querySelector('[name=site]')
@@ -73,10 +74,10 @@ filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 filters.querySelectorAll('.seg').forEach(seg => {
   const name = seg.dataset.name
   const show = () => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[name] || '')))
-  seg.onclick = e => { if (e.target.tagName === 'BUTTON') { F[name] = e.target.value; show(); localStorage.filters = JSON.stringify(F); applyFilters() } }
+  seg.onclick = e => { if (e.target.tagName === 'BUTTON') { F[name] = e.target.value; show(); saveF(); applyFilters() } }
   show()
 })
-filters.onchange = e => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; localStorage.filters = JSON.stringify(F); applyFilters() }
+filters.onchange = e => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() }
 const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)) }
 
 // Projects: sidebar picks the active project (where pulls land) and shows its grid.
@@ -220,7 +221,7 @@ api.onRemoved(file => {
 api.onSaved(i => {
   if (i.replace) { // same picture, fresher facts (tags looked up)
     items[items.findIndex(x => x.file === i.file)] = i
-    document.querySelectorAll('.grid img').forEach(img => { if (img.dataset.file === i.file) { decorate(img, i); img.onclick = () => preview(i, img.closest('section')); img.oncontextmenu = () => api.menu(i) } })
+    document.querySelectorAll('.grid img').forEach(img => { if (img.dataset.file === i.file) decorate(img, i) })
     return
   }
   items.unshift(i)

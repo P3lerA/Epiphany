@@ -8,7 +8,7 @@ const crypto = require('crypto')
 const { PROFILES, caption } = require('./profiles')
 const { autoUpdater } = require('electron-updater')
 
-const PORT = 7777
+const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIRI, 67xx is a Windows reserved range; env override keeps test runs off the real app
 const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
 const SETTINGS = path.join(HOME, 'settings.json')
 const WIN = path.join(HOME, 'window.json') // last window bounds; separate file so renderer settings saves never clobber it
@@ -17,7 +17,10 @@ let win
 Menu.setApplicationMenu(null)
 
 const readJson = (f, fallback) => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : fallback
+const writeJson = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 2))
 const settings = () => ({ ...DEFAULTS, ...readJson(SETTINGS, {}) })
+const profile = () => { const s = settings(); return { ...PROFILES[s.profile], ...s.overrides } }
+const GDL = path.join(process.env.APPDATA, 'gallery-dl', 'config.json') // site credentials live here, where gallery-dl reads them
 const PROJ = path.join(HOME, 'project')
 
 const dir = (p = settings().project) => {
@@ -68,11 +71,12 @@ const enrich = async item => { const e = withUrl({ ...item, ...info(item) }); e.
 
 const record = item => {
   fs.appendFileSync(path.join(dir(), 'meta.jsonl'), JSON.stringify(item) + '\n')
-  enrich({ ...item, project: settings().project }).then(e => win?.webContents.send('saved', e))
+  enrich({ ...item, project: settings().project }).then(e => send('saved', e))
   return item
 }
 
-const toast = text => win?.webContents.send('toast', text)
+const send = (ch, ...a) => win?.webContents.send(ch, ...a)
+const toast = text => send('toast', text)
 
 const run = (cmd, args) => new Promise((res, rej) =>
   execFile(cmd, args, { maxBuffer: 1e7 }, (e, out, err) => e ? rej(new Error(err || e.message)) : res(out)))
@@ -94,7 +98,7 @@ function createWindow() {
   })
   win.once('ready-to-show', () => { win.show(); if (saved.maximized) win.maximize() })
   win.on('close', e => {
-    fs.writeFileSync(WIN, JSON.stringify({ bounds: win.getNormalBounds(), maximized: win.isMaximized() }))
+    writeJson(WIN, { bounds: win.getNormalBounds(), maximized: win.isMaximized() })
     if (!app.quitting) { e.preventDefault(); win.hide() } // closing parks it in the tray; the extension keeps a listener
   })
   win.loadFile('index.html')
@@ -135,7 +139,7 @@ const lookup = async (j, file) => {
   const key = j.category === 'pixiv' ? `pixiv_id:${j.id}` : j.category === 'twitter' ? `source:*status/${j.tweet_id}*` : null
   let hit = (key && await dan(key)) || await dan(`md5:${md5}`)
   if (!hit) {
-    const g = readJson(path.join(process.env.APPDATA, 'gallery-dl', 'config.json'), {}).extractor?.gelbooru ?? {}
+    const g = readJson(GDL, {}).extractor?.gelbooru ?? {}
     hit = await get(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&limit=1&tags=md5:${md5}&api_key=${g['api-key'] ?? ''}&user_id=${g['user-id'] ?? ''}`,
       r => r?.post?.[0] ? { ...r.post[0], category: 'gelbooru' } : null)
   }
@@ -148,8 +152,7 @@ async function pull({ page }) {
   const before = new Set(fs.readdirSync(d))
   // ponytail: --range caps a search page at 50 posts; make it a profile field if you want whole searches
   await gdl(['--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, page])
-  const s = settings()
-  const profile = { ...PROFILES[s.profile], ...s.overrides }
+  const s = settings(), prof = profile()
   const items = []
   for (const f of fs.readdirSync(d)) {
     if (before.has(f) || !f.endsWith('.json')) continue
@@ -158,9 +161,9 @@ async function pull({ page }) {
     const j = readJson(path.join(d, f), {})
     if (s.lookup && !BOORU.has(j.category)) {
       j.booru = await lookup(j, path.join(d, img))
-      if (j.booru) fs.writeFileSync(path.join(d, f), JSON.stringify(j, null, 2))
+      if (j.booru) writeJson(path.join(d, f), j)
     }
-    if (j.booru || s.sites.includes(j.category)) fs.writeFileSync(path.join(d, img.replace(/\.[^.]+$/, '.txt')), caption(profile, meta(j.booru ?? j)))
+    if (j.booru || s.sites.includes(j.category)) fs.writeFileSync(path.join(d, img.replace(/\.[^.]+$/, '.txt')), caption(prof, meta(j.booru ?? j)))
     items.push(record({ file: path.join(d, img), src: page, page, time: new Date().toISOString() }))
   }
   if (!items.length) throw new Error('nothing new from ' + page)
@@ -168,22 +171,16 @@ async function pull({ page }) {
   return items
 }
 
-ipcMain.handle('list', () => Promise.all(projects().flatMap(p => {
+const list = () => Promise.all(projects().flatMap(p => {
   const f = path.join(dir(p), 'meta.jsonl')
   return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map(l => enrich({ ...JSON.parse(l), project: p })) : []
-})))
+}))
 
-ipcMain.handle('projects', projects)
-ipcMain.handle('newProject', (_, name) => { if (/^[\w-]+$/.test(name)) dir(name) })
-ipcMain.handle('getSettings', settings)
-ipcMain.handle('setSettings', (_, s) => fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2)))
-ipcMain.handle('profiles', () => PROFILES)
+const newProject = name => { if (/^[\w-]+$/.test(name)) dir(name) }
 const txt = f => f.replace(/\.[^.]+$/, '.txt')
-ipcMain.handle('getCaption', (_, file) => fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : '')
-ipcMain.handle('setCaption', (_, file, text) => fs.writeFileSync(txt(file), text))
-ipcMain.handle('open', (_, url) => shell.openExternal(url))
-// Native bits (select popups, title bar) follow nativeTheme, not our CSS; keep them in step with the dot.
-ipcMain.on('theme', (_, t) => { nativeTheme.themeSource = t })
+const getCaption = file => fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : ''
+const setCaption = (file, text) => fs.writeFileSync(txt(file), text)
+const open = url => shell.openExternal(url)
 
 // Right-click on a picture. Delete goes to the Recycle Bin, so no confirm.
 const remove = async item => {
@@ -191,9 +188,8 @@ const remove = async item => {
   const m = path.join(dir(item.project), 'meta.jsonl')
   fs.writeFileSync(m, fs.readFileSync(m, 'utf8').split('\n').filter(l => l && JSON.parse(l).file !== item.file).join('\n') + '\n')
   fs.rmSync(thumbPath(item), { force: true })
-  win.webContents.send('removed', item.file)
+  send('removed', item.file)
 }
-ipcMain.handle('remove', (_, item) => remove(item))
 
 // Manual lookup for any picture, including right-click saves that have no sidecar.
 const relookup = async item => {
@@ -204,13 +200,11 @@ const relookup = async item => {
   toast(hit ? `Tags from ${hit.category}` : 'No match on danbooru or gelbooru')
   if (!hit) return null
   j.booru = hit
-  fs.writeFileSync(jf, JSON.stringify(j, null, 2))
-  const s = settings()
-  fs.writeFileSync(txt(item.file), caption({ ...PROFILES[s.profile], ...s.overrides }, meta(hit)))
-  enrich(item).then(e => win.webContents.send('saved', { ...e, replace: true }))
+  writeJson(jf, j)
+  fs.writeFileSync(txt(item.file), caption(profile(), meta(hit)))
+  enrich(item).then(e => send('saved', { ...e, replace: true }))
   return hit
 }
-ipcMain.handle('lookup', (_, item) => relookup(item))
 // Tag search pages per site. The query arrives in the site's own syntax (booru: space-separated tags).
 const booru = t => encodeURIComponent(t)
 
@@ -231,26 +225,25 @@ const SEARCH = {
   artstation: t => `https://www.artstation.com/search?query=${encodeURIComponent(t)}`
 }
 
-ipcMain.handle('searchSites', () => Object.keys(SEARCH))
-ipcMain.handle('search', (_, site, q) => { toast(`Pulling "${q}" from ${site}…`); return pull({ page: SEARCH[site](q) }).catch(e => { toast(e.message); throw e }) })
+const search = (site, q) => { toast(`Pulling "${q}" from ${site}…`); return pull({ page: SEARCH[site](q) }).catch(e => { toast(e.message); throw e }) }
 
-ipcMain.handle('tagMenu', (_, tag) => {
+const tagMenu = tag => {
   // A caption tag shows spaces; boorus spell it with underscores.
   const sites = settings().sites.filter(s => SEARCH[s]).map(s => ({ label: s, click: () => shell.openExternal(SEARCH[s](BOORU.has(s) || s === 'animepictures' ? tag.replace(/ /g, '_') : tag)) }))
   Menu.buildFromTemplate([
-    { label: `Search "${tag}"`, click: () => win.webContents.send('search', tag) },
+    { label: `Search "${tag}"`, click: () => send('search', tag) },
     ...(sites.length ? [{ label: 'Search in', submenu: sites }] : [])
   ]).popup({ window: win })
-})
+}
 
-ipcMain.handle('menu', (_, item) => Menu.buildFromTemplate([
+const menu = item => Menu.buildFromTemplate([
   { label: 'Open in Explorer', click: () => shell.showItemInFolder(item.file) },
   { label: 'Open original site', click: () => shell.openExternal(item.page) },
-  { label: 'Open project', click: () => win.webContents.send('openProject', item.project) },
+  { label: 'Open project', click: () => send('openProject', item.project) },
   { label: 'Look up tags', click: () => relookup(item) },
   { type: 'separator' },
   { label: 'Delete', click: () => remove(item) }
-]).popup({ window: win }))
+]).popup({ window: win })
 
 const QUOTES = {
   advice: ['https://api.adviceslip.com/advice', j => j.slip.advice],
@@ -260,31 +253,27 @@ const QUOTES = {
   none: null
 }
 
-ipcMain.handle('quoteSources', () => Object.keys(QUOTES))
-
-ipcMain.handle('quote', () => {
+const quote = () => {
   const src = QUOTES[settings().quote]
   if (!src) return null
   const [url, pick] = src
   return fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { signal: AbortSignal.timeout(3000), cache: 'no-store' })
     .then(r => r.json()).then(pick, () => null)
-})
+}
 
-// Site credentials live in gallery-dl's own config, which is what reads them.
-const GDL = path.join(process.env.APPDATA, 'gallery-dl', 'config.json')
-ipcMain.handle('getCreds', () => readJson(GDL, {}).extractor ?? {})
+const getCreds = () => readJson(GDL, {}).extractor ?? {}
 
-ipcMain.handle('setCred', (_, site, key, value) => {
+const setCred = (site, key, value) => {
   const c = readJson(GDL, {})
   ;((c.extractor ??= {})[site] ??= {})[key] = value
   fs.mkdirSync(path.dirname(GDL), { recursive: true })
-  fs.writeFileSync(GDL, JSON.stringify(c, null, 2))
-})
+  writeJson(GDL, c)
+}
 
-ipcMain.handle('oauth', (_, site) => {
+const oauth = site => {
   const [c, a] = gdlCmd()
   spawn('cmd.exe', ['/c', 'start', '""', 'cmd', '/k', c, ...a, `oauth:${site}`], { detached: true, stdio: 'ignore' }).unref()
-})
+}
 
 // The Chrome extension ships inside the app (extraResources when packaged) and is exported for "Load unpacked".
 const EXT = app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension')
@@ -297,14 +286,14 @@ autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall())
 autoUpdater.on('download-progress', p => toast(`Downloading ${Math.round(p.percent)}%`))
 let latestRelease
 
-ipcMain.handle('checkUpdate', async () => {
+const checkUpdate = async () => {
   const current = require('./package.json').version // app.getVersion() is Electron's own when launched without a package.json
   latestRelease = await fetch(RELEASES, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null, () => null)
   const latest = latestRelease?.tag_name?.replace(/^v/, '') ?? null
   return { current, latest, how: PORTABLE ? 'portable' : app.isPackaged ? 'installed' : 'dev' }
-})
+}
 
-ipcMain.handle('update', async () => {
+const update = async () => {
   if (!PORTABLE) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
   const asset = latestRelease.assets.find(a => /^Epiphany[ .][0-9.]+\.exe$/.test(a.name)) // GitHub swaps spaces for dots in asset names
   if (!asset) throw new Error('no portable exe in ' + latestRelease.tag_name)
@@ -315,27 +304,27 @@ ipcMain.handle('update', async () => {
   fs.writeFileSync(nw, buf)
   spawn('cmd.exe', ['/c', `ping -n 2 127.0.0.1 >nul & move /y "${nw}" "${PORTABLE}" & start "" "${PORTABLE}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
   app.quit()
-})
+}
 
-ipcMain.handle('instruments', async () => {
+const instruments = async () => {
   const v = await gdl(['--version']).then(v => v.trim(), () => null)
   return {
     'gallery-dl': { status: v ?? 'not found', action: v ? 'Update' : 'Install' },
     extension: { status: readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?', action: 'Export' }
   }
-})
+}
 
-ipcMain.handle('exportExtension', async () => {
+const exportExtension = async () => {
   const { filePaths: [d] } = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
   if (!d) return
   const out = path.join(d, 'epiphany-extension')
   fs.cpSync(EXT, out, { recursive: true })
   shell.showItemInFolder(out)
   toast('Load it unpacked from chrome://extensions')
-})
+}
 
 // Stable executables are published on Codeberg, with SHA256SUMS alongside.
-ipcMain.handle('installGdl', async () => {
+const installGdl = async () => {
   toast('Downloading gallery-dl…')
   const get = url => fetch(url, { signal: AbortSignal.timeout(120000) }).then(r => { if (!r.ok) throw new Error(`${r.status} ${url}`); return r })
   const rel = await get('https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest').then(r => r.json())
@@ -349,7 +338,13 @@ ipcMain.handle('installGdl', async () => {
   const v = await gdl(['--version']).then(v => v.trim())
   toast(`gallery-dl ${v} installed`)
   return v
-})
+}
+
+const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open,
+  searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
+  checkUpdate, update, instruments, exportExtension, installGdl }
+for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
+ipcMain.on('theme', (_, t) => { nativeTheme.themeSource = t }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 
 app.on('before-quit', () => { app.quitting = true })
 let tray
