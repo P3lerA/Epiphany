@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src file:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src file: https:">
   <title>Epiphany</title>
   <link rel="stylesheet" href="style.css">
   <script src="theme.js"></script>
@@ -30,7 +30,7 @@
     </aside>
     <div id="general">
       <h2>General</h2>
-      <ul class="panel"><li><span>quote</span><select name="quote"></select></li><li><span>lookup</span><input type="checkbox" name="lookup"></li></ul>
+      <ul class="panel"><li><span>quote</span><select name="quote"></select></li><li><span>lookup</span><input type="checkbox" name="lookup"></li><li><span>accept a similar match</span><select name="accept"><option value="101">always ask</option><option value="95">at 95%</option><option value="90">at 90%</option><option value="80">at 80%</option></select></li></ul>
     </div>
     <div id="profile">
       <h2>Profile</h2>
@@ -57,7 +57,7 @@
   <div id="filters" popover>
     <label><input type="checkbox" name="ai" checked> AI</label>
     <div class="seg" data-name="rating"><button value="g">general</button><button value="gs">sensitive</button><button value="">any</button></div>
-    <div class="seg" data-name="tagged"><button value="booru">booru</button><button value="other">other</button><button value="none">none</button><button value="">any</button></div>
+    <div class="seg" data-name="tagged"><button value="booru">booru</button><button value="unsure">unsure</button><button value="none">none</button><button value="">any</button></div>
     <select name="site"><option value="">All sources</option></select>
   </div>
   <div id="toast" hidden></div>
@@ -69,11 +69,14 @@
     </figure>
     <aside>
       <textarea spellcheck="false"></textarea>
+      <a href="#" class="from"></a>
       <div class="meta">
         <span>Project: <a href="#projects" class="proj"></a></span>
         <span class="time"></span>
         <span class="rating"></span>
         <span class="tagged"></span>
+        <div class="picks"></div>
+        <button class="use" hidden>Use these tags</button>
         <a href="#" class="src"></a>
       </div>
     </aside>

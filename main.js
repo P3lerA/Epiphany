@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, dialog, nativeTheme, Tray } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, dialog, nativeTheme, Tray, net } = require('electron')
 const http = require('http')
 const fs = require('fs')
 const path = require('path')
@@ -12,7 +12,7 @@ const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIR
 const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
 const SETTINGS = path.join(HOME, 'settings.json')
 const WIN = path.join(HOME, 'window.json') // last window bounds; separate file so renderer settings saves never clobber it
-const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {} }
+const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90 }
 let win
 Menu.setApplicationMenu(null)
 if (!app.requestSingleInstanceLock()) app.exit() // quit() is async and whenReady would still open a window; a second launch (tray-parked app, double-clicked exe) just raises the first
@@ -51,9 +51,14 @@ const info = ({ file, page }) => {
   if (!j) return { site: new URL(page).host, ai: false, rating: '', tagged: 'none' }
   const b = j.booru ?? j // a booru match looked up for a non-booru source, if any
   const tags = [b.tag_string, b.tags, b.tag_string_meta, b.tags_metadata].flatMap(words)
-  // booru: booru-vocabulary tags (pulled from one, or matched by lookup); other: the site's own tags only; none: nothing.
-  const tagged = j.booru || BOORU.has(j.category) ? 'booru' : tags.length ? 'other' : 'none'
-  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: meta(b).artist, tags: meta(b).tags, tagged }
+  // booru: booru-vocabulary tags (pulled from one, or matched); unsure: close matches await a pick; none: no booru tags.
+  const tagged = j.booru || BOORU.has(j.category) ? 'booru' : j.candidates ? 'unsure' : 'none'
+  // Each candidate with the tags only it has, so look-alike variants can be told apart.
+  const sets = j.candidates?.map(c => new Set(words(c.post.tag_string_general)))
+  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb ? pathToFileURL(c.thumb).href : c.post.preview_file_url, caption: caption(profile(), meta(c.post)), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
+  // Where the caption's tags came from when they were looked up rather than pulled: the matched post.
+  const from = j.booru && (j.booru.category === 'gelbooru' ? `https://gelbooru.com/index.php?page=post&s=view&id=${j.booru.id}` : `https://danbooru.donmai.us/posts/${j.booru.id}`)
+  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: meta(b).artist, tags: meta(b).tags, tagged, candidates, from }
 }
 
 // Grid thumbnails live beside the dataset, never inside it. OS thumbnailer, cached as JPEG.
@@ -73,7 +78,8 @@ const enrich = async item => { const e = withUrl({ ...item, ...info(item) }); e.
 
 const record = item => {
   fs.appendFileSync(path.join(dir(), 'meta.jsonl'), JSON.stringify(item) + '\n')
-  enrich({ ...item, project: settings().project }).then(e => send('saved', e))
+  item = { ...item, project: settings().project }
+  enrich(item).then(e => send('saved', e))
   return item
 }
 
@@ -115,7 +121,9 @@ async function save({ src, page }) {
   if (fs.existsSync(path.join(dir(), name))) name = `${Date.now()}_${name}`
   const file = path.join(dir(), name)
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()))
-  return record({ file, src, page, time: new Date().toISOString() })
+  const item = record({ file, src, page, time: new Date().toISOString() })
+  if (settings().lookup) resolve(item, { category: new URL(page).host }).catch(e => toast(e.message)) // same matching as a pull, after the reply
+  return item
 }
 
 // gallery-dl metadata -> caption fields.
@@ -133,6 +141,7 @@ const meta = j => ({
 // Non-booru sources (pixiv, twitter...) carry no booru tags. Ask danbooru, then gelbooru, for the same picture.
 const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34'])
 
+const danAuth = () => { const d = readJson(GDL, {}).extractor?.danbooru ?? {}; return d.username && d['api-key'] ? 'Basic ' + Buffer.from(`${d.username}:${d['api-key']}`).toString('base64') : null }
 const lookup = async (j, file) => {
   const get = (url, pick) => fetch(url, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Epiphany/0.1' } })
     .then(r => r.ok ? r.json() : null).then(pick, () => null)
@@ -145,6 +154,28 @@ const lookup = async (j, file) => {
     hit = await get(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&limit=1&tags=md5:${md5}&api_key=${g['api-key'] ?? ''}&user_id=${g['user-id'] ?? ''}`,
       r => r?.post?.[0] ? { ...r.post[0], category: 'gelbooru' } : null)
   }
+  if (!hit && danAuth()) {
+    // Same picture, different bytes (watermark, rescale, scan): danbooru's IQDB matches by similarity.
+    // Uploading needs an account (anonymous = Pundit denied); API-key auth also skips Rails CSRF. net.fetch: Cloudflare accepts Chromium's TLS, not Node's.
+    const fd = new FormData()
+    fd.append('search[file]', new Blob([fs.readFileSync(file)]), path.basename(file))
+    const c = await net.fetch('https://danbooru.donmai.us/iqdb_queries.json', { method: 'POST', body: fd, signal: AbortSignal.timeout(30000), headers: { Authorization: danAuth() } })
+      .then(r => r.ok ? r.json() : [], () => [])
+    const near = c.filter(x => x.score >= 70 && x.post).sort((a, b) => b.score - a.score).slice(0, 4)
+      .map(x => ({ score: Math.round(x.score), post: { ...x.post, category: 'danbooru' } }))
+    // Settings decide how sure a similarity match must be to skip the human; exact id/md5 hits above never ask.
+    if (near.length && near[0].score >= settings().accept && (near.length === 1 || near[0].score - near[1].score >= 15)) hit = near[0].post
+    else if (near.length) {
+      j.candidates = near
+      // Their preview thumbnails, fetched here (Chromium's stack, proven against the CDN) and kept beside our own thumbs.
+      const p = path.basename(path.dirname(path.dirname(file)))
+      for (const c of near) {
+        const t = path.join(thumbs(p), 'cand-' + c.post.id + '.jpg')
+        if (!fs.existsSync(t)) await net.fetch(c.post.preview_file_url).then(async r => r.ok && fs.writeFileSync(t, Buffer.from(await r.arrayBuffer()))).catch(() => {})
+        if (fs.existsSync(t)) c.thumb = t
+      }
+    }
+  }
   return hit
 }
 
@@ -155,21 +186,22 @@ async function pull({ page }) {
   // ponytail: --range caps a search page at 50 posts; make it a profile field if you want whole searches
   await gdl(['--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, page])
   const s = settings(), prof = profile()
-  const items = []
+  const items = [], later = []
   for (const f of fs.readdirSync(d)) {
     if (before.has(f) || !f.endsWith('.json')) continue
     const img = f.slice(0, -5)
     if (!fs.existsSync(path.join(d, img))) continue
     const j = readJson(path.join(d, f), {})
-    if (s.lookup && !BOORU.has(j.category)) {
-      j.booru = await lookup(j, path.join(d, img))
-      if (j.booru) writeJson(path.join(d, f), j)
-    }
-    if (j.booru || s.sites.includes(j.category)) fs.writeFileSync(path.join(d, img.replace(/\.[^.]+$/, '.txt')), caption(prof, meta(j.booru ?? j)))
-    items.push(record({ file: path.join(d, img), src: page, page, time: new Date().toISOString() }))
+    const item = record({ file: path.join(d, img), src: page, page, time: new Date().toISOString() })
+    items.push(item)
+    // The site's own tags caption it right away; a booru match (below) replaces that.
+    if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), caption(prof, meta(j)))
+    if (s.lookup && !BOORU.has(j.category)) later.push([item, j])
   }
   if (!items.length) throw new Error('nothing new from ' + page)
   toast(`${items.length} from ${new URL(page).host}`)
+  // After the grid has them, and after the extension gets its answer: IQDB uploads take seconds each.
+  ;(async () => { for (const [item, j] of later) await resolve(item, j) })().catch(e => toast(e.message))
   return items
 }
 
@@ -194,19 +226,30 @@ const remove = async item => {
 }
 
 // Manual lookup for any picture, including right-click saves that have no sidecar.
-const relookup = async item => {
-  toast('Looking up…')
-  const jf = item.file + '.json'
-  const j = readJson(jf, { category: new URL(item.page).host })
-  const hit = await lookup(j, item.file)
-  toast(hit ? `Tags from ${hit.category}` : 'No match on danbooru or gelbooru')
-  if (!hit) return null
+const adopt = (item, j, hit) => {
   j.booru = hit
-  writeJson(jf, j)
+  delete j.candidates
+  writeJson(item.file + '.json', j)
   fs.writeFileSync(txt(item.file), caption(profile(), meta(hit)))
   enrich(item).then(e => send('saved', { ...e, replace: true }))
+}
+// A non-booru picture: its booru post by exact ids/md5, then by similarity; close calls become candidates.
+const resolve = async (item, j) => {
+  delete j.candidates
+  const hit = await lookup(j, item.file)
+  if (hit) adopt(item, j, hit)
+  else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
   return hit
 }
+const relookup = async item => {
+  toast('Looking up…')
+  const j = readJson(item.file + '.json', { category: new URL(item.page).host })
+  const hit = await resolve(item, j)
+  toast(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : danAuth() ? 'No match on danbooru or gelbooru' : 'No exact match; similarity search needs a danbooru account (Sites)')
+  return hit
+}
+// The user picked one of the close matches.
+const pick = (item, i) => { const j = readJson(item.file + '.json', {}); adopt(item, j, j.candidates[i].post) }
 // Tag search pages per site. The query arrives in the site's own syntax (booru: space-separated tags).
 const booru = t => encodeURIComponent(t)
 
@@ -343,7 +386,7 @@ const installGdl = async () => {
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open,
-  searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
+  lookup: relookup, pick, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
   checkUpdate, update, instruments, exportExtension, installGdl }
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
 ipcMain.on('theme', (_, t) => { nativeTheme.themeSource = t }) // native bits (select popups, title bar) follow nativeTheme, not our CSS

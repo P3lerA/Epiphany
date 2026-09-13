@@ -119,10 +119,30 @@ const preview = async (item, root) => {
   dlg.querySelector('img').src = item.url
   dlg.querySelector('.time').textContent = new Date(item.time).toLocaleString()
   dlg.querySelector('.rating').textContent = { g: 'general', s: 'sensitive', q: 'questionable', e: 'explicit' }[item.rating] ?? ''
-  dlg.querySelector('.tagged').textContent = { booru: 'Tags: booru', other: 'Tags: site only', none: 'Tags: none' }[item.tagged]
+  const tagged = dlg.querySelector('.tagged')
+  tagged.textContent = { booru: 'Tags: booru', none: 'Tags: none', unsure: 'Tags: pick a match' }[item.tagged]
+  if (item.tagged !== 'booru') tagged.append(' ', Object.assign(document.createElement('a'), { href: '#', textContent: 'Look up', onclick: e => { e.preventDefault(); api.lookup(item) } }))
+  // Close IQDB matches: click one to see its caption in the box, Use to keep it.
+  const picks = dlg.querySelector('.picks'), use = dlg.querySelector('.use')
+  use.hidden = true
+  picks.replaceChildren(...(item.candidates ?? []).map((c, i) => {
+    const b = document.createElement('button')
+    b.innerHTML = `<img src="${esc(c.url ?? '')}"><span>${c.score}% · +${c.plus.length}</span>`
+    b.title = c.plus.join(', ') || 'no tags of its own'
+    b.onclick = () => {
+      picks.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b))
+      dlg.querySelector('textarea').value = c.caption
+      use.hidden = false
+      use.onclick = () => api.pick(item, i)
+    }
+    return b
+  }))
   const proj = dlg.querySelector('.proj')
   proj.textContent = item.project
   proj.onclick = e => { e.preventDefault(); dlg.close(); openProject(item.project) }
+  const from = dlg.querySelector('.from')
+  from.hidden = !item.from
+  if (item.from) { from.replaceChildren('caption from ', Object.assign(document.createElement('b'), { textContent: new URL(item.from).host })); from.onclick = e => { e.preventDefault(); api.open(item.from) } }
   const src = dlg.querySelector('.src')
   const u = new URL(item.page)
   src.replaceChildren(u.protocol + '//', Object.assign(document.createElement('b'), { textContent: u.host }), u.pathname + u.search)
@@ -151,8 +171,9 @@ const settingsUI = profiles => {
     general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
   })
   general.querySelector('[name=lookup]').checked = s.lookup
+  general.querySelector('[name=accept]').value = s.accept
   general.onchange = e => {
-    s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value
+    s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.name === 'accept' ? Number(e.target.value) : e.target.value
     save()
     if (e.target.name === 'quote') quote()
   }
@@ -221,6 +242,7 @@ api.onSaved(i => {
   if (i.replace) { // same picture, fresher facts (tags looked up)
     items[items.findIndex(x => x.file === i.file)] = i
     document.querySelectorAll('.grid img').forEach(img => { if (img.dataset.file === i.file) decorate(img, i) })
+    if (dlg.open && cur.file === i.file) preview(i)
     return
   }
   items.unshift(i)

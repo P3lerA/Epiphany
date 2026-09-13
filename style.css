@@ -108,6 +108,17 @@ dialog textarea { flex: 1; resize: none; line-height: 1.6 }
 .meta a { color: var(--link) }
 .meta .src { color: var(--muted) }
 .meta .src b { color: var(--link); font-weight: 500 }
+.from { margin-top: -.5rem; font-size: .75rem; color: var(--muted) }
+.from b { color: var(--link); font-weight: 500 }
+.picks { display: flex; gap: .5rem; flex-wrap: wrap }
+.picks:empty { display: none }
+.picks button { width: 4.5rem; flex: none; padding: 0; display: flex; flex-direction: column; gap: .25rem; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); color: var(--muted); font-size: .75rem; overflow: hidden; transition: border-color .15s, color .15s }
+.picks button:hover { border-color: var(--link); color: var(--fg) }
+.picks img { width: 100%; aspect-ratio: 1; object-fit: cover }
+.picks span { padding: 0 .4rem .25rem; white-space: nowrap }
+.picks button.on { border-color: var(--link); color: var(--fg) }
+.meta .use { align-self: start; padding: .4rem .9rem; border: 1px solid var(--rule); border-radius: 4px; background: var(--field); color: var(--fg); transition: background .15s }
+.meta .use:hover { background: var(--tonal) }
 
 #settings, #projects { gap: 2rem; align-content: start }
 #settings { grid-template-columns: 13rem minmax(0, 40rem) }
