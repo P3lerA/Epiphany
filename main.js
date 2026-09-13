@@ -15,6 +15,8 @@ const WIN = path.join(HOME, 'window.json') // last window bounds; separate file 
 const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {} }
 let win
 Menu.setApplicationMenu(null)
+if (!app.requestSingleInstanceLock()) app.exit() // quit() is async and whenReady would still open a window; a second launch (tray-parked app, double-clicked exe) just raises the first
+app.on('second-instance', () => { win?.show(); win?.focus() })
 
 const readJson = (f, fallback) => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : fallback
 const writeJson = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 2))
