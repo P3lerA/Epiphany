@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, dialog, nativeTheme } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, dialog, nativeTheme, Tray } = require('electron')
 const http = require('http')
 const fs = require('fs')
 const path = require('path')
@@ -79,7 +79,10 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false }
   })
   win.once('ready-to-show', () => { win.show(); if (saved.maximized) win.maximize() })
-  win.on('close', () => fs.writeFileSync(WIN, JSON.stringify({ bounds: win.getNormalBounds(), maximized: win.isMaximized() })))
+  win.on('close', e => {
+    fs.writeFileSync(WIN, JSON.stringify({ bounds: win.getNormalBounds(), maximized: win.isMaximized() }))
+    if (!app.quitting) { e.preventDefault(); win.hide() } // closing parks it in the tray; the extension keeps a listener
+  })
   win.loadFile('index.html')
 }
 
@@ -314,8 +317,14 @@ ipcMain.handle('installGdl', async () => {
   return v
 })
 
+app.on('before-quit', () => { app.quitting = true })
+let tray
 app.whenReady().then(() => {
   dir()
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 32 }))
+  tray.setToolTip('Epiphany')
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Quit', click: () => app.quit() }]))
+  tray.on('click', () => { win.show(); win.focus() })
   http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     if (req.method !== 'POST') return res.writeHead(404).end()
