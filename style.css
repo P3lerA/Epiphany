@@ -84,7 +84,9 @@ section:target { display: block }
 #lobby h3, #pgrid h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 1rem 0 .5rem }
 #lobby > div:first-child h3, #pgrid > div:first-child h3 { margin-top: 0 }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem }
-.grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer; animation: rise .35s var(--ease) both; animation-delay: min(calc(var(--i, 0) * 20ms), 300ms); transition: transform .15s var(--ease) }
+.grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer; transition: transform .15s var(--ease) }
+.grid img:not(.in) { opacity: 0 }
+.grid img.in { animation: rise .35s var(--ease) both }
 .grid img:hover { transform: scale(1.02) }
 #lobby:empty::before, #pgrid:empty::before { content: 'Nothing here yet'; color: var(--muted) }
 #lobby > div:not(:has(img:not([hidden]))), #pgrid > div:not(:has(img:not([hidden]))) { display: none }

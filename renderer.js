@@ -28,11 +28,11 @@ const groupIn = (root, t, front) => {
 const add = (root, item, front) => {
   const grid = groupIn(root, item.time, front)
   const img = new Image()
+  img.onload = () => { img.style.animationDelay = 100 + Math.random() * 200 + 'ms'; img.classList.add('in') } // cached thumbs all land in the same frame; a little scatter reads as one-by-one
   img.src = item.thumb || item.url
   img.loading = 'lazy'
   img.decoding = 'async'
   img.title = item.src
-  img.style.setProperty('--i', front ? 0 : grid.children.length)
   decorate(img, item)
   grid[front ? 'prepend' : 'append'](img)
 }
