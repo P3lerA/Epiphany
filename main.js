@@ -272,7 +272,7 @@ ipcMain.handle('checkUpdate', async () => {
 })
 ipcMain.handle('update', async () => {
   if (!PORTABLE) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
-  const asset = latestRelease.assets.find(a => /^Epiphany [\d.]+\.exe$/.test(a.name))
+  const asset = latestRelease.assets.find(a => /^Epiphany[ .][0-9.]+\.exe$/.test(a.name)) // GitHub swaps spaces for dots in asset names
   if (!asset) throw new Error('no portable exe in ' + latestRelease.tag_name)
   toast('Downloading ' + asset.name + '…')
   const buf = Buffer.from(await fetch(asset.browser_download_url).then(r => r.arrayBuffer()))
