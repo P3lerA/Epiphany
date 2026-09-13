@@ -19,23 +19,28 @@ Menu.setApplicationMenu(null)
 const readJson = (f, fallback) => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : fallback
 const settings = () => ({ ...DEFAULTS, ...readJson(SETTINGS, {}) })
 const PROJ = path.join(HOME, 'project')
+
 const dir = (p = settings().project) => {
   const d = path.join(PROJ, p, 'dataset')
   fs.mkdirSync(d, { recursive: true })
   return d
 }
+
 const projects = () => {
   fs.mkdirSync(PROJ, { recursive: true })
   return fs.readdirSync(PROJ, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name)
 }
+
 const words = v => (Array.isArray(v) ? v : String(v ?? '').split(' ')).filter(Boolean) // booru tag strings are space-separated
 const withUrl = item => ({ ...item, url: pathToFileURL(item.file).href })
+
 // View-side facts from the gallery-dl sidecar: source site, AI-tagged, rating normalized to g/s/q/e.
 const rating = j => {
   const r = String(j.rating ?? '').toLowerCase()
   const four = j.category === 'danbooru' || j.category === 'gelbooru' // elsewhere s = safe
   return r.startsWith('safe') || (!four && r === 's') ? 'g' : (r[0] ?? '')
 }
+
 const info = ({ file, page }) => {
   const j = readJson(file + '.json', null)
   if (!j) return { site: new URL(page).host, ai: false, rating: '', tagged: 'none' }
@@ -45,9 +50,11 @@ const info = ({ file, page }) => {
   const tagged = j.booru || BOORU.has(j.category) ? 'booru' : tags.length ? 'other' : 'none'
   return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: meta(b).artist, tags: meta(b).tags, tagged }
 }
+
 // Grid thumbnails live beside the dataset, never inside it. OS thumbnailer, cached as JPEG.
 const thumbs = p => { const d = path.join(PROJ, p, 'thumbs'); fs.mkdirSync(d, { recursive: true }); return d }
 const thumbPath = item => path.join(thumbs(item.project), path.basename(item.file) + '.jpg')
+
 const thumb = async item => {
   const t = thumbPath(item)
   if (!fs.existsSync(t)) {
@@ -56,15 +63,20 @@ const thumb = async item => {
   }
   return pathToFileURL(t).href
 }
+
 const enrich = async item => { const e = withUrl({ ...item, ...info(item) }); e.thumb = await thumb(e); return e }
+
 const record = item => {
   fs.appendFileSync(path.join(dir(), 'meta.jsonl'), JSON.stringify(item) + '\n')
   enrich({ ...item, project: settings().project }).then(e => win?.webContents.send('saved', e))
   return item
 }
+
 const toast = text => win?.webContents.send('toast', text)
+
 const run = (cmd, args) => new Promise((res, rej) =>
   execFile(cmd, args, { maxBuffer: 1e7 }, (e, out, err) => e ? rej(new Error(err || e.message)) : res(out)))
+
 // gallery-dl: the standalone exe we downloaded if present, else whatever Python has (dev machines).
 const GDL_EXE = path.join(HOME, 'bin', 'gallery-dl.exe')
 const gdlCmd = () => fs.existsSync(GDL_EXE) ? [GDL_EXE, []] : ['python', ['-m', 'gallery_dl']]
@@ -102,6 +114,7 @@ async function save({ src, page }) {
 
 // gallery-dl metadata -> caption fields.
 const first = (j, ...ks) => words(ks.map(k => j[k]).find(v => v && v.length))
+
 const meta = j => ({
   tags: first(j, 'tag_string_general', 'tags_general', 'tags').join(', '),
   artist: first(j, 'tag_string_artist', 'tags_artist').join(', @'), // ponytail: "a, @b" so "@{{artist}}" reads right
@@ -113,6 +126,7 @@ const meta = j => ({
 
 // Non-booru sources (pixiv, twitter...) carry no booru tags. Ask danbooru, then gelbooru, for the same picture.
 const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34'])
+
 const lookup = async (j, file) => {
   const get = (url, pick) => fetch(url, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Epiphany/0.1' } })
     .then(r => r.ok ? r.json() : null).then(pick, () => null)
@@ -158,6 +172,7 @@ ipcMain.handle('list', () => Promise.all(projects().flatMap(p => {
   const f = path.join(dir(p), 'meta.jsonl')
   return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map(l => enrich({ ...JSON.parse(l), project: p })) : []
 })))
+
 ipcMain.handle('projects', projects)
 ipcMain.handle('newProject', (_, name) => { if (/^[\w-]+$/.test(name)) dir(name) })
 ipcMain.handle('getSettings', settings)
@@ -179,6 +194,7 @@ const remove = async item => {
   win.webContents.send('removed', item.file)
 }
 ipcMain.handle('remove', (_, item) => remove(item))
+
 // Manual lookup for any picture, including right-click saves that have no sidecar.
 const relookup = async item => {
   toast('Looking up…')
@@ -197,6 +213,7 @@ const relookup = async item => {
 ipcMain.handle('lookup', (_, item) => relookup(item))
 // Tag search pages per site. The query arrives in the site's own syntax (booru: space-separated tags).
 const booru = t => encodeURIComponent(t)
+
 const SEARCH = {
   danbooru: t => `https://danbooru.donmai.us/posts?tags=${booru(t)}`,
   gelbooru: t => `https://gelbooru.com/index.php?page=post&s=list&tags=${booru(t)}`,
@@ -213,8 +230,10 @@ const SEARCH = {
   deviantart: t => `https://www.deviantart.com/search?q=${encodeURIComponent(t)}`,
   artstation: t => `https://www.artstation.com/search?query=${encodeURIComponent(t)}`
 }
+
 ipcMain.handle('searchSites', () => Object.keys(SEARCH))
 ipcMain.handle('search', (_, site, q) => { toast(`Pulling "${q}" from ${site}…`); return pull({ page: SEARCH[site](q) }).catch(e => { toast(e.message); throw e }) })
+
 ipcMain.handle('tagMenu', (_, tag) => {
   // A caption tag shows spaces; boorus spell it with underscores.
   const sites = settings().sites.filter(s => SEARCH[s]).map(s => ({ label: s, click: () => shell.openExternal(SEARCH[s](BOORU.has(s) || s === 'animepictures' ? tag.replace(/ /g, '_') : tag)) }))
@@ -223,6 +242,7 @@ ipcMain.handle('tagMenu', (_, tag) => {
     ...(sites.length ? [{ label: 'Search in', submenu: sites }] : [])
   ]).popup({ window: win })
 })
+
 ipcMain.handle('menu', (_, item) => Menu.buildFromTemplate([
   { label: 'Open in Explorer', click: () => shell.showItemInFolder(item.file) },
   { label: 'Open original site', click: () => shell.openExternal(item.page) },
@@ -231,6 +251,7 @@ ipcMain.handle('menu', (_, item) => Menu.buildFromTemplate([
   { type: 'separator' },
   { label: 'Delete', click: () => remove(item) }
 ]).popup({ window: win }))
+
 const QUOTES = {
   advice: ['https://api.adviceslip.com/advice', j => j.slip.advice],
   animechan: ['https://api.animechan.io/v1/quotes/random', j => j.data.content],
@@ -238,7 +259,9 @@ const QUOTES = {
   hitokoto: ['https://v1.hitokoto.cn/?c=a&c=b&c=c&c=d&max_length=28', j => j.hitokoto],
   none: null
 }
+
 ipcMain.handle('quoteSources', () => Object.keys(QUOTES))
+
 ipcMain.handle('quote', () => {
   const src = QUOTES[settings().quote]
   if (!src) return null
@@ -246,19 +269,23 @@ ipcMain.handle('quote', () => {
   return fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { signal: AbortSignal.timeout(3000), cache: 'no-store' })
     .then(r => r.json()).then(pick, () => null)
 })
+
 // Site credentials live in gallery-dl's own config, which is what reads them.
 const GDL = path.join(process.env.APPDATA, 'gallery-dl', 'config.json')
 ipcMain.handle('getCreds', () => readJson(GDL, {}).extractor ?? {})
+
 ipcMain.handle('setCred', (_, site, key, value) => {
   const c = readJson(GDL, {})
   ;((c.extractor ??= {})[site] ??= {})[key] = value
   fs.mkdirSync(path.dirname(GDL), { recursive: true })
   fs.writeFileSync(GDL, JSON.stringify(c, null, 2))
 })
+
 ipcMain.handle('oauth', (_, site) => {
   const [c, a] = gdlCmd()
   spawn('cmd.exe', ['/c', 'start', '""', 'cmd', '/k', c, ...a, `oauth:${site}`], { detached: true, stdio: 'ignore' }).unref()
 })
+
 // The Chrome extension ships inside the app (extraResources when packaged) and is exported for "Load unpacked".
 const EXT = app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension')
 // Self-update. Installed builds use electron-updater (latest.yml on the GitHub release).
@@ -269,12 +296,14 @@ autoUpdater.autoDownload = false
 autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall())
 autoUpdater.on('download-progress', p => toast(`Downloading ${Math.round(p.percent)}%`))
 let latestRelease
+
 ipcMain.handle('checkUpdate', async () => {
   const current = require('./package.json').version // app.getVersion() is Electron's own when launched without a package.json
   latestRelease = await fetch(RELEASES, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null, () => null)
   const latest = latestRelease?.tag_name?.replace(/^v/, '') ?? null
   return { current, latest, how: PORTABLE ? 'portable' : app.isPackaged ? 'installed' : 'dev' }
 })
+
 ipcMain.handle('update', async () => {
   if (!PORTABLE) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
   const asset = latestRelease.assets.find(a => /^Epiphany[ .][0-9.]+\.exe$/.test(a.name)) // GitHub swaps spaces for dots in asset names
@@ -287,6 +316,7 @@ ipcMain.handle('update', async () => {
   spawn('cmd.exe', ['/c', `ping -n 2 127.0.0.1 >nul & move /y "${nw}" "${PORTABLE}" & start "" "${PORTABLE}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
   app.quit()
 })
+
 ipcMain.handle('instruments', async () => {
   const v = await gdl(['--version']).then(v => v.trim(), () => null)
   return {
@@ -294,6 +324,7 @@ ipcMain.handle('instruments', async () => {
     extension: { status: readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?', action: 'Export' }
   }
 })
+
 ipcMain.handle('exportExtension', async () => {
   const { filePaths: [d] } = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
   if (!d) return
@@ -302,6 +333,7 @@ ipcMain.handle('exportExtension', async () => {
   shell.showItemInFolder(out)
   toast('Load it unpacked from chrome://extensions')
 })
+
 // Stable executables are published on Codeberg, with SHA256SUMS alongside.
 ipcMain.handle('installGdl', async () => {
   toast('Downloading gallery-dl…')
@@ -321,6 +353,7 @@ ipcMain.handle('installGdl', async () => {
 
 app.on('before-quit', () => { app.quitting = true })
 let tray
+
 app.whenReady().then(() => {
   dir()
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 32 }))
