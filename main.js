@@ -38,10 +38,12 @@ const rating = j => {
 }
 const info = ({ file, page }) => {
   const j = readJson(file + '.json', null)
-  if (!j) return { site: new URL(page).host, ai: false, rating: '' }
+  if (!j) return { site: new URL(page).host, ai: false, rating: '', tagged: 'none' }
   const b = j.booru ?? j // a booru match looked up for a non-booru source, if any
   const tags = [b.tag_string, b.tags, b.tag_string_meta, b.tags_metadata].flatMap(words)
-  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: meta(b).artist, tags: meta(b).tags }
+  // booru: booru-vocabulary tags (pulled from one, or matched by lookup); other: the site's own tags only; none: nothing.
+  const tagged = j.booru || BOORU.has(j.category) ? 'booru' : tags.length ? 'other' : 'none'
+  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: meta(b).artist, tags: meta(b).tags, tagged }
 }
 // Grid thumbnails live beside the dataset, never inside it. OS thumbnailer, cached as JPEG.
 const thumbs = p => { const d = path.join(PROJ, p, 'thumbs'); fs.mkdirSync(d, { recursive: true }); return d }

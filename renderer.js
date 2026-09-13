@@ -45,16 +45,17 @@ const decorate = (img, item) => {
   img.dataset.site = item.site
   if (item.ai) img.dataset.ai = 1
   img.dataset.rating = item.rating || 'g'
+  img.dataset.tagged = item.tagged || 'none'
   hide(img)
 }
 
 // View filters: never touch files, only what is shown. Kept per machine.
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","site":""}')
 const filters = $('#filters')
-const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.site && img.dataset.site !== F.site) || (F.q && !img.dataset.q.includes(F.q)))
+const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && img.dataset.tagged !== F.tagged) || (F.site && img.dataset.site !== F.site) || (F.q && !img.dataset.q.includes(F.q)))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
-  $('.filter-toggle').classList.toggle('on', !F.ai || !!F.rating || !!F.site || !!F.q)
+  $('.filter-toggle').classList.toggle('on', !F.ai || !!F.rating || !!F.tagged || !!F.site || !!F.q)
 }
 const drawSites = () => {
   const sel = filters.querySelector('[name=site]')
@@ -69,10 +70,12 @@ search.oninput = localQ
 scope.onchange = localQ
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
-const seg = filters.querySelector('.seg')
-const showSeg = () => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F.rating || '')))
-seg.onclick = e => { if (e.target.tagName === 'BUTTON') { F.rating = e.target.value; showSeg(); localStorage.filters = JSON.stringify(F); applyFilters() } }
-showSeg()
+filters.querySelectorAll('.seg').forEach(seg => {
+  const name = seg.dataset.name
+  const show = () => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[name] || '')))
+  seg.onclick = e => { if (e.target.tagName === 'BUTTON') { F[name] = e.target.value; show(); localStorage.filters = JSON.stringify(F); applyFilters() } }
+  show()
+})
 filters.onchange = e => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; localStorage.filters = JSON.stringify(F); applyFilters() }
 const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)) }
 
