@@ -229,7 +229,7 @@ api.onSaved(i => {
 const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]).then(([v, u]) => {
   const ul = $('#instruments ul')
   const newer = u.latest && u.latest !== u.current
-  const rows = { Epiphany: { status: `${u.current} · ${u.how}${newer ? ` · ${u.latest} available` : ''}`, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v }
+  const rows = { Epiphany: { status: u.current, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v }
   ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
     `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
   ).join('')

@@ -285,7 +285,7 @@ ipcMain.handle('update', async () => {
 ipcMain.handle('instruments', async () => {
   const v = await gdl(['--version']).then(v => v.trim(), () => null)
   return {
-    'gallery-dl': { status: v ? `${v} · ${fs.existsSync(GDL_EXE) ? 'exe' : 'python'}` : 'not found', action: v ? 'Update' : 'Install' },
+    'gallery-dl': { status: v ?? 'not found', action: v ? 'Update' : 'Install' },
     extension: { status: readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?', action: 'Export' }
   }
 })
