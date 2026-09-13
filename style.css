@@ -13,7 +13,7 @@ img { max-width: 100%; display: block }
   --hover: color-mix(in srgb, var(--fg) 8%, transparent);
   --tonal: color-mix(in srgb, var(--link) 22%, var(--bg));
   --field: color-mix(in srgb, var(--fg) 7%, var(--bg));
-  --ease: cubic-bezier(0, 0, 0, 1);
+  --ease: cubic-bezier(.2, 0, 0, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -36,14 +36,15 @@ html, body { overflow: hidden }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--muted) }
 a { color: inherit; text-decoration: none }
 
-header { display: flex; align-items: center; height: 4rem; flex: none; padding: 0 1.5rem }
+header { display: flex; align-items: center; height: 56px; flex: none; padding: 0 1.5rem }
 h1, h2 { font-family: 'Segoe UI Variable Display', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: -.01em }
 h1 { font-size: 1.5rem; font-weight: 700 }
-h1::before { content: 'Lobby' }
-h1[data-quote]::before { content: attr(data-quote); cursor: pointer }
-body:has(#lobby:target) h1[data-quote]::before { font: 500 1.15rem/1.4 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0 }
-body:has(#projects:target) h1::before { content: 'Projects' }
-body:has(#settings :target) h1::before { content: 'Settings' }
+/* Page titles are stacked and cross-faded with the same fade-through rhythm as the pages. */
+/* Whole-pixel metrics (even css px = whole device px at 150%): a fractional text baseline gets re-snapped when layers change and the title visibly jumps. */
+h1 { display: grid; align-items: center; height: 36px }
+h1 > span { grid-area: 1 / 1; line-height: 24px; display: none }
+body:has(#lobby:target) .t-lobby, body:has(#projects:target) .t-projects, body:has(#settings :target) .t-settings { display: block } /* hard swap: a title that doesn't move doesn't need to fade */
+.t-lobby.quote { font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer }
 nav { display: flex; gap: .25rem; margin-left: auto }
 nav a, main aside a { display: flex; align-items: center; gap: .75rem; padding: .5rem 1rem; border-radius: 6px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s, transform .1s }
 nav a:hover, main aside a:hover { color: var(--fg); background: var(--hover) }
@@ -64,12 +65,18 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem; transition: background .15s, color .15s }
 .seg button:hover { color: var(--fg) }
 .seg button.on { color: var(--fg); background: var(--tonal) }
+.fab .search { width: auto; border-radius: 999px; padding: 0 .25rem; gap: 0 }
+.fab .search:focus-within { border-color: var(--muted) }
+.search select, .search input { height: 100%; background: none; border: none; box-shadow: none; margin: 0 }
+.search select { padding: 0 .25rem 0 .75rem }
+.search input { width: 11rem; padding: 0 .75rem 0 .25rem }
 .theme-toggle::before { content: ''; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--fg); background: var(--toggle-fill); transition: background .15s }
 .theme-toggle:hover::before { background: var(--toggle-preview) }
 
 main { flex: 1; min-height: 0; display: grid }
-section { grid-area: 1 / 1; display: none; opacity: 0; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 0 1.5rem 1.5rem; transition: opacity .25s, transform .25s var(--ease), display .25s allow-discrete }
-section:target, #settings:has(:target) { opacity: 1; @starting-style { opacity: 0; transform: translateY(12px) } }
+section { grid-area: 1 / 1; display: none; opacity: 0; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 0 1.5rem 1.5rem; transition: opacity .12s, display .12s allow-discrete }
+/* Fade only. A translate on the entering page makes Chromium re-raster the header and the title jitters by sub-pixels. */
+section:target, #settings:has(:target) { opacity: 1; transition: opacity .25s .06s; @starting-style { opacity: 0 } }
 section:target { display: block }
 #settings:has(:target), #projects:target { display: grid }
 
@@ -103,7 +110,8 @@ dialog textarea { flex: 1; resize: none; line-height: 1.6 }
 #settings, #projects { gap: 2rem; align-content: start }
 #settings { grid-template-columns: 13rem minmax(0, 40rem) }
 #projects { grid-template-columns: 13rem minmax(0, 1fr) }
-main aside { display: flex; flex-direction: column; gap: .25rem; position: sticky; top: 0 }
+main aside { display: flex; flex-direction: column; gap: .25rem; position: sticky; top: 0; align-self: start } /* start: a stretched grid item has no room to stick */
+#settings h2 { position: sticky; top: 0; z-index: 1; background: var(--bg); padding-bottom: .25rem }
 #plist input { margin-top: .5rem }
 #settings > div { display: none }
 #settings > div:target { display: block }
@@ -111,13 +119,26 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem }
 .panel { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px }
 .panel li { display: flex; align-items: center; justify-content: space-between; min-height: 3.25rem; padding: .5rem 1rem .5rem 1.25rem; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; animation: rise .3s var(--ease) both; animation-delay: calc(var(--i, 0) * 25ms); transition: background .15s }
 #sites li:hover { background: var(--hover) }
+#sites li { flex-wrap: wrap; row-gap: .5rem }
 #sites label { display: flex; align-items: center; justify-content: space-between; flex: 1; cursor: pointer }
+#sites .key { width: 2rem; height: 2rem; margin-left: .75rem; padding: 0; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: none; color: var(--muted); transition: background .15s, color .15s }
+#sites .key:hover { color: var(--fg); background: var(--hover) }
+#sites .creds { flex-basis: 100%; display: flex; gap: .5rem; padding-bottom: .25rem }
+#sites .creds input { flex: 1; min-width: 0 }
+#instruments li { gap: 1rem }
+#instruments .status { margin-left: auto }
+#sites .creds button, #instruments button { padding: .4rem .9rem; border: 1px solid var(--rule); border-radius: 4px; background: var(--field); color: var(--fg); transition: background .15s }
+#sites .creds button:hover, #instruments button:hover { background: var(--tonal) }
 input[type="checkbox"] { accent-color: var(--link); width: 1.1rem; height: 1.1rem; margin: 0 }
 .status, .hint { color: var(--muted); font-size: .85rem }
 .hint { margin-top: .75rem; font-family: Consolas, monospace }
-select, .panel input[type="text"], #plist input, #filters input[type="search"], textarea { font: inherit; color: inherit; background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: .4rem .75rem; outline: none; transition: border-color .15s, box-shadow .15s }
-select:hover, .panel input[type="text"]:hover, #plist input:hover, #filters input[type="search"]:hover, textarea:hover { border-color: var(--muted) }
-select:focus, .panel input[type="text"]:focus, #plist input:focus, #filters input[type="search"]:focus, textarea:focus { box-shadow: inset 0 -2px 0 var(--link) }
-#profile select { margin-bottom: 1rem }
+/* Two controls, one language: typing gets a box, picking from a list is bare text. */
+select { font: inherit; color: var(--muted); background: none; border: none; padding: .4rem .25rem; cursor: pointer; transition: color .15s }
+select:hover, select:focus { color: var(--fg); outline: none }
+option { background: var(--surface); color: var(--fg) }
+.panel input[type="text"], .panel input[type="password"], #plist input, #filters input[type="search"], textarea { font: inherit; color: inherit; background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: .4rem .75rem; outline: none; transition: border-color .15s, box-shadow .15s }
+.panel input:not([type="checkbox"]):hover, #plist input:hover, #filters input[type="search"]:hover, textarea:hover { border-color: var(--muted) }
+.panel input:not([type="checkbox"]):focus, #plist input:focus, #filters input[type="search"]:focus, textarea:focus { box-shadow: inset 0 -2px 0 var(--link) }
+#profile select { margin: 0 0 1rem -.25rem }
 .panel input[type="text"] { flex: 1; max-width: 30rem; margin-left: 2rem }
 .panel span a { color: var(--link); font-size: .85rem; margin-left: .5rem }

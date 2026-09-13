@@ -1,15 +1,16 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, dialog, nativeTheme } = require('electron')
 const http = require('http')
 const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
-const { execFile } = require('child_process')
+const { execFile, spawn } = require('child_process')
 const crypto = require('crypto')
 const { PROFILES, caption } = require('./profiles')
 
 const PORT = 7777
-const HOME = process.env.EPIPHANY_HOME || __dirname
+const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
 const SETTINGS = path.join(HOME, 'settings.json')
+const WIN = path.join(HOME, 'window.json') // last window bounds; separate file so renderer settings saves never clobber it
 const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {} }
 let win
 Menu.setApplicationMenu(null)
@@ -61,15 +62,23 @@ const record = item => {
 const toast = text => win?.webContents.send('toast', text)
 const run = (cmd, args) => new Promise((res, rej) =>
   execFile(cmd, args, { maxBuffer: 1e7 }, (e, out, err) => e ? rej(new Error(err || e.message)) : res(out)))
+// gallery-dl: the standalone exe we downloaded if present, else whatever Python has (dev machines).
+const GDL_EXE = path.join(HOME, 'bin', 'gallery-dl.exe')
+const gdlCmd = () => fs.existsSync(GDL_EXE) ? [GDL_EXE, []] : ['python', ['-m', 'gallery_dl']]
+const gdl = args => { const [c, a] = gdlCmd(); return run(c, [...a, ...args]) }
 
 function createWindow() {
+  const saved = readJson(WIN, {})
   win = new BrowserWindow({
     width: 1000,
     height: 700,
+    ...saved.bounds,
     show: false,
+    icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false }
   })
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => { win.show(); if (saved.maximized) win.maximize() })
+  win.on('close', () => fs.writeFileSync(WIN, JSON.stringify({ bounds: win.getNormalBounds(), maximized: win.isMaximized() })))
   win.loadFile('index.html')
 }
 
@@ -118,7 +127,7 @@ async function pull({ page }) {
   const d = dir()
   const before = new Set(fs.readdirSync(d))
   // ponytail: --range caps a search page at 50 posts; make it a profile field if you want whole searches
-  await run('python', ['-m', 'gallery_dl', '--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, page])
+  await gdl(['--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, page])
   const s = settings()
   const profile = { ...PROFILES[s.profile], ...s.overrides }
   const items = []
@@ -152,6 +161,8 @@ const txt = f => f.replace(/\.[^.]+$/, '.txt')
 ipcMain.handle('getCaption', (_, file) => fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : '')
 ipcMain.handle('setCaption', (_, file, text) => fs.writeFileSync(txt(file), text))
 ipcMain.handle('open', (_, url) => shell.openExternal(url))
+// Native bits (select popups, title bar) follow nativeTheme, not our CSS; keep them in step with the dot.
+ipcMain.on('theme', (_, t) => { nativeTheme.themeSource = t })
 
 // Right-click on a picture. Delete goes to the Recycle Bin, so no confirm.
 const remove = async item => {
@@ -178,8 +189,8 @@ const relookup = async item => {
   return hit
 }
 ipcMain.handle('lookup', (_, item) => relookup(item))
-// Tag search pages per site. Boorus want underscores; the rest take the words as typed.
-const booru = t => encodeURIComponent(t.replace(/ /g, '_'))
+// Tag search pages per site. The query arrives in the site's own syntax (booru: space-separated tags).
+const booru = t => encodeURIComponent(t)
 const SEARCH = {
   danbooru: t => `https://danbooru.donmai.us/posts?tags=${booru(t)}`,
   gelbooru: t => `https://gelbooru.com/index.php?page=post&s=list&tags=${booru(t)}`,
@@ -196,8 +207,11 @@ const SEARCH = {
   deviantart: t => `https://www.deviantart.com/search?q=${encodeURIComponent(t)}`,
   artstation: t => `https://www.artstation.com/search?query=${encodeURIComponent(t)}`
 }
+ipcMain.handle('searchSites', () => Object.keys(SEARCH))
+ipcMain.handle('search', (_, site, q) => { toast(`Pulling "${q}" from ${site}…`); return pull({ page: SEARCH[site](q) }).catch(e => { toast(e.message); throw e }) })
 ipcMain.handle('tagMenu', (_, tag) => {
-  const sites = settings().sites.filter(s => SEARCH[s]).map(s => ({ label: s, click: () => shell.openExternal(SEARCH[s](tag)) }))
+  // A caption tag shows spaces; boorus spell it with underscores.
+  const sites = settings().sites.filter(s => SEARCH[s]).map(s => ({ label: s, click: () => shell.openExternal(SEARCH[s](BOORU.has(s) || s === 'animepictures' ? tag.replace(/ /g, '_') : tag)) }))
   Menu.buildFromTemplate([
     { label: `Search "${tag}"`, click: () => win.webContents.send('search', tag) },
     ...(sites.length ? [{ label: 'Search in', submenu: sites }] : [])
@@ -226,9 +240,52 @@ ipcMain.handle('quote', () => {
   return fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { signal: AbortSignal.timeout(3000), cache: 'no-store' })
     .then(r => r.json()).then(pick, () => null)
 })
-ipcMain.handle('instruments', async () => ({
-  'gallery-dl': await run('python', ['-m', 'gallery_dl', '--version']).then(v => v.trim(), () => null)
-}))
+// Site credentials live in gallery-dl's own config, which is what reads them.
+const GDL = path.join(process.env.APPDATA, 'gallery-dl', 'config.json')
+ipcMain.handle('getCreds', () => readJson(GDL, {}).extractor ?? {})
+ipcMain.handle('setCred', (_, site, key, value) => {
+  const c = readJson(GDL, {})
+  ;((c.extractor ??= {})[site] ??= {})[key] = value
+  fs.mkdirSync(path.dirname(GDL), { recursive: true })
+  fs.writeFileSync(GDL, JSON.stringify(c, null, 2))
+})
+ipcMain.handle('oauth', (_, site) => {
+  const [c, a] = gdlCmd()
+  spawn('cmd.exe', ['/c', 'start', '""', 'cmd', '/k', c, ...a, `oauth:${site}`], { detached: true, stdio: 'ignore' }).unref()
+})
+// The Chrome extension ships inside the app (extraResources when packaged) and is exported for "Load unpacked".
+const EXT = app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension')
+ipcMain.handle('instruments', async () => {
+  const v = await gdl(['--version']).then(v => v.trim(), () => null)
+  return {
+    'gallery-dl': { status: v ? `${v} · ${fs.existsSync(GDL_EXE) ? 'exe' : 'python'}` : 'not found', action: v ? 'Update' : 'Install' },
+    extension: { status: readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?', action: 'Export' }
+  }
+})
+ipcMain.handle('exportExtension', async () => {
+  const { filePaths: [d] } = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
+  if (!d) return
+  const out = path.join(d, 'epiphany-extension')
+  fs.cpSync(EXT, out, { recursive: true })
+  shell.showItemInFolder(out)
+  toast('Load it unpacked from chrome://extensions')
+})
+// Stable executables are published on Codeberg, with SHA256SUMS alongside.
+ipcMain.handle('installGdl', async () => {
+  toast('Downloading gallery-dl…')
+  const get = url => fetch(url, { signal: AbortSignal.timeout(120000) }).then(r => { if (!r.ok) throw new Error(`${r.status} ${url}`); return r })
+  const rel = await get('https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest').then(r => r.json())
+  const asset = n => rel.assets.find(a => a.name === n)?.browser_download_url
+  if (!asset('gallery-dl.exe')) throw new Error('no gallery-dl.exe in ' + rel.tag_name)
+  const buf = Buffer.from(await get(asset('gallery-dl.exe')).then(r => r.arrayBuffer()))
+  const want = (await get(asset('SHA256SUMS')).then(r => r.text())).split('\n').find(l => l.trim().endsWith('gallery-dl.exe'))?.trim().split(/\s+/)[0]
+  if (want && crypto.createHash('sha256').update(buf).digest('hex') !== want) throw new Error('checksum mismatch')
+  fs.mkdirSync(path.dirname(GDL_EXE), { recursive: true })
+  fs.writeFileSync(GDL_EXE, buf)
+  const v = await gdl(['--version']).then(v => v.trim())
+  toast(`gallery-dl ${v} installed`)
+  return v
+})
 
 app.whenReady().then(() => {
   dir()

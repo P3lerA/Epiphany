@@ -2,6 +2,11 @@ const SITES = ['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sank
   'zerochan', 'animepictures', 'pixiv', 'twitter', 'deviantart', 'artstation', 'fanbox', 'fantia', 'bluesky']
 const $ = s => document.querySelector(s)
 const esc = s => String(s).replace(/"/g, '&quot;')
+// What gallery-dl needs per site. 'oauth' = a browser login flow, the rest are config fields.
+const CREDS = { danbooru: ['username', 'api-key'], gelbooru: ['api-key', 'user-id'], e621: ['username', 'api-key'],
+  sankaku: ['username', 'password'], twitter: ['username', 'password'], pixiv: 'oauth' }
+const SECRET = /key|password|token/
+const KEY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.9 12.1 21 2m-3 3 3 3m-6 0 2 2"/></svg>'
 const stagger = ul => [...ul.children].forEach((li, i) => li.style.setProperty('--i', i))
 
 let s, projects, items
@@ -56,8 +61,13 @@ const drawSites = () => {
   sel.innerHTML = '<option value="">All sources</option>' + [...new Set(items.map(i => i.site).filter(Boolean))].sort()
     .map(x => `<option ${x === F.site ? 'selected' : ''}>${x}</option>`).join('')
 }
-$('.filter-toggle').onclick = () => { filters.hidden = !filters.hidden; if (!filters.hidden) filters.querySelector('[name=q]').focus() }
-filters.oninput = e => { if (e.target.name === 'q') { F.q = e.target.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters() } }
+$('.filter-toggle').onclick = () => filters.hidden = !filters.hidden
+// Search box: local scope filters the grid as you type; a site scope pulls that site's tag search on Enter.
+const search = $('.search input'), scope = $('.search select')
+const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters() }
+search.oninput = localQ
+scope.onchange = localQ
+search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 const seg = filters.querySelector('.seg')
 const showSeg = () => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F.rating || '')))
@@ -130,13 +140,7 @@ const tagAt = ta => {
   return ta.value.slice(a, b < 0 ? undefined : b).trim()
 }
 dlg.querySelector('textarea').oncontextmenu = e => { const t = tagAt(e.target); if (t) api.tagMenu(t) }
-api.onSearch(tag => {
-  dlg.close()
-  const q = filters.querySelector('[name=q]')
-  q.value = tag
-  q.dispatchEvent(new Event('input', { bubbles: true }))
-  filters.hidden = false
-})
+api.onSearch(tag => { dlg.close(); scope.value = ''; search.value = tag; localQ(); search.focus() })
 
 const settingsUI = profiles => {
   const general = $('#general ul')
@@ -147,16 +151,29 @@ const settingsUI = profiles => {
   general.onchange = e => {
     s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value
     save()
-    if (e.target.name === 'quote') { delete h1.dataset.quote; quote() }
+    if (e.target.name === 'quote') quote()
   }
   stagger(general)
 
   const sites = $('#sites ul')
-  sites.innerHTML = SITES.map(site =>
-    `<li><label>${site}<input type="checkbox" value="${site}" ${s.sites.includes(site) ? 'checked' : ''}></label></li>`
-  ).join('')
-  stagger(sites)
-  sites.onchange = () => { s.sites = [...sites.querySelectorAll(':checked')].map(c => c.value); save() }
+  api.getCreds().then(creds => {
+    sites.innerHTML = SITES.map(site => {
+      const c = CREDS[site]
+      const fields = c === 'oauth' ? `<button data-oauth="${site}">Log in</button>`
+        : (c || []).map(k => `<input name="${k}" placeholder="${k}" type="${SECRET.test(k) ? 'password' : 'text'}" value="${esc(creds[site]?.[k] ?? '')}" spellcheck="false">`).join('')
+      return `<li data-site="${site}"><label>${site}<input type="checkbox" value="${site}" ${s.sites.includes(site) ? 'checked' : ''}></label>${c ? `<button class="key" aria-label="Credentials">${KEY}</button><div class="creds" hidden>${fields}</div>` : ''}</li>`
+    }).join('')
+    stagger(sites)
+  })
+  sites.onclick = e => {
+    const key = e.target.closest('.key'), oauth = e.target.closest('[data-oauth]')
+    if (key) { const d = key.nextElementSibling; d.hidden = !d.hidden }
+    if (oauth) api.oauth(oauth.dataset.oauth)
+  }
+  sites.onchange = e => {
+    if (e.target.type === 'checkbox') { s.sites = [...sites.querySelectorAll(':checked')].map(c => c.value); save() }
+    else api.setCred(e.target.closest('li').dataset.site, e.target.name, e.target.value)
+  }
 
   const sel = $('#profile select')
   const rows = $('#profile ul')
@@ -185,6 +202,7 @@ Promise.all([api.list(), api.projects(), api.getSettings(), api.profiles()]).the
   render($('#lobby'), items)
   drawProjects()
   drawSites()
+  api.searchSites().then(names => scope.innerHTML = '<option value="">local</option>' + names.filter(n => s.sites.includes(n)).map(n => `<option>${n}</option>`).join(''))
   applyFilters()
   settingsUI(profiles)
 })
@@ -208,17 +226,23 @@ api.onSaved(i => {
   if (i.project === s.project) add(pgrid, i, true)
 })
 
-api.instruments().then(v => {
+const drawInstruments = () => api.instruments().then(v => {
   const ul = $('#instruments ul')
-  ul.innerHTML = Object.entries(v).map(([name, ver]) =>
-    `<li><span>${name}</span><span class="status">${ver || 'not found'}</span></li>`
+  ul.innerHTML = Object.entries(v).map(([name, { status, action }]) =>
+    `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
   ).join('')
   stagger(ul)
+  ul.onclick = e => {
+    const n = e.target.dataset.act
+    if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
+    if (n === 'extension') api.exportExtension()
+  }
 })
+drawInstruments()
 
-const h1 = $('h1')
-const quote = () => api.quote().then(q => { if (q) h1.dataset.quote = q })
-h1.onclick = e => { if (e.target === h1) quote() }
+const h1 = $('h1 .t-lobby')
+const quote = () => api.quote().then(q => { h1.textContent = q || 'Lobby'; h1.classList.toggle('quote', !!q) })
+h1.onclick = quote
 quote()
 
 const mark = () => document.querySelectorAll('#settings aside a').forEach(a => a.classList.toggle('on', a.hash === location.hash))

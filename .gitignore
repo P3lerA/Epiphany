@@ -3,3 +3,6 @@ project/
 settings.json
 electron.log
 design/epiphany.html
+window.json
+dist/
+bin/

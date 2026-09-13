@@ -1,11 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
+  theme: t => ipcRenderer.send('theme', t),
   list: () => ipcRenderer.invoke('list'),
   onSaved: cb => ipcRenderer.on('saved', (_, item) => cb(item)),
   getSettings: () => ipcRenderer.invoke('getSettings'),
   setSettings: s => ipcRenderer.invoke('setSettings', s),
   instruments: () => ipcRenderer.invoke('instruments'),
+  installGdl: () => ipcRenderer.invoke('installGdl'),
+  exportExtension: () => ipcRenderer.invoke('exportExtension'),
   profiles: () => ipcRenderer.invoke('profiles'),
   getCaption: file => ipcRenderer.invoke('getCaption', file),
   setCaption: (file, text) => ipcRenderer.invoke('setCaption', file, text),
@@ -17,9 +20,14 @@ contextBridge.exposeInMainWorld('api', {
   menu: item => ipcRenderer.invoke('menu', item),
   remove: item => ipcRenderer.invoke('remove', item),
   lookup: item => ipcRenderer.invoke('lookup', item),
+  getCreds: () => ipcRenderer.invoke('getCreds'),
+  setCred: (site, key, value) => ipcRenderer.invoke('setCred', site, key, value),
+  oauth: site => ipcRenderer.invoke('oauth', site),
   onOpenProject: cb => ipcRenderer.on('openProject', (_, p) => cb(p)),
   onRemoved: cb => ipcRenderer.on('removed', (_, f) => cb(f)),
   onToast: cb => ipcRenderer.on('toast', (_, t) => cb(t)),
   tagMenu: tag => ipcRenderer.invoke('tagMenu', tag),
+  searchSites: () => ipcRenderer.invoke('searchSites'),
+  search: (site, q) => ipcRenderer.invoke('search', site, q),
   onSearch: cb => ipcRenderer.on('search', (_, t) => cb(t))
 })

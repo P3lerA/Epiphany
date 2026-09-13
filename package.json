@@ -3,9 +3,43 @@
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "description": "Collect booru pictures into per-project training sets.",
+  "build": {
+    "appId": "dev.alice.epiphany",
+    "productName": "Epiphany",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "profiles.js",
+      "theme.js",
+      "index.html",
+      "style.css",
+      "package.json",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "extraResources": [
+      {
+        "from": "extension",
+        "to": "extension"
+      }
+    ]
   }
 }
