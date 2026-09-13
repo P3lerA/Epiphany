@@ -6,6 +6,7 @@ const { pathToFileURL } = require('url')
 const { execFile, spawn } = require('child_process')
 const crypto = require('crypto')
 const { PROFILES, caption } = require('./profiles')
+const { autoUpdater } = require('electron-updater')
 
 const PORT = 7777
 const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
@@ -255,6 +256,32 @@ ipcMain.handle('oauth', (_, site) => {
 })
 // The Chrome extension ships inside the app (extraResources when packaged) and is exported for "Load unpacked".
 const EXT = app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension')
+// Self-update. Installed builds use electron-updater (latest.yml on the GitHub release).
+// The portable exe is a self-extracting shell that runs from %TEMP%, so the file itself can simply be replaced and relaunched.
+const PORTABLE = process.env.PORTABLE_EXECUTABLE_FILE
+const RELEASES = 'https://api.github.com/repos/P3lerA/Epiphany/releases/latest'
+autoUpdater.autoDownload = false
+autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall())
+autoUpdater.on('download-progress', p => toast(`Downloading ${Math.round(p.percent)}%`))
+let latestRelease
+ipcMain.handle('checkUpdate', async () => {
+  const current = app.getVersion()
+  latestRelease = await fetch(RELEASES, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null, () => null)
+  const latest = latestRelease?.tag_name?.replace(/^v/, '') ?? null
+  return { current, latest, how: PORTABLE ? 'portable' : app.isPackaged ? 'installed' : 'dev' }
+})
+ipcMain.handle('update', async () => {
+  if (!PORTABLE) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
+  const asset = latestRelease.assets.find(a => /^Epiphany [\d.]+\.exe$/.test(a.name))
+  if (!asset) throw new Error('no portable exe in ' + latestRelease.tag_name)
+  toast('Downloading ' + asset.name + '…')
+  const buf = Buffer.from(await fetch(asset.browser_download_url).then(r => r.arrayBuffer()))
+  if (buf.length !== asset.size) throw new Error('download incomplete')
+  const nw = PORTABLE + '.new'
+  fs.writeFileSync(nw, buf)
+  spawn('cmd.exe', ['/c', `ping -n 2 127.0.0.1 >nul & move /y "${nw}" "${PORTABLE}" & start "" "${PORTABLE}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+  app.quit()
+})
 ipcMain.handle('instruments', async () => {
   const v = await gdl(['--version']).then(v => v.trim(), () => null)
   return {

@@ -21,4 +21,6 @@ jobs:
         with:
           files: |
             dist/*.exe
+            dist/*.yml
+            dist/*.blockmap
             dist/epiphany-extension.zip

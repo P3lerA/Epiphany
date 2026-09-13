@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('api', {
   setSettings: s => ipcRenderer.invoke('setSettings', s),
   instruments: () => ipcRenderer.invoke('instruments'),
   installGdl: () => ipcRenderer.invoke('installGdl'),
+  checkUpdate: () => ipcRenderer.invoke('checkUpdate'),
+  update: () => ipcRenderer.invoke('update'),
   exportExtension: () => ipcRenderer.invoke('exportExtension'),
   profiles: () => ipcRenderer.invoke('profiles'),
   getCaption: file => ipcRenderer.invoke('getCaption', file),

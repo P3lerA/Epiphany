@@ -226,9 +226,11 @@ api.onSaved(i => {
   if (i.project === s.project) add(pgrid, i, true)
 })
 
-const drawInstruments = () => api.instruments().then(v => {
+const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]).then(([v, u]) => {
   const ul = $('#instruments ul')
-  ul.innerHTML = Object.entries(v).map(([name, { status, action }]) =>
+  const newer = u.latest && u.latest !== u.current
+  const rows = { Epiphany: { status: `${u.current} · ${u.how}${newer ? ` · ${u.latest} available` : ''}`, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v }
+  ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
     `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
   ).join('')
   stagger(ul)
@@ -236,6 +238,7 @@ const drawInstruments = () => api.instruments().then(v => {
     const n = e.target.dataset.act
     if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
     if (n === 'extension') api.exportExtension()
+    if (n === 'Epiphany') (newer && u.how !== 'dev' ? api.update() : Promise.resolve()).then(drawInstruments)
   }
 })
 drawInstruments()
