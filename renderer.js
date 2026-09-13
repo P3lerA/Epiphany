@@ -117,9 +117,9 @@ const preview = async (item, root) => {
   dlg.querySelector('.prev').hidden = !prev
   dlg.querySelector('.next').hidden = !next
   dlg.querySelector('img').src = item.url
-  dlg.querySelector('.name').textContent = item.file.split(/[\\/]/).pop()
   dlg.querySelector('.time').textContent = new Date(item.time).toLocaleString()
   dlg.querySelector('.rating').textContent = { g: 'general', s: 'sensitive', q: 'questionable', e: 'explicit' }[item.rating] ?? ''
+  dlg.querySelector('.tagged').textContent = { booru: 'Tags: booru', other: 'Tags: site only', none: 'Tags: none' }[item.tagged]
   const proj = dlg.querySelector('.proj')
   proj.textContent = item.project
   proj.onclick = e => { e.preventDefault(); dlg.close(); openProject(item.project) }
