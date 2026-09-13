@@ -50,7 +50,7 @@ const decorate = (img, item) => {
 }
 
 // View filters: never touch files, only what is shown. Kept per machine.
-const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","site":""}')
+const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
 const filters = $('#filters')
 const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && img.dataset.tagged !== F.tagged) || (F.site && img.dataset.site !== F.site) || (F.q && !img.dataset.q.includes(F.q)))
 const applyFilters = () => {

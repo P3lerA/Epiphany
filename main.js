@@ -333,7 +333,8 @@ app.whenReady().then(() => {
     let body = ''
     req.on('data', c => body += c)
     req.on('end', () => {
-      const q = JSON.parse(body)
+      let q
+      try { q = JSON.parse(body) } catch { return res.writeHead(400).end() }
       ;(q.src ? save(q) : pull(q)).then(
         r => res.end(JSON.stringify(r)),
         err => { console.error(err.message); toast(err.message); res.writeHead(500).end(err.message) }
