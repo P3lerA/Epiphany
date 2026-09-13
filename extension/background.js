@@ -1,4 +1,4 @@
-const post = body => fetch('http://127.0.0.1:7777/', { method: 'POST', body: JSON.stringify(body) }).then(r => r.ok, () => false)
+const post = body => fetch('http://127.0.0.1:7676/', { method: 'POST', body: JSON.stringify(body) }).then(r => r.ok, () => false)
 
 const badge = (tabId, text) => {
   chrome.action.setBadgeText({ tabId, text })
