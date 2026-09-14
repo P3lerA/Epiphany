@@ -10,7 +10,10 @@
 <body>
   <header>
     <h1><span class="t-lobby">Lobby</span><span class="t-projects">Projects</span><span class="t-settings">Settings</span></h1>
-    <div id="selection" hidden><span></span><button class="export">Export</button><button class="clear" aria-label="Clear selection">&#x2715;</button></div>
+    <div class="pills">
+      <button id="unsure" hidden></button>
+      <div id="selection" hidden><span></span><button class="lookup">Look up</button><button class="export">Export</button><button class="clear" aria-label="Clear selection">&#x2715;</button></div>
+    </div>
     <nav>
       <a href="#lobby">Lobby</a>
       <a href="#projects">Projects</a>

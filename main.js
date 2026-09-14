@@ -122,7 +122,7 @@ async function save({ src, page }) {
   const file = path.join(dir(), name)
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()))
   const item = record({ file, src, page, time: new Date().toISOString() })
-  if (settings().lookup) resolve(item, { category: new URL(page).host }).catch(e => toast(e.message)) // same matching as a pull, after the reply
+  if (settings().lookup) relookup(item).catch(e => toast(e.message)) // same matching as a pull, with its toasts, after the reply
   return item
 }
 
@@ -152,28 +152,51 @@ const POST = {
 }
 const postUrl = p => POST[p.category]?.(p.id)
 
+// Similarity search per site, each answering with whole posts. Danbooru's IQDB needs an account (anonymous uploads are denied;
+// API-key auth also skips Rails CSRF; net.fetch because Cloudflare accepts Chromium's TLS, not Node's). Moebooru's post/similar is open.
+const moe = (base, form) => fetch(base + '/post/similar.json', { method: 'POST', body: form('file'), signal: AbortSignal.timeout(30000), ...UA })
+  .then(r => r.ok ? r.json() : [], () => []).then(j => (j.posts ?? []).map(p => ({ score: p.similarity, post: p })))
+const SIMILAR = {
+  danbooru: form => !danAuth() ? [] : net.fetch('https://danbooru.donmai.us/iqdb_queries.json', { method: 'POST', body: form('search[file]'), signal: AbortSignal.timeout(30000), headers: { Authorization: danAuth() } })
+    .then(r => r.ok ? r.json() : (toast(`IQDB: ${r.status}`), []), e => (toast(`IQDB: ${e.message}`), [])).then(c => c.filter(x => x.post)),
+  yandere: form => moe('https://yande.re', form),
+  konachan: form => moe('https://konachan.com', form)
+}
+// iqdb.org: one upload covers every booru it indexes, and the tags ride along in each thumbnail's alt text. It is HTML, but the
+// template has not changed since 2008; if it ever does, the regex finds nothing and we get no candidates, never wrong ones.
+const IQDB_HOST = { 'danbooru.donmai.us': 'danbooru', 'gelbooru.com': 'gelbooru', 'yande.re': 'yandere', 'konachan.com': 'konachan',
+  'chan.sankakucomplex.com': 'sankaku', 'anime-pictures.net': 'animepictures', 'www.zerochan.net': 'zerochan' }
+const IQDB_ONLY = ['gelbooru', 'sankaku', 'zerochan', 'animepictures'] // enabling one of these is what turns iqdb.org on
+const iqdbOrg = form => fetch('https://iqdb.org/', { method: 'POST', body: form('file'), signal: AbortSignal.timeout(30000), ...UA })
+  .then(r => r.ok ? r.text() : '', () => '').then(html => html.split('<table>').flatMap(t => {
+    const m = t.match(/href="\/\/([^/"]+)([^"]*)"[^>]*>\s*<img src='([^']+)' alt="Rating: (\w+)(?: Score: (\S+))? Tags: ([^"]*)"[\s\S]*?(\d+)% similarity/)
+    const category = m && IQDB_HOST[m[1]], id = m && m[2].match(/\d+(?!.*\d)/)?.[0]
+    return category && id ? [{ score: Number(m[7]), post: { id: Number(id), category, tags: m[6], rating: m[4], score: Number(m[5]) || '', preview_url: 'https://iqdb.org' + m[3] } }] : []
+  }))
+const canSimilar = () => settings().sites.some(site => (SIMILAR[site] && (site !== 'danbooru' || danAuth())) || IQDB_ONLY.includes(site))
 const danAuth = () => { const d = readJson(GDL, {}).extractor?.danbooru ?? {}; return d.username && d['api-key'] ? 'Basic ' + Buffer.from(`${d.username}:${d['api-key']}`).toString('base64') : null }
 const lookup = async (j, file) => {
-  const get = (url, pick) => fetch(url, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Epiphany/0.1' } })
+  const get = (url, pick) => fetch(url, { signal: AbortSignal.timeout(8000), ...UA })
     .then(r => r.ok ? r.json() : null).then(pick, () => null)
-  const dan = tags => get(`https://danbooru.donmai.us/posts.json?limit=1&tags=${encodeURIComponent(tags)}`, r => r?.[0] ? { ...r[0], category: 'danbooru' } : null)
+  // one: the tags must name exactly one post (a multi-page pixiv work is several posts; the wrong page would get the wrong tags)
+  const dan = (tags, one) => get(`https://danbooru.donmai.us/posts.json?limit=2&tags=${encodeURIComponent(tags)}`, r => r?.[0] && !(one && r[1]) ? { ...r[0], category: 'danbooru' } : null)
   const md5 = crypto.createHash('md5').update(fs.readFileSync(file)).digest('hex')
-  const key = j.category === 'pixiv' ? `pixiv_id:${j.id}` : j.category === 'twitter' ? `source:*status/${j.tweet_id}*` : null
-  let hit = (key && await dan(key)) || await dan(`md5:${md5}`)
+  // The source id: from gallery-dl's metadata, or from the page a right-click save came from.
+  const pix = j.category === 'pixiv' ? j.id : j.page?.match(/pixiv\.net\/(?:en\/)?artworks\/(\d+)/)?.[1]
+  const tw = j.category === 'twitter' ? j.tweet_id : j.page?.match(/(?:twitter|x)\.com\/\w+\/status\/(\d+)/)?.[1]
+  const key = pix ? `pixiv_id:${pix}` : tw ? `source:*status/${tw}*` : null
+  const gel = () => get(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&limit=1&tags=md5:${md5}${gelCreds()}`, r => r?.post?.[0] ? { ...r.post[0], category: 'gelbooru' } : null)
+  // Exact bytes first, then the source id, then similarity.
+  let hit = await dan(`md5:${md5}`) || await gel() || (key && await dan(key, true))
   if (!hit) {
-    const g = readJson(GDL, {}).extractor?.gelbooru ?? {}
-    hit = await get(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&limit=1&tags=md5:${md5}&api_key=${g['api-key'] ?? ''}&user_id=${g['user-id'] ?? ''}`,
-      r => r?.post?.[0] ? { ...r.post[0], category: 'gelbooru' } : null)
-  }
-  if (!hit && danAuth()) {
-    // Same picture, different bytes (watermark, rescale, scan): danbooru's IQDB matches by similarity.
-    // Uploading needs an account (anonymous = Pundit denied); API-key auth also skips Rails CSRF. net.fetch: Cloudflare accepts Chromium's TLS, not Node's.
-    const fd = new FormData()
-    fd.append('search[file]', new Blob([fs.readFileSync(file)]), path.basename(file))
-    const c = await net.fetch('https://danbooru.donmai.us/iqdb_queries.json', { method: 'POST', body: fd, signal: AbortSignal.timeout(30000), headers: { Authorization: danAuth() } })
-      .then(r => r.ok ? r.json() : [], () => [])
-    const near = c.filter(x => x.score >= 70 && x.post).sort((a, b) => b.score - a.score).slice(0, 4)
-      .map(x => ({ score: Math.round(x.score), post: { ...x.post, category: 'danbooru' } }))
+    // Same picture, different bytes (watermark, rescale, scan): ask every enabled site that can search by similarity.
+    const bytes = fs.readFileSync(file)
+    const form = field => { const d = new FormData(); d.append(field, new Blob([bytes]), path.basename(file)); return d }
+    const found = []
+    const sites = settings().sites
+    for (const site of sites) if (SIMILAR[site]) for (const c of await SIMILAR[site](form)) found.push({ score: Math.round(c.score), post: { ...c.post, category: site } })
+    if (sites.some(s => IQDB_ONLY.includes(s))) for (const c of await iqdbOrg(form)) if (!found.some(f => f.post.category === c.post.category && f.post.id === c.post.id)) found.push(c)
+    const near = found.filter(x => x.score >= 70).sort((a, b) => b.score - a.score).slice(0, 4)
     // Settings decide how sure a similarity match must be to skip the human; exact id/md5 hits above never ask.
     if (near.length && near[0].score >= settings().accept && (near.length === 1 || near[0].score - near[1].score >= 15)) hit = near[0].post
     else if (near.length) {
@@ -181,8 +204,8 @@ const lookup = async (j, file) => {
       // Their preview thumbnails, fetched here (Chromium's stack, proven against the CDN) and kept beside our own thumbs.
       const p = path.basename(path.dirname(path.dirname(file)))
       for (const c of near) {
-        const t = path.join(thumbs(p), 'cand-' + c.post.id + '.jpg')
-        if (!fs.existsSync(t)) await net.fetch(c.post.preview_file_url).then(async r => r.ok && fs.writeFileSync(t, Buffer.from(await r.arrayBuffer()))).catch(() => {})
+        const t = path.join(thumbs(p), `cand-${c.post.category}-${c.post.id}.jpg`) // ids collide across sites
+        if (!fs.existsSync(t)) await net.fetch(c.post.preview_file_url ?? c.post.preview_url).then(async r => r.ok && fs.writeFileSync(t, Buffer.from(await r.arrayBuffer()))).catch(() => {})
         if (fs.existsSync(t)) c.thumb = t
       }
     }
@@ -237,26 +260,59 @@ const remove = async item => {
 }
 
 // Manual lookup for any picture, including right-click saves that have no sidecar.
-const adopt = (item, j, hit) => {
-  j.booru = hit
+// A flat tag string becomes tags by kind, so @artist can be written: danbooru answers by post id; gelbooru types a batch of names;
+// the moebooru sites publish their whole artist list, fetched once a month into HOME/cache.
+const MOE = { yandere: 'https://yande.re', konachan: 'https://konachan.com' }
+const artists = async site => {
+  const f = path.join(HOME, 'cache', site + '-artists.json')
+  if (!fs.existsSync(f) || Date.now() - fs.statSync(f).mtimeMs > 30 * 864e5) {
+    const names = await fetch(MOE[site] + '/tag.json?type=1&limit=0', UA).then(r => r.json()).then(l => l.map(t => t.name), () => null)
+    if (names) { fs.mkdirSync(path.dirname(f), { recursive: true }); writeJson(f, names) }
+  }
+  return new Set(readJson(f, []))
+}
+// The post as the site has it now: iqdb.org's index lags, and a similarity hit may carry an old tag list.
+const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
+const gelCreds = () => { const g = readJson(GDL, {}).extractor?.gelbooru ?? {}; return `&api_key=${g['api-key'] ?? ''}&user_id=${g['user-id'] ?? ''}` }
+const live = p => {
+  if (p.category === 'danbooru') return fetch(`https://danbooru.donmai.us/posts/${p.id}.json`, UA).then(r => r.ok ? r.json() : null, () => null)
+  if (p.category === 'gelbooru') return fetch(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&id=${p.id}${gelCreds()}`, UA).then(r => r.json()).then(r => r?.post?.[0] ?? null, () => null)
+  if (MOE[p.category]) return fetch(`${MOE[p.category]}/post.json?tags=id:${p.id}`, UA).then(r => r.json()).then(r => r?.[0] ?? null, () => null)
+  return null
+}
+const categorize = async p => {
+  p = { ...(await live(p) ?? p), category: p.category }
+  if (p.tag_string_general != null) return p
+  const tags = words(p.tags), kind = {}
+  if (p.category === 'gelbooru') {
+    const r = await fetch(`https://gelbooru.com/index.php?page=dapi&s=tag&q=index&json=1&limit=1000&names=${encodeURIComponent(tags.join(' '))}${gelCreds()}`, UA).then(r => r.json(), () => null)
+    for (const t of r?.tag ?? []) kind[t.name] = { 1: 'artist', 3: 'copyright', 4: 'character' }[t.type]
+  } else if (MOE[p.category]) { const a = await artists(p.category); for (const t of tags) if (a.has(t)) kind[t] = 'artist' }
+  const of = k => tags.filter(t => kind[t] === k).join(' ')
+  return { ...p, tag_string_artist: of('artist'), tag_string_copyright: of('copyright'), tag_string_character: of('character'), tag_string_general: tags.filter(t => !kind[t]).join(' ') }
+}
+const adopt = async (item, j, hit) => {
+  j.booru = await categorize(hit)
   delete j.candidates
   writeJson(item.file + '.json', j)
-  fs.writeFileSync(txt(item.file), caption(profile(), meta(hit)))
+  fs.writeFileSync(txt(item.file), caption(profile(), meta(j.booru)))
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
 // A non-booru picture: its booru post by exact ids/md5, then by similarity; close calls become candidates.
 const resolve = async (item, j) => {
   delete j.candidates
+  // Pulled from a booru: its own tags are the caption, nothing to look up (this re-renders it under the current profile).
+  if (BOORU.has(j.category)) { fs.writeFileSync(txt(item.file), caption(profile(), meta(j))); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
   const hit = await lookup(j, item.file)
-  if (hit) adopt(item, j, hit)
+  if (hit) await adopt(item, j, hit)
   else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
   return hit
 }
 const relookup = async item => {
   toast('Looking up…')
-  const j = readJson(item.file + '.json', { category: new URL(item.page).host })
+  const j = readJson(item.file + '.json', { category: new URL(item.page).host, page: item.page })
   const hit = await resolve(item, j)
-  toast(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : danAuth() ? 'No match on danbooru or gelbooru' : 'No exact match; similarity search needs a danbooru account (Sites)')
+  toast(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : canSimilar() ? 'No match' : 'No exact match; for similarity add a danbooru account or enable yande.re / konachan in Sites')
   return hit
 }
 // Projects: right-click. Delete goes to the Recycle Bin; the active project falls back to the first one left.
@@ -284,6 +340,17 @@ const exportItems = async items => {
   }
   toast(`${items.length} pictures, ${captions} captions → ${path.basename(d)}`)
   shell.showItemInFolder(d)
+}
+// Several at once, one toast at the end.
+const lookupAll = async items => {
+  toast(`Looking up ${items.length}…`)
+  let matched = 0, unsure = 0
+  for (const item of items) {
+    const j = readJson(item.file + '.json', { category: new URL(item.page).host, page: item.page })
+    if (await resolve(item, j)) matched++
+    else if (j.candidates) unsure++
+  }
+  toast(`${matched} matched, ${unsure} to pick, ${items.length - matched - unsure} none`)
 }
 // The user picked one of the close matches.
 const pick = (item, i) => { const j = readJson(item.file + '.json', {}); adopt(item, j, j.candidates[i].post) }
@@ -423,7 +490,7 @@ const installGdl = async () => {
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open,
-  lookup: relookup, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
+  lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems }
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
 ipcMain.on('theme', (_, t) => { nativeTheme.themeSource = t }) // native bits (select popups, title bar) follow nativeTheme, not our CSS

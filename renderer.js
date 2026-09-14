@@ -74,6 +74,16 @@ addEventListener('keydown', e => {
 })
 selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
 selUI.querySelector('.export').onclick = () => api.export(items.filter(i => sel.has(i.file)))
+selUI.querySelector('.lookup').onclick = () => api.lookupAll(items.filter(i => sel.has(i.file))) // booru-pulled ones just re-render their caption
+// Pictures waiting for a pick: a pill that toggles the unsure filter.
+const unsureUI = $('#unsure')
+const drawUnsure = () => {
+  const n = items.filter(i => i.tagged === 'unsure').length
+  unsureUI.hidden = !n
+  unsureUI.textContent = n + ' to pick'
+  unsureUI.classList.toggle('on', F.tagged === 'unsure')
+}
+unsureUI.onclick = () => { F.tagged = F.tagged === 'unsure' ? '' : 'unsure'; saveF(); applyFilters() }
 
 // View filters: never touch files, only what is shown. Kept per machine.
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
@@ -82,6 +92,8 @@ const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '' }) // th
 const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && img.dataset.tagged !== F.tagged) || (F.site && img.dataset.site !== F.site) || (F.q && !img.dataset.q.includes(F.q)))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
+  filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[seg.dataset.name] || ''))))
+  if (items) drawUnsure()
   $('.filter-toggle').classList.toggle('on', Object.entries(F).some(([k, v]) => k === 'ai' ? !v : v))
 }
 const drawSites = () => {
@@ -96,12 +108,7 @@ search.oninput = localQ
 scope.onchange = localQ
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
-filters.querySelectorAll('.seg').forEach(seg => {
-  const name = seg.dataset.name
-  const show = () => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[name] || '')))
-  seg.onclick = e => { if (e.target.tagName === 'BUTTON') { F[name] = e.target.value; show(); saveF(); applyFilters() } }
-  show()
-})
+filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') { F[seg.dataset.name] = e.target.value; saveF(); applyFilters() } } })
 filters.onchange = e => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() }
 const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)) }
 
@@ -118,7 +125,7 @@ plist.oncontextmenu = e => { if (e.target.dataset.p) api.projectMenu(e.target.da
 api.onProjectRemoved(async name => {
   items = items.filter(i => i.project !== name)
   document.querySelectorAll('.grid img').forEach(i => { if (i.item.project === name) { sel.delete(i.dataset.file); i.remove() } })
-  drawSel()
+  drawSel(); drawUnsure()
   ;[projects, s] = await Promise.all([api.projects(), api.getSettings()])
   drawProjects()
   drawSites()
@@ -272,6 +279,7 @@ api.onToast(t => { toastEl.textContent = t; toastEl.hidden = false; clearTimeout
 api.onRemoved(file => {
   items = items.filter(i => i.file !== file)
   if (sel.delete(file)) drawSel()
+  drawUnsure()
   document.querySelectorAll('.grid img').forEach(i => { if (i.dataset.file === file) i.remove() })
 })
 api.onSaved(i => {
@@ -279,6 +287,7 @@ api.onSaved(i => {
     items[items.findIndex(x => x.file === i.file)] = i
     document.querySelectorAll('.grid img').forEach(img => { if (img.dataset.file === i.file) decorate(img, i) })
     if (dlg.open && cur.file === i.file) preview(i)
+    drawUnsure()
     return
   }
   items.unshift(i)
