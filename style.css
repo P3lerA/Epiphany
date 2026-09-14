@@ -46,6 +46,7 @@ h1 > span { grid-area: 1 / 1; line-height: 24px; display: none }
 body:has(#lobby:target) .t-lobby, body:has(#projects:target) .t-projects, body:has(#settings :target) .t-settings { display: block } /* hard swap: a title that doesn't move doesn't need to fade */
 .t-lobby.quote { font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer }
 nav { display: flex; gap: .25rem; margin-left: auto }
+#selection:not([hidden]) + nav { margin-left: 1rem }
 nav a, main aside a { display: flex; align-items: center; gap: .75rem; padding: .5rem 1rem; border-radius: 6px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s, transform .1s }
 nav a:hover, main aside a:hover { color: var(--fg); background: var(--hover) }
 nav a:active, main aside a:active { transform: scale(.97) }
@@ -89,6 +90,11 @@ section:target { display: block }
 .grid img:not(.in) { opacity: 0 }
 .grid img.in { animation: rise .35s var(--ease) both }
 .grid img:hover { transform: scale(1.02) }
+.grid img.sel { outline: 2px solid var(--link); outline-offset: 2px }
+#selection { display: flex; align-items: center; gap: .25rem; margin-left: auto; padding: .25rem .25rem .25rem .75rem; border-radius: 6px; background: var(--tonal); font-size: .85rem; animation: rise .2s var(--ease) }
+#selection button { padding: .25rem .6rem; border: none; border-radius: 4px; background: none; color: var(--fg); transition: background .15s }
+#selection button:hover { background: var(--hover) }
+#selection .export { font-weight: 500 }
 #lobby:empty::before, #pgrid:empty::before { content: 'Nothing here yet'; color: var(--muted) }
 #lobby > div:not(:has(img:not([hidden]))), #pgrid > div:not(:has(img:not([hidden]))) { display: none }
 

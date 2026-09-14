@@ -38,7 +38,7 @@ const add = (root, item, front) => {
 }
 const decorate = (img, item) => {
   img.item = item
-  img.onclick = () => preview(item, img.closest('section'))
+  img.onclick = e => e.ctrlKey || e.metaKey || e.shiftKey ? select(img, e) : preview(item, img.closest('section'))
   img.oncontextmenu = () => api.menu(item)
   img.dataset.file = item.file
   img.dataset.q = `${item.artist || ''} ${item.tags || ''}`.toLowerCase()
@@ -48,6 +48,32 @@ const decorate = (img, item) => {
   img.dataset.tagged = item.tagged || 'none'
   hide(img)
 }
+
+// Selection: Ctrl-click toggles, Shift-click extends from the last toggle, Ctrl+A takes every visible picture, Esc clears.
+const sel = new Set()
+let anchor
+const selUI = $('#selection')
+const visible = () => [...(location.hash === '#projects' ? pgrid : $('#lobby')).querySelectorAll('.grid img')].filter(i => !i.hidden)
+const drawSel = () => {
+  document.querySelectorAll('.grid img').forEach(i => i.classList.toggle('sel', sel.has(i.dataset.file)))
+  selUI.hidden = !sel.size
+  selUI.firstElementChild.textContent = sel.size + ' selected'
+}
+const select = (img, e) => {
+  const f = img.dataset.file
+  if (e.shiftKey && anchor) {
+    const imgs = visible(), a = imgs.findIndex(i => i.dataset.file === anchor), b = imgs.indexOf(img)
+    imgs.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(i => sel.add(i.dataset.file))
+  } else { sel.has(f) ? sel.delete(f) : sel.add(f); anchor = f }
+  drawSel()
+}
+addEventListener('keydown', e => {
+  if (dlg.open || e.target.matches?.('input, textarea')) return
+  if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); visible().forEach(i => sel.add(i.dataset.file)); drawSel() }
+  if (e.key === 'Escape' && sel.size) { sel.clear(); drawSel() }
+})
+selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
+selUI.querySelector('.export').onclick = () => api.export(items.filter(i => sel.has(i.file)))
 
 // View filters: never touch files, only what is shown. Kept per machine.
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
@@ -88,6 +114,15 @@ const drawProjects = () => {
 }
 const openProject = p => { s.project = p; save(); drawProjects(); location.hash = '#projects' }
 plist.onclick = e => { if (e.target.dataset.p) openProject(e.target.dataset.p) }
+plist.oncontextmenu = e => { if (e.target.dataset.p) api.projectMenu(e.target.dataset.p) }
+api.onProjectRemoved(async name => {
+  items = items.filter(i => i.project !== name)
+  document.querySelectorAll('.grid img').forEach(i => { if (i.item.project === name) { sel.delete(i.dataset.file); i.remove() } })
+  drawSel()
+  ;[projects, s] = await Promise.all([api.projects(), api.getSettings()])
+  drawProjects()
+  drawSites()
+})
 plist.onkeydown = e => {
   const v = e.target.value?.trim()
   if (e.key !== 'Enter' || !v || projects.includes(v)) return
@@ -236,6 +271,7 @@ let toastTimer
 api.onToast(t => { toastEl.textContent = t; toastEl.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.hidden = true, 2500) })
 api.onRemoved(file => {
   items = items.filter(i => i.file !== file)
+  if (sel.delete(file)) drawSel()
   document.querySelectorAll('.grid img').forEach(i => { if (i.dataset.file === file) i.remove() })
 })
 api.onSaved(i => {

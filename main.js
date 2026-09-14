@@ -56,8 +56,8 @@ const info = ({ file, page }) => {
   // Each candidate with the tags only it has, so look-alike variants can be told apart.
   const sets = j.candidates?.map(c => new Set(words(c.post.tag_string_general)))
   const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb ? pathToFileURL(c.thumb).href : c.post.preview_file_url, caption: caption(profile(), meta(c.post)), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
-  // Where the caption's tags came from when they were looked up rather than pulled: the matched post.
-  const from = j.booru && (j.booru.category === 'gelbooru' ? `https://gelbooru.com/index.php?page=post&s=view&id=${j.booru.id}` : `https://danbooru.donmai.us/posts/${j.booru.id}`)
+  // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
+  const from = j.booru ? postUrl(j.booru) : BOORU.has(j.category) ? postUrl(j) : undefined
   return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: meta(b).artist, tags: meta(b).tags, tagged, candidates, from }
 }
 
@@ -140,6 +140,17 @@ const meta = j => ({
 
 // Non-booru sources (pixiv, twitter...) carry no booru tags. Ask danbooru, then gelbooru, for the same picture.
 const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34'])
+const POST = {
+  danbooru: id => `https://danbooru.donmai.us/posts/${id}`,
+  gelbooru: id => `https://gelbooru.com/index.php?page=post&s=view&id=${id}`,
+  safebooru: id => `https://safebooru.org/index.php?page=post&s=view&id=${id}`,
+  rule34: id => `https://rule34.xxx/index.php?page=post&s=view&id=${id}`,
+  yandere: id => `https://yande.re/post/show/${id}`,
+  konachan: id => `https://konachan.com/post/show/${id}`,
+  sankaku: id => `https://chan.sankakucomplex.com/post/show/${id}`,
+  e621: id => `https://e621.net/posts/${id}`
+}
+const postUrl = p => POST[p.category]?.(p.id)
 
 const danAuth = () => { const d = readJson(GDL, {}).extractor?.danbooru ?? {}; return d.username && d['api-key'] ? 'Basic ' + Buffer.from(`${d.username}:${d['api-key']}`).toString('base64') : null }
 const lookup = async (j, file) => {
@@ -247,6 +258,32 @@ const relookup = async item => {
   const hit = await resolve(item, j)
   toast(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : danAuth() ? 'No match on danbooru or gelbooru' : 'No exact match; similarity search needs a danbooru account (Sites)')
   return hit
+}
+// Projects: right-click. Delete goes to the Recycle Bin; the active project falls back to the first one left.
+const removeProject = async name => {
+  await shell.trashItem(path.join(PROJ, name))
+  const s = settings()
+  if (s.project === name) { s.project = projects()[0] ?? 'default'; writeJson(SETTINGS, s); dir(s.project) }
+  send('projectRemoved', name)
+}
+const projectMenu = name => Menu.buildFromTemplate([
+  { label: 'Open in Explorer', click: () => shell.openPath(path.join(PROJ, name)) },
+  { type: 'separator' },
+  { label: 'Delete project', click: () => removeProject(name) }
+]).popup({ window: win })
+// Export: pictures and their captions into a folder of the user's choosing, which is all a trainer reads. Same names; a clash gets the project as prefix.
+const exportItems = async items => {
+  const { filePaths: [d] } = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
+  if (!d) return
+  let captions = 0
+  for (const it of items) {
+    let name = path.basename(it.file)
+    if (fs.existsSync(path.join(d, name))) name = it.project + '_' + name
+    fs.copyFileSync(it.file, path.join(d, name))
+    if (fs.existsSync(txt(it.file))) { fs.copyFileSync(txt(it.file), txt(path.join(d, name))); captions++ }
+  }
+  toast(`${items.length} pictures, ${captions} captions → ${path.basename(d)}`)
+  shell.showItemInFolder(d)
 }
 // The user picked one of the close matches.
 const pick = (item, i) => { const j = readJson(item.file + '.json', {}); adopt(item, j, j.candidates[i].post) }
@@ -386,8 +423,8 @@ const installGdl = async () => {
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open,
-  lookup: relookup, pick, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
-  checkUpdate, update, instruments, exportExtension, installGdl }
+  lookup: relookup, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
+  checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems }
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
 ipcMain.on('theme', (_, t) => { nativeTheme.themeSource = t }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 
