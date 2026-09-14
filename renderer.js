@@ -44,7 +44,7 @@ const decorate = (img, item) => {
   img.dataset.q = `${item.artist || ''} ${item.tags || ''}`.toLowerCase()
   img.dataset.site = item.site
   if (item.ai) img.dataset.ai = 1
-  img.dataset.rating = item.rating || 'g'
+  img.dataset.rating = item.rating || 'e' // unrated (no booru match yet) is treated as explicit by the filter
   img.dataset.tagged = item.tagged || 'none'
   hide(img)
 }
