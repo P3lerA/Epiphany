@@ -130,8 +130,12 @@ function createWindow() {
   win.loadFile('index.html')
 }
 
+// Only web URLs reach fetch/gallery-dl; anything else (file:, "--exec=...") is refused.
+const web = u => { if (!/^https?:$/.test(new URL(u).protocol)) throw new Error(`Not a web URL: ${u}`) }
+
 // Right-click: one image URL, fetched directly.
 async function save({ src, page }) {
+  web(src); web(page)
   const res = await fetch(src, { headers: { Referer: page, 'User-Agent': 'Mozilla/5.0 Epiphany/0.1' } })
   if (!res.ok) throw new Error(`${res.status} ${src}`)
   let name = decodeURIComponent(path.basename(new URL(src).pathname)).replace(/[<>:"/\\|?*]/g, '_') || 'image'
@@ -237,10 +241,11 @@ const lookup = async (j, file) => {
 let pulling = Promise.resolve()
 const pull = q => pulling = pulling.then(() => pullOne(q), () => pullOne(q))
 async function pullOne({ page }) {
+  web(page)
   const d = dir()
   const before = new Set(fs.readdirSync(d))
   // ponytail: --range caps a search page at 50 posts; make it a profile field if you want whole searches
-  await gdl(['--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, page])
+  await gdl(['--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, '--', page])
   const s = settings(), prof = profile(), m = path.join(d, 'meta.jsonl')
   const known = new Set(fs.existsSync(m) ? fs.readFileSync(m, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l).file) : [])
   const items = [], later = []
@@ -566,7 +571,8 @@ app.whenReady().then(() => {
   tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Quit', click: () => app.quit() }]))
   tray.on('click', () => { win.show(); win.focus() })
   http.createServer((req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*')
+    // Only the extension: web pages can POST here too (text/plain skips preflight), but can't fake Origin.
+    if (!req.headers.origin?.startsWith('chrome-extension://')) return res.writeHead(403).end()
     if (req.method !== 'POST') return res.writeHead(404).end()
     let body = ''
     req.on('data', c => body += c)
