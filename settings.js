@@ -16,11 +16,16 @@ const settingsUI = profiles => {
   general.querySelector('[name=theme]').value = localStorage.theme || 'system'
   general.querySelector('[name=lookup]').checked = s.lookup
   general.querySelector('[name=accept]').value = s.accept
+  general.querySelector('[name=debug]').checked = !!s.debug
+  general.querySelector('[name=slow]').value = localStorage.slow || '1'
+  debug()
   general.onchange = e => {
+    if (e.target.name === 'slow') { localStorage.slow = e.target.value; return debug() } // per machine, like the theme
     if (e.target.name === 'theme') return setTheme(e.target.value) // per machine, like the filters
     s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.name === 'accept' ? Number(e.target.value) : e.target.value
     save()
     if (e.target.name === 'quote') quote()
+    if (e.target.name === 'debug') debug()
   }
 
   const sites = $('#sites ul')
@@ -77,6 +82,17 @@ const settingsUI = profiles => {
     else if (e.target.dataset.reset) { delete s.overrides[e.target.dataset.reset]; save(); draw() }
   }
 }
+
+// Debug mode: the reload button (Shift restarts the app, for main.js), Ctrl+R / Ctrl+Shift+R, F12 for DevTools, the animation
+// speed, and a DevTools port from the next start (main.js).
+const debug = () => { document.body.classList.toggle('debug', !!s.debug); SLOW = s.debug ? +localStorage.slow || 1 : 1 }
+const reload = restart => restart ? api.restart() : location.reload()
+$('.fab .reload').onclick = e => reload(e.shiftKey)
+addEventListener('keydown', e => {
+  if (!s?.debug) return
+  if (e.key === 'F12') api.devtools()
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); reload(e.shiftKey) }
+})
 
 // The fab's quick switch flips what shows now; Settings > General keeps the choice in step.
 $('.fab .theme-toggle').onclick = () => {

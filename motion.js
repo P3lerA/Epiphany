@@ -25,7 +25,7 @@ const fly = (el, a, b, box, o) => {
   if (a.frame !== undefined && a.frame !== b.frame) play(el, [frame(a), frame(b)], o)
 }
 const EASE = 'cubic-bezier(.2, 0, 0, 1)'
-const SLOW = 1 // slow motion, for looking closely; 1 is normal speed
+let SLOW = 1 // slow motion for looking closely: Settings > General > Animation speed, in debug mode
 // The swap still in the air: its animations, the ghosts it left, and the change, to take it back when piles are toggled again.
 let flight = null, air = null
 const play = (el, keys, o) => { const a = el.animate(keys, o); a.playbackRate = 1 / SLOW; air?.anims.push(a); return a }

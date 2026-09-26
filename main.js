@@ -21,6 +21,8 @@ app.on('second-instance', () => { win?.show(); win?.focus() })
 const readJson = (f, fallback) => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : fallback
 const writeJson = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 2))
 const settings = () => ({ ...DEFAULTS, ...readJson(SETTINGS, {}) })
+// Debug mode opens a DevTools port at start, so the running app can be driven from outside (Claude's tests) without a relaunch.
+if (settings().debug) app.commandLine.appendSwitch('remote-debugging-port', '9231')
 // A profile's caption template can live in captions/<profile>.md, edited in the user's editor: one piece per line, <!-- notes --> ignored.
 const templateFile = () => path.join(HOME, 'captions', settings().profile + '.md')
 const template = () => fs.existsSync(templateFile()) ? fs.readFileSync(templateFile(), 'utf8').replace(/<!--[\s\S]*?-->/g, '').replace(/\r?\n/g, ',') : null
@@ -507,7 +509,8 @@ const installGdl = async () => {
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
-  checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems }
+  checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
+  devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
 ipcMain.on('theme', (_, t, bar) => { nativeTheme.themeSource = t; win?.setTitleBarOverlay(bar) }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 

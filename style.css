@@ -4,6 +4,7 @@ button { font: inherit; color: inherit; cursor: pointer }
 img { max-width: 100%; display: block }
 a { color: inherit; text-decoration: none }
 [hidden] { display: none !important }
+body:not(.debug) .debug { display: none } /* debug mode only, see settings.js */
 
 /* Near-neutral surfaces: a tinted surround shifts how the pictures' colors read. The ink keeps a trace of the old navy. */
 :root {
