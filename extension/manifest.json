@@ -3,7 +3,8 @@
   "name": "Epiphany",
   "version": "0.2",
   "permissions": [
-    "contextMenus"
+    "contextMenus",
+    "storage"
   ],
   "host_permissions": [
     "http://127.0.0.1:7676/"
