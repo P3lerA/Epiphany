@@ -81,7 +81,12 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .fab .search:focus-within { border-color: var(--muted) }
 .search select, .search input { height: 100%; background: none; border: none; box-shadow: none; margin: 0 }
 .search select { padding: 0 .25rem 0 .75rem }
-.search input { width: 11rem; padding: 0 .75rem 0 .25rem }
+.search input { width: 11rem; padding: 0 .25rem }
+.search input::-webkit-search-cancel-button { display: none } /* too small to hit: .clear-q instead */
+/* Clearing the search: a real button in space the pill always keeps, so it appearing never moves the box. */
+.search .clear-q { flex: none; width: 1.75rem; height: 1.75rem; margin-right: .1rem; display: flex; align-items: center; justify-content: center; padding: 0; border: none; border-radius: 50%; background: none; color: var(--muted); opacity: 0; pointer-events: none; transition: opacity .15s, background .15s, color .15s }
+.search:has(input:not(:placeholder-shown)) .clear-q { opacity: 1; pointer-events: auto }
+.search .clear-q:hover { background: var(--hover); color: var(--fg) }
 .filter-toggle { anchor-name: --filters }
 .theme-toggle::before { content: ''; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid currentColor; background: var(--toggle-fill); transition: background .15s }
 .theme-toggle:hover::before { background: var(--toggle-preview) }

@@ -122,6 +122,7 @@ const drawSites = () => {
 const search = $('.search input'), scope = $('.search select')
 const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters(); explain() }
 search.oninput = scope.onchange = () => swap(() => { localQ(); backToPiles() }) // filter changes move the pictures, see swap
+$('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')) }
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') swap(() => { F[seg.dataset.name] = e.target.value; saveF(); applyFilters() }) } })
