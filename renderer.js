@@ -245,6 +245,7 @@ const settingsUI = profiles => {
   sel.innerHTML = Object.keys(profiles).map(n => `<option ${n === s.profile ? 'selected' : ''}>${n}</option>`).join('')
   const draw = () => {
     rows.innerHTML = Object.entries(profiles[s.profile]).map(([k, v]) => {
+      if (k === 'caption') return '<li><span>caption</span><button class="template" title="Edit in your text editor"><span></span>Edit</button></li>' // a long template is edited as a file, not in a one-line box
       const cur = s.overrides[k] ?? v
       const reset = k in s.overrides ? ` <a href="#profile" data-reset="${k}">reset</a>` : ''
       const input = typeof v === 'boolean'
@@ -252,7 +253,14 @@ const settingsUI = profiles => {
         : `<input type="text" name="${k}" value="${esc(cur)}">`
       return `<li><span>${k}${reset}</span>${input}</li>`
     }).join('')
+    drawTemplate()
   }
+  const drawTemplate = () => api.templateInfo().then(({ text, custom }) => {
+    const b = rows.querySelector('.template')
+    b.firstElementChild.textContent = text
+    b.previousElementSibling.innerHTML = 'caption' + (custom ? ' <a href="#profile" data-reset="caption">reset</a>' : '')
+  })
+  addEventListener('focus', () => { if (location.hash === '#profile') drawTemplate() }) // back from the editor
   draw()
   sel.onchange = () => { s.profile = sel.value; s.overrides = {}; save(); draw() }
   rows.onchange = e => { // no redraw: it would drop the focus Tab just moved to the next field
@@ -261,7 +269,11 @@ const settingsUI = profiles => {
     const label = e.target.closest('li').firstElementChild
     if (!label.querySelector('a')) label.insertAdjacentHTML('beforeend', ` <a href="#profile" data-reset="${e.target.name}">reset</a>`)
   }
-  rows.onclick = e => { if (e.target.dataset.reset) { delete s.overrides[e.target.dataset.reset]; save(); draw() } }
+  rows.onclick = e => {
+    if (e.target.closest('.template')) api.editTemplate()
+    if (e.target.dataset.reset === 'caption') api.resetTemplate().then(drawTemplate)
+    else if (e.target.dataset.reset) { delete s.overrides[e.target.dataset.reset]; save(); draw() }
+  }
 }
 
 Promise.all([api.list(), api.projects(), api.getSettings(), api.profiles()]).then(([list, ps, settings, profiles]) => {

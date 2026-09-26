@@ -21,7 +21,21 @@ app.on('second-instance', () => { win?.show(); win?.focus() })
 const readJson = (f, fallback) => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : fallback
 const writeJson = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 2))
 const settings = () => ({ ...DEFAULTS, ...readJson(SETTINGS, {}) })
-const profile = () => { const s = settings(); return { ...PROFILES[s.profile], ...s.overrides } }
+// A profile's caption template can live in captions/<profile>.md, edited in the user's editor: one piece per line, <!-- notes --> ignored.
+const templateFile = () => path.join(HOME, 'captions', settings().profile + '.md')
+const template = () => fs.existsSync(templateFile()) ? fs.readFileSync(templateFile(), 'utf8').replace(/<!--[\s\S]*?-->/g, '').replace(/\r?\n/g, ',') : null
+const profile = () => { const s = settings(), t = template(); return { ...PROFILES[s.profile], ...s.overrides, ...(t != null && { caption: t }) } }
+const editTemplate = () => {
+  const f = templateFile()
+  if (!fs.existsSync(f)) {
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    const note = `<!-- Caption template for the "${settings().profile}" profile. One piece per line. {{tags}} {{artist}} {{character}} {{copyright}} {{rating}} {{score}} are filled in per picture. Delete this file (or Reset in Settings) to go back to the default. -->`
+    fs.writeFileSync(f, [note, ...profile().caption.split(',').map(x => x.trim())].join('\n') + '\n')
+  }
+  return shell.openPath(f)
+}
+const templateInfo = () => ({ text: profile().caption.split(',').map(x => x.trim()).filter(Boolean).join(', '), custom: template() != null })
+const resetTemplate = () => fs.existsSync(templateFile()) && shell.trashItem(templateFile())
 const GDL = path.join(process.env.APPDATA, 'gallery-dl', 'config.json') // site credentials live here, where gallery-dl reads them
 const PROJ = path.join(HOME, 'project')
 
@@ -491,7 +505,7 @@ const installGdl = async () => {
   return v
 }
 
-const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open,
+const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems }
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
