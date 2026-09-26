@@ -7,7 +7,7 @@
     "dist": "electron-builder --win --publish never"
   },
   "devDependencies": {
-    "electron": "^33.0.0",
+    "electron": "^44.4.5",
     "electron-builder": "^26.15.3"
   },
   "description": "Collect booru pictures into per-project training sets.",
