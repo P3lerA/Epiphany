@@ -7,7 +7,6 @@ const CREDS = { danbooru: ['username', 'api-key'], gelbooru: ['api-key', 'user-i
   sankaku: ['username', 'password'], twitter: ['username', 'password'], pixiv: 'oauth' }
 const SECRET = /key|password|token/
 const KEY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.9 12.1 21 2m-3 3 3 3m-6 0 2 2"/></svg>'
-const stagger = ul => [...ul.children].forEach((li, i) => li.style.setProperty('--i', i))
 
 let s, projects, items
 const save = () => api.setSettings(s)
@@ -114,10 +113,10 @@ const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root
 
 // Projects: sidebar picks the active project (where pulls land) and shows its grid.
 const plist = $('#plist'), pgrid = $('#pgrid')
-const drawProjects = () => {
-  plist.innerHTML = projects.map(p => `<a href="#projects" data-p="${esc(p)}" class="${p === s.project ? 'on' : ''}">${p}</a>`).join('')
-    + '<input placeholder="new project">'
-  render(pgrid, items.filter(i => i.project === s.project))
+const drawProjects = force => {
+  plist.innerHTML = projects.map(p => `<a href="#projects" data-p="${esc(p)}"${p === s.project ? ' class="on" title="New pictures land here"' : ''}>${p}</a>`).join('')
+    + '<input placeholder="+ New project" spellcheck="false">'
+  if (force || pgrid.dataset.p !== s.project) { pgrid.dataset.p = s.project; render(pgrid, items.filter(i => i.project === s.project)) } // redrawing the same grid would only replay the fade-in
 }
 const openProject = p => { s.project = p; save(); drawProjects(); location.hash = '#projects' }
 plist.onclick = e => { if (e.target.dataset.p) openProject(e.target.dataset.p) }
@@ -127,7 +126,7 @@ api.onProjectRemoved(async name => {
   document.querySelectorAll('.grid img').forEach(i => { if (i.item.project === name) { sel.delete(i.dataset.file); i.remove() } })
   drawSel(); drawUnsure()
   ;[projects, s] = await Promise.all([api.projects(), api.getSettings()])
-  drawProjects()
+  drawProjects(true)
   drawSites()
 })
 plist.onkeydown = e => {
@@ -212,14 +211,15 @@ const settingsUI = profiles => {
   api.quoteSources().then(names => {
     general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
   })
+  general.querySelector('[name=theme]').value = localStorage.theme || 'system'
   general.querySelector('[name=lookup]').checked = s.lookup
   general.querySelector('[name=accept]').value = s.accept
   general.onchange = e => {
+    if (e.target.name === 'theme') return setTheme(e.target.value) // per machine, like the filters
     s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.name === 'accept' ? Number(e.target.value) : e.target.value
     save()
     if (e.target.name === 'quote') quote()
   }
-  stagger(general)
 
   const sites = $('#sites ul')
   api.getCreds().then(creds => {
@@ -229,7 +229,6 @@ const settingsUI = profiles => {
         : (c || []).map(k => `<input name="${k}" placeholder="${k}" type="${SECRET.test(k) ? 'password' : 'text'}" value="${esc(creds[site]?.[k] ?? '')}" spellcheck="false">`).join('')
       return `<li data-site="${site}"><label>${site}<input type="checkbox" value="${site}" ${s.sites.includes(site) ? 'checked' : ''}></label>${c ? `<button class="key" aria-label="Credentials">${KEY}</button><div class="creds" hidden>${fields}</div>` : ''}</li>`
     }).join('')
-    stagger(sites)
   })
   sites.onclick = e => {
     const key = e.target.closest('.key'), oauth = e.target.closest('[data-oauth]')
@@ -253,11 +252,15 @@ const settingsUI = profiles => {
         : `<input type="text" name="${k}" value="${esc(cur)}">`
       return `<li><span>${k}${reset}</span>${input}</li>`
     }).join('')
-    stagger(rows)
   }
   draw()
   sel.onchange = () => { s.profile = sel.value; s.overrides = {}; save(); draw() }
-  rows.onchange = e => { s.overrides[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; save(); draw() }
+  rows.onchange = e => { // no redraw: it would drop the focus Tab just moved to the next field
+    s.overrides[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value
+    save()
+    const label = e.target.closest('li').firstElementChild
+    if (!label.querySelector('a')) label.insertAdjacentHTML('beforeend', ` <a href="#profile" data-reset="${e.target.name}">reset</a>`)
+  }
   rows.onclick = e => { if (e.target.dataset.reset) { delete s.overrides[e.target.dataset.reset]; save(); draw() } }
 }
 
@@ -303,7 +306,6 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
   ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
     `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
   ).join('')
-  stagger(ul)
   ul.onclick = e => {
     const n = e.target.dataset.act
     if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
@@ -313,8 +315,9 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
 })
 drawInstruments()
 
+// Lobby has no title of its own: a random line is the title. Click for another.
 const h1 = $('h1 .t-lobby')
-const quote = () => api.quote().then(q => { h1.textContent = q || 'Lobby'; h1.classList.toggle('quote', !!q) })
+const quote = () => api.quote().then(q => { h1.textContent = h1.title = q || '' })
 h1.onclick = quote
 quote()
 

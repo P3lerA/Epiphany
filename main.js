@@ -101,6 +101,8 @@ function createWindow() {
     height: 700,
     ...saved.bounds,
     show: false,
+    titleBarStyle: 'hidden', // the renderer's header is the title bar; Windows keeps only its caption buttons
+    titleBarOverlay: { height: 56 },
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false }
   })
@@ -493,7 +495,7 @@ const HANDLERS = { list, projects, newProject, getSettings: settings, setSetting
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems }
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
-ipcMain.on('theme', (_, t) => { nativeTheme.themeSource = t }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
+ipcMain.on('theme', (_, t, bar) => { nativeTheme.themeSource = t; win?.setTitleBarOverlay(bar) }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 
 app.on('before-quit', () => { app.quitting = true })
 let tray
