@@ -37,7 +37,7 @@ const add = (root, item, front) => {
 }
 const decorate = (img, item) => {
   img.item = item
-  img.onclick = e => e.ctrlKey || e.metaKey || e.shiftKey ? select(img, e) : preview(item, img.closest('section'))
+  img.onclick = e => e.shiftKey ? select(img, e) : e.ctrlKey || e.metaKey ? null : preview(item, img.closest('section')) // Ctrl toggles on press, see paint
   img.oncontextmenu = () => api.menu(item)
   img.dataset.file = item.file
   img.dataset.q = `${item.artist || ''} ${item.tags || ''}`.toLowerCase()
@@ -48,7 +48,7 @@ const decorate = (img, item) => {
   hide(img)
 }
 
-// Selection: Ctrl-click toggles, Shift-click extends from the last toggle, Ctrl+A takes every visible picture, Esc clears.
+// Selection: Ctrl-click toggles, Ctrl-drag paints, Shift-click extends from the last toggle, Ctrl+A takes every visible picture, Esc clears.
 const sel = new Set()
 let anchor
 const selUI = $('#selection')
@@ -66,6 +66,22 @@ const select = (img, e) => {
   } else { sel.has(f) ? sel.delete(f) : sel.add(f); anchor = f }
   drawSel()
 }
+// Ctrl-drag: every picture the pointer passes over takes the state the first one got.
+let paint = null
+addEventListener('mousedown', e => {
+  const img = e.target.closest?.('.grid img')
+  if (!img || e.button || e.shiftKey || !(e.ctrlKey || e.metaKey)) return
+  e.preventDefault() // no image drag-out while painting
+  select(img, e)
+  paint = sel.has(img.dataset.file)
+})
+addEventListener('mouseover', e => {
+  const img = e.target.closest?.('.grid img')
+  if (paint === null || !img) return
+  if (!(e.buttons & 1)) return paint = null // released outside the window
+  paint ? sel.add(img.dataset.file) : sel.delete(img.dataset.file)
+  drawSel()
+})
 addEventListener('keydown', e => {
   if (dlg.open || e.target.matches?.('input, textarea')) return
   if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); visible().forEach(i => sel.add(i.dataset.file)); drawSel() }
@@ -191,10 +207,11 @@ const preview = async (item, root) => {
   const ta = dlg.querySelector('textarea')
   ta.value = await api.getCaption(item.file)
   ta.onchange = () => api.setCaption(item.file, ta.value)
-  if (!dlg.open) dlg.showModal()
+  if (!dlg.open) { bar(true); dlg.showModal() }
   dlg.focus()
 }
 dlg.onclick = e => { if (e.target === dlg) dlg.close() }
+dlg.onclose = () => setTimeout(() => dlg.open || bar(), 150) // the strip turns opaque again once the backdrop has faded
 // Right-click a tag in the caption: the selection, or the comma-delimited piece under the caret.
 const tagAt = ta => {
   const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim()
