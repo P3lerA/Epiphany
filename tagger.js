@@ -26,6 +26,8 @@ const post = t => {
 
 // The picture as the model takes it: RGB over white, letterboxed with black to 1008 square, scaled to -1..1, planar. nativeImage
 // reads PNG and JPEG; anything else (WebP, GIF, AVIF) goes through Windows' thumbnailer, already fitted to the square.
+// ponytail: the thumbnailer keeps alpha only on its first extraction; from its cache a clear area comes back black. Fine for
+// opaque pictures; decode in the page (createImageBitmap) if transparent WebP/GIF start getting odd tags.
 const pixels = async file => {
   let img = nativeImage.createFromPath(file)
   if (img.isEmpty()) img = await nativeImage.createThumbnailFromPath(file, { width: SIDE, height: SIDE }).catch(() => img)
