@@ -3,6 +3,7 @@
 // The model only: main.js writes what it guesses into sidecars and captions.
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 const crypto = require('crypto')
 const { Readable } = require('stream')
 const { pipeline } = require('stream/promises')
@@ -45,11 +46,16 @@ const pixels = async file => {
 module.exports = models => {
   const dir = path.join(models, NAME)
   const has = () => Object.keys(FILES).every(f => fs.existsSync(path.join(dir, f)))
-  // One session, loaded on first use; ~3GB of GPU memory goes back two minutes after the last picture.
-  let session, idle
+  // One session, loaded on first use; ~3GB of GPU memory goes back two minutes after the last picture. Without WebGPU (no GPU, an
+  // old driver) the CPU: half the cores, and main below normal priority, so the machine stays usable (~12 s a picture on 8 threads).
+  let session, idle, cpu = false
   const load = () => session ??= (async () => {
-    const ort = require('onnxruntime-node')
-    const s = await ort.InferenceSession.create(path.join(dir, 'model.onnx'), { executionProviders: ['webgpu'], intraOpNumThreads: 1, extra: { session: { intra_op: { allow_spinning: '0' } } } })
+    const ort = require('onnxruntime-node'), model = path.join(dir, 'model.onnx'), quiet = { extra: { session: { intra_op: { allow_spinning: '0' } } } }
+    const s = await ort.InferenceSession.create(model, { ...quiet, executionProviders: ['webgpu'], intraOpNumThreads: 1 }).catch(() => {
+      cpu = true
+      os.setPriority(os.constants.priority.PRIORITY_BELOW_NORMAL)
+      return ort.InferenceSession.create(model, { ...quiet, executionProviders: ['cpu'], intraOpNumThreads: Math.max(1, os.availableParallelism() >> 1) })
+    })
     return { ort, s, cats: JSON.parse(fs.readFileSync(path.join(dir, 'tags.json'), 'utf8')).categories }
   })().catch(e => { session = null; throw e })
   const release = () => { clearTimeout(idle); session?.then(t => t.s.release(), () => {}); session = null }
@@ -89,6 +95,6 @@ module.exports = models => {
     }
   }
   const remove = () => { release(); fs.rmSync(dir, { recursive: true, force: true }) } // a download, not the user's data
-  return { has, guess, post, install, remove }
+  return { has, guess, post, install, remove, onCpu: () => cpu }
 }
 module.exports.pixels = pixels // for test/tagger.js

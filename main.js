@@ -407,7 +407,7 @@ const resolve = async (item, j, say) => {
   const hit = await lookup(j, item.file, say)
   if (hit) await adopt(item, j, hit)
   else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
-  else if (!j.booru && (!j.tagger || j.tagged) && settings().autotag && tagger.has()) { say?.('tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it (j.tagged: its caption was emptied)
+  else if (!j.booru && (!j.tagger || j.tagged) && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it (j.tagged: its caption was emptied)
   return hit
 }
 const relookup = async item => {
@@ -421,26 +421,27 @@ const relookup = async item => {
 const tagger = Tagger(path.join(HOME, 'models'))
 const tagIt = async (item, j = sidecar(item)) => {
   j.tagger = await tagger.guess(item.file)
+  delete j.booru // a match the tagger replaces: likely a look-alike variant; Look up finds it again
   delete j.candidates
   delete j.tagged
   writeJson(item.file + '.json', j)
   recaption(item, j)
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
-// Booru tags stay: the tagger is for pictures without them (their caption would stop matching what the page shows).
+// A picture pulled from a booru keeps its own tags; a booru match can be replaced (a variant taken for it).
 const tag = async items => {
   if (!tagger.has()) return note('Install tagger in Instruments')
   const t = task('Tagging')
   let done = 0, kept = 0
   for (const [k, item] of items.entries()) {
-    if (items.length > 1) t.set(`Tagging ${k + 1}/${items.length}`)
+    t.set(`Tagging${tagger.onCpu() ? ' on CPU' : ''}${items.length > 1 ? ` ${k + 1}/${items.length}` : ''}`)
     try {
       const j = sidecar(item)
-      if (j.booru || BOORU.has(j.category)) kept++
+      if (BOORU.has(j.category)) kept++
       else { await tagIt(item, j); done++ }
     } catch (e) { note(`Tagger: ${e.message}`, true) }
   }
-  t.end(items.length > 1 ? `${done} tagged${kept ? `, ${kept} had booru tags` : ''}` : done ? 'Tagged' : kept ? 'Has booru tags' : '')
+  t.end(items.length > 1 ? `${done} tagged${kept ? `, ${kept} from boorus kept` : ''}` : done ? 'Tagged' : kept ? 'From a booru, kept' : '')
 }
 let installing
 const installTagger = () => installing ??= (async () => {
