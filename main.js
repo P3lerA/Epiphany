@@ -231,18 +231,23 @@ const lookup = async (j, file) => {
   return hit
 }
 
-// Toolbar button: a page URL, handed to gallery-dl.
-async function pull({ page }) {
+// Toolbar button: a page URL, handed to gallery-dl. A pull takes the new sidecars in the dataset as its own, so pulls go one at a
+// time (two at once would each take the other's), and a picture already recorded is skipped (a right-click save's lookup writes
+// its sidecar mid-pull).
+let pulling = Promise.resolve()
+const pull = q => pulling = pulling.then(() => pullOne(q), () => pullOne(q))
+async function pullOne({ page }) {
   const d = dir()
   const before = new Set(fs.readdirSync(d))
   // ponytail: --range caps a search page at 50 posts; make it a profile field if you want whole searches
   await gdl(['--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, page])
-  const s = settings(), prof = profile()
+  const s = settings(), prof = profile(), m = path.join(d, 'meta.jsonl')
+  const known = new Set(fs.existsSync(m) ? fs.readFileSync(m, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l).file) : [])
   const items = [], later = []
   for (const f of fs.readdirSync(d)) {
     if (before.has(f) || !f.endsWith('.json')) continue
     const img = f.slice(0, -5)
-    if (!fs.existsSync(path.join(d, img))) continue
+    if (!fs.existsSync(path.join(d, img)) || known.has(path.join(d, img))) continue
     const j = readJson(path.join(d, f), {})
     const item = record({ file: path.join(d, img), src: page, page, time: new Date().toISOString() })
     items.push(item)
@@ -296,6 +301,7 @@ const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
 // HOME/cache for good, a tag without a wiki as null; a failed request isn't kept, so it is asked again next time.
 const WIKI = path.join(HOME, 'cache', 'tag-wiki.json')
 let wiki
+const saveWiki = () => { fs.mkdirSync(path.dirname(WIKI), { recursive: true }); fs.writeFileSync(WIKI, JSON.stringify(wiki)) } // ~3MB: no indent
 const plain = body => body.split(/\r?\n\s*\r?\n/).map(p => p.trim()).find(p => p && !/^(h\d\.|\*|!post|\[(table|expand|quote|spoiler))/i.test(p))
   ?.replace(/\[\[([^\]|]+)\|\]\]/g, (_, t) => t.replace(/\s*\(.*\)$/, '')) // [[poster (object)|]]: the pipe trick drops the qualifier
   .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1').replace(/\[\[([^\]]+)\]\]/g, '$1')
@@ -307,23 +313,23 @@ const pullWikis = async () => {
   wiki ??= readJson(WIKI, {})
   if (wiki['']) return
   for (let page = 1; ; page++) {
-    const l = await fetch(`https://danbooru.donmai.us/wiki_pages.json?search[tag][category]=0&search[tag][post_count]=>=100&search[is_deleted]=false&limit=1000&only=title,body&page=${page}`, { signal: AbortSignal.timeout(30000), ...UA }).then(r => r.ok ? r.json() : null, () => null)
+    const l = await fetch(`https://danbooru.donmai.us/wiki_pages.json?search[tag][category]=0&search[tag][post_count]=>=100&search[is_deleted]=false&limit=1000&only=title,body&page=${page}`, { signal: AbortSignal.timeout(30000), ...UA }).then(r => r.ok ? r.json() : null).catch(() => null)
     if (!l) return // offline or refused: the next start tries again
     for (const w of l) wiki[w.title] ??= plain(w.body ?? '')
     if (l.length < 1000) break
   }
   wiki[''] = new Date().toISOString()
-  fs.mkdirSync(path.dirname(WIKI), { recursive: true })
-  writeJson(WIKI, wiki)
+  saveWiki()
 }
 const tagWiki = async tag => {
   wiki ??= readJson(WIKI, {})
   if (tag in wiki) return wiki[tag]
   const r = await fetch(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(tag)}.json`, { signal: AbortSignal.timeout(8000), ...UA }).catch(() => null)
   if (!r || (!r.ok && r.status !== 404)) return null
-  wiki[tag] = r.ok ? plain((await r.json()).body ?? '') : null
-  fs.mkdirSync(path.dirname(WIKI), { recursive: true })
-  writeJson(WIKI, wiki)
+  const j = r.ok && await r.json().catch(() => null)
+  if (r.ok && !j) return null // cut off mid-read: asked again next time
+  wiki[tag] = j ? plain(j.body ?? '') : null
+  saveWiki()
   return wiki[tag]
 }
 const gelCreds = () => { const g = readJson(GDL, {}).extractor?.gelbooru ?? {}; return `&api_key=${g['api-key'] ?? ''}&user_id=${g['user-id'] ?? ''}` }
@@ -375,7 +381,7 @@ const removeProject = async name => {
   if (s.project === name) { s.project = projects()[0] ?? 'default'; writeJson(SETTINGS, s); dir(s.project) }
   send('projectRemoved', name)
 }
-const projectMenu = name => Menu.buildFromTemplate([
+const projectMenu = name => void Menu.buildFromTemplate([
   { label: 'Open in Explorer', click: () => shell.openPath(path.join(PROJ, name)) },
   { type: 'separator' },
   { label: 'Delete project', click: () => removeProject(name) }
@@ -438,7 +444,8 @@ const tagMenu = tag => {
   ]).popup({ window: win })
 }
 
-const menu = item => Menu.buildFromTemplate([
+// void: popup() answers with the window it opened on, which the IPC reply can't carry (the renderer logged an error per right-click)
+const menu = item => void Menu.buildFromTemplate([
   { label: 'Open in Explorer', click: () => shell.showItemInFolder(item.file) },
   { label: 'Open original site', click: () => shell.openExternal(item.page) },
   { label: 'Open project', click: () => send('openProject', item.project) },

@@ -52,7 +52,10 @@ h1 { font-size: 1.5rem; font-weight: 700 }
 h1 { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; height: 36px }
 h1 > span { grid-area: 1 / 1; line-height: 24px; display: none }
 body:has(#lobby:target) .t-lobby, body:has(#projects:target) .t-projects, body:has(#settings :target) .t-settings { display: block }
-.t-lobby { justify-self: start; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer; -webkit-app-region: no-drag }
+/* Clickable (another quote, or the tag's wiki), so it lights up like the tabs; capped so the rest of the bar still drags the window. */
+.t-lobby { justify-self: start; max-width: min(70%, 40rem); margin-left: -8px; padding: 4px 8px; border-radius: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer; -webkit-app-region: no-drag; transition: background .15s }
+.t-lobby:hover { background: var(--hover) }
+.t-lobby:empty { padding: 0 }
 .pills { display: flex; gap: .5rem; margin-left: auto }
 nav { display: flex; gap: .25rem; margin-left: 1rem }
 nav a, main aside a { display: flex; align-items: center; gap: .75rem; padding: .5rem 1rem; border-radius: 6px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s }
@@ -84,8 +87,8 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .search input { width: 11rem; padding: 0 .25rem }
 .search input::-webkit-search-cancel-button { display: none } /* too small to hit: .clear-q instead */
 /* Clearing the search: a real button in space the pill always keeps, so it appearing never moves the box. */
-.search .clear-q { flex: none; width: 1.75rem; height: 1.75rem; margin-right: .1rem; display: flex; align-items: center; justify-content: center; padding: 0; border: none; border-radius: 50%; background: none; color: var(--muted); opacity: 0; pointer-events: none; transition: opacity .15s, background .15s, color .15s }
-.search:has(input:not(:placeholder-shown)) .clear-q { opacity: 1; pointer-events: auto }
+.search .clear-q { flex: none; width: 1.75rem; height: 1.75rem; margin-right: .1rem; display: flex; align-items: center; justify-content: center; padding: 0; border: none; border-radius: 50%; background: none; color: var(--muted); opacity: 0; visibility: hidden; transition: opacity .15s, visibility .15s, background .15s, color .15s } /* hidden: out of the Tab order too */
+.search:has(input:not(:placeholder-shown)) .clear-q { opacity: 1; visibility: visible }
 .search .clear-q:hover { background: var(--hover); color: var(--fg) }
 .filter-toggle { anchor-name: --filters }
 .theme-toggle::before { content: ''; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid currentColor; background: var(--toggle-fill); transition: background .15s }

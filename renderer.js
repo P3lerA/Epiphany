@@ -50,7 +50,9 @@ const decorate = (img, item) => {
 const sel = new Set()
 let anchor
 const selUI = $('#selection')
-const page = () => location.hash === '#projects' ? pgrid : $('#lobby')
+let grid // the grid page on show; while Settings is up, the one shown last: piles, filters and pulls still act on it
+const page = () => grid = location.hash === '#projects' ? pgrid : location.hash === '#lobby' || !grid ? $('#lobby') : grid
+addEventListener('hashchange', page) // noted as it shows, asked or not
 const scroller = () => page().closest('section')
 const shown = root => [...root.querySelectorAll('.grid img')].filter(i => !i.hidden)
 const visible = () => shown(page())
@@ -70,6 +72,7 @@ const select = (img, e) => {
 // Ctrl-drag: every picture the pointer passes over takes the state the first one got.
 let paint = null
 addEventListener('mousedown', e => {
+  paint = null
   const img = e.target.closest?.('.grid img')
   if (!img || e.button || e.shiftKey || !(e.ctrlKey || e.metaKey)) return
   e.preventDefault() // no image drag-out while painting
@@ -121,8 +124,9 @@ const drawSites = () => {
 // Search box: local scope filters the grid as you type; a site scope pulls that site's tag search on Enter.
 const search = $('.search input'), scope = $('.search select')
 const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters(); explain() }
-search.oninput = scope.onchange = () => swap(() => { localQ(); backToPiles() }) // filter changes move the pictures, see swap
-$('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')) }
+let typing
+search.oninput = scope.onchange = () => { clearTimeout(typing); typing = setTimeout(() => swap(() => { localQ(); backToPiles() }), 120) } // filter changes move the pictures, see swap; one move once typing pauses, not one per key
+$('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')); search.focus() }
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') swap(() => { F[seg.dataset.name] = e.target.value; saveF(); applyFilters() }) } })
@@ -195,9 +199,10 @@ api.onSaved(i => {
 // Lobby has no title of its own: a random line is the title. Click for another. While the search is one tag of the library, its
 // danbooru explanation is the title instead, and a click opens its wiki.
 const h1 = $('h1 .t-lobby')
-let line = '', explained = '', asked = ''
+let line = '', explained = '', asked = '', showing = ''
 const title = text => {
-  if (h1.textContent === text) return
+  if (showing === text) return // what it is fading to: mid-fade the old text still shows
+  showing = text
   h1.getAnimations().forEach(a => a.cancel())
   if (calm.matches) return h1.textContent = h1.title = text
   h1.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'ease-in' }).onfinish = () => { // not play(): a swap would take it for one of its fliers
@@ -207,14 +212,14 @@ const title = text => {
 }
 const explain = () => {
   const t = F.q
+  asked = t // before any return: a late answer for the last tag must not land
   if (t === explained) return
-  asked = t
   if (!t || !items?.some(i => `, ${i.tags}, `.includes(`, ${t}, `))) { explained = ''; return title(line) } // a word being typed is not a tag
   api.tagWiki(t).then(text => { if (asked !== t) return; explained = text ? t : ''; title(text || line) })
 }
 const quote = () => api.quote().then(q => { line = q || ''; if (!explained) title(line) })
 h1.onclick = () => explained ? api.open(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(explained)}`) : quote()
-quote()
+addEventListener('DOMContentLoaded', quote) // title() needs motion.js
 
 const mark = () => document.querySelectorAll('#settings aside a').forEach(a => a.classList.toggle('on', a.hash === location.hash))
 addEventListener('hashchange', mark)
