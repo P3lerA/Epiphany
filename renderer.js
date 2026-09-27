@@ -131,7 +131,7 @@ const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":""
 if (pending(F.tagged)) F.tagged = 'pending' // saved before none and unsure were one
 const filters = $('#filters')
 const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '' }) // the search box is not remembered
-const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && (F.tagged === 'pending' ? !pending(img.dataset.tagged) : img.dataset.tagged !== F.tagged)) || (F.site && img.dataset.site !== F.site) || (F.q && !img.dataset.q.includes(F.q)))
+const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && (F.tagged === 'pending' ? !pending(img.dataset.tagged) : img.dataset.tagged !== F.tagged)) || (F.site && source(img.dataset.site) !== source(F.site)) || (F.q && !img.dataset.q.includes(F.q)))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
   filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[seg.dataset.name] || ''))))
@@ -140,10 +140,12 @@ const applyFilters = () => {
   if (!F.ai || F.site) filters.querySelector('details').open = true // a filter at work is never folded away
   $('.filter-toggle').classList.toggle('on', Object.entries(F).some(([k, v]) => k === 'ai' ? !v : k !== 'piles' && v)) // piles hides nothing
 }
+// A source is one of the sites Settings lists (settings.js); any other (a right-click save's host) is 'other', listed last.
+const source = site => SITES.includes(site) ? site : 'other'
 const drawSites = () => {
   const sel = filters.querySelector('[name=site]')
-  sel.innerHTML = '<option value="">All sources</option>' + [...new Set(items.map(i => i.site).filter(Boolean))].sort()
-    .map(x => `<option ${x === F.site ? 'selected' : ''}>${x}</option>`).join('')
+  sel.innerHTML = '<option value="">All sources</option>' + [...new Set(items.map(i => i.site).filter(Boolean).map(source))].sort((a, b) => (a === 'other') - (b === 'other') || a.localeCompare(b))
+    .map(x => `<option ${F.site && x === source(F.site) ? 'selected' : ''}>${x}</option>`).join('')
 }
 // Search box: local scope filters the grid as you type; a site scope pulls that site's tag search on Enter.
 const search = $('.search input'), scope = $('.search select')
