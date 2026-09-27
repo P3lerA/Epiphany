@@ -5,7 +5,8 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win --publish never",
-    "test": "node test/extension-queue.mjs && electron test/tagger.js"
+    "test": "node test/extension-queue.mjs && electron test/tagger.js",
+    "smoke": "node test/smoke.mjs"
   },
   "devDependencies": {
     "electron": "^44.4.5",
