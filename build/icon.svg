@@ -1,14 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="112" fill="#1E1F2A"/>
   <g fill="#D9DAE0">
-    <rect x="84" y="84" width="96" height="96" rx="22"/>
-    <rect x="208" y="84" width="96" height="96" rx="22"/>
-    <rect x="84" y="208" width="96" height="96" rx="22"/>
-    <rect x="208" y="208" width="96" height="96" rx="22"/>
-    <rect x="332" y="208" width="96" height="96" rx="22"/>
-    <rect x="84" y="332" width="96" height="96" rx="22"/>
-    <rect x="208" y="332" width="96" height="96" rx="22"/>
-    <rect x="332" y="332" width="96" height="96" rx="22"/>
+    <rect x="92" y="92" width="150" height="150" rx="34"/>
+    <rect x="92" y="270" width="150" height="150" rx="34"/>
+    <rect x="270" y="270" width="150" height="150" rx="34"/>
   </g>
-  <rect x="332" y="84" width="96" height="96" rx="22" fill="#6F86FF"/>
+  <rect x="270" y="92" width="150" height="150" rx="34" fill="#6F86FF"/>
 </svg>
