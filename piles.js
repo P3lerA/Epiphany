@@ -36,6 +36,7 @@ const drawPiles = root => {
   }
   root.querySelector(':scope > .piles')?.remove()
   root.append(el)
+  face()
 }
 const setPiling = (on, root = page()) => {
   const sec = root.closest('section')

@@ -114,6 +114,7 @@ const applyFilters = () => {
   filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[seg.dataset.name] || ''))))
   if (items) drawUnsure()
   if (piling) drawPiles(page())
+  face()
   $('.filter-toggle').classList.toggle('on', Object.entries(F).some(([k, v]) => k === 'ai' ? !v : v))
 }
 const drawSites = () => {
@@ -131,7 +132,11 @@ search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.t
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') swap(() => { F[seg.dataset.name] = e.target.value; saveF(); applyFilters() }) } })
 filters.onchange = e => swap(() => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() })
-const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root) }
+const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root); face() }
+// Nothing on show (no pictures yet, a search that finds none, no piles): a face in the middle, no words (style.css). Picked anew
+// while it is hidden, so each time it comes up it is another one.
+const FACES = ['(・_・)', '(´・ω・`)', '(・∀・)', '(￣▽￣)', '(°ー°〃)', '(´-ω-`)', '(・ε・)', '(o_O)', '(>_<)', '( ˘ω˘ )', 'ヽ(・∀・)ﾉ', '(ﾟДﾟ)', '(=^・ω・^=)', '¯\\_(ツ)_/¯', '(っ´ω`c)', '(・・?)']
+const face = () => { for (const r of [$('#lobby'), pgrid]) if (!r.dataset.face || r.querySelector(r.classList.contains('piling') ? '.pile' : '.grid img:not([hidden])')) r.dataset.face = FACES[Math.random() * FACES.length | 0] }
 
 // Projects: sidebar picks the active project (where pulls land) and shows its grid.
 const plist = $('#plist'), pgrid = $('#pgrid')

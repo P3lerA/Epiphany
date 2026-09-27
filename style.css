@@ -122,8 +122,9 @@ section:target { display: block }
 :is(#lobby, #pgrid, #ghosts) h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 1rem 0 .5rem }
 :is(#lobby, #pgrid) > div:first-child h3 { margin-top: 0 }
 :is(#lobby, #pgrid) > div:not(:has(img:not([hidden]))) { display: none }
-#lobby:empty::before { content: 'Pictures you save from the browser show up here.'; color: var(--muted) }
-#pgrid:empty::before { content: 'Nothing in this project yet. New pictures land in the project marked with a filled dot.'; color: var(--muted) }
+/* Nothing on show: a face in the middle of the window, no words (renderer.js face). */
+:is(#lobby, #pgrid):not(.piling):not(:has(.grid img:not([hidden])))::before, .piling:not(:has(.pile))::before { content: attr(data-face); position: fixed; inset: var(--bar) 0 0; display: grid; place-items: center; font-size: 2rem; color: var(--muted); pointer-events: none; animation: face .3s .15s both }
+@keyframes face { from { opacity: 0 } }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem }
 .grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer }
 .grid img:not(.in) { opacity: 0 }
