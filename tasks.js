@@ -1,0 +1,24 @@
+// The header's task line, left of the tabs: what main.js is doing (task), newest first, with a ring while anything runs. A result
+// or error (note) takes the line for a few seconds, then it goes back to what still runs, or away.
+const tasksUI = $('#tasks'), taskLine = tasksUI.lastElementChild
+let running = [], noted = null, noteTimer
+let stopSpin // while busy, a spinner (spinners.js), a new one picked each time the line starts running
+const spinning = on => { if (on !== !!stopSpin) { stopSpin?.(); stopSpin = on ? spinner(tasksUI.firstElementChild) : null } }
+const drawTasks = () => {
+  const now = running.at(-1)
+  tasksUI.hidden = !now && !noted
+  tasksUI.classList.toggle('busy', !!now)
+  spinning(!!now)
+  tasksUI.classList.toggle('error', !!noted?.error)
+  taskLine.textContent = noted?.text ?? (now ?? '') + (running.length > 1 ? `  +${running.length - 1}` : '')
+  tasksUI.title = [noted?.text, ...running.toReversed()].filter(Boolean).join('\n')
+}
+api.onTasks(l => { running = l; drawTasks() })
+api.onNote(n => { noted = n; clearTimeout(noteTimer); noteTimer = setTimeout(() => { noted = null; drawTasks() }, n.error ? 10000 : 5000); drawTasks() })
+
+// A crowded right side (tasks, selection, tabs, and Windows' caption buttons in the padding) past 60% of the bar: the title's quote
+// or explanation steps aside for it rather than show a stub.
+const head = $('header'), crowd = () => document.body.classList.toggle('crowded',
+  $('.pills').offsetWidth + $('header nav').offsetWidth + parseFloat(getComputedStyle(head).paddingRight) > head.clientWidth * .6)
+const fit = new ResizeObserver(crowd)
+fit.observe(head); fit.observe($('.pills'))

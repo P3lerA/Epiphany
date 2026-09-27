@@ -26,7 +26,7 @@ const preview = async (item, root) => {
   const tagged = dlg.querySelector('.tagged')
   tagged.textContent = { booru: 'Tags: booru', none: 'Tags: none', unsure: 'Tags: pick a match', tagger: 'Tags: tagger' }[item.tagged]
   const act = (text, f) => tagged.append(tagged.lastElementChild ? ' / ' : ' ', Object.assign(document.createElement('a'), { href: '#', textContent: text, onclick: e => { e.preventDefault(); f() } }))
-  if (item.tagged !== 'booru') { act('Look up', () => api.lookup(item)); act('Tag', () => api.tag(item)) } // booru tags need neither; an emptied caption counts as none
+  if (item.tagged !== 'booru') { act('Look up', () => api.lookup(item)); act('Tag', () => api.tag([item])) } // booru tags need neither; an emptied caption counts as none
   // Close IQDB matches: click one to see its caption in the box, Use to keep it.
   const picks = dlg.querySelector('.picks'), use = dlg.querySelector('.use')
   use.hidden = true

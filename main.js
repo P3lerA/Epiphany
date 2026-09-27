@@ -103,7 +103,16 @@ const record = item => {
 }
 
 const send = (ch, ...a) => win?.webContents.send(ch, ...a)
-const toast = (text, hold) => send('toast', { text, hold }) // hold: progress, stays up until the next toast
+// What the app is doing, in the header's task line (tasks.js). task(): shown while it runs, its line updated as it goes, ending
+// with a result; note(): a result or error on its own. A result stays there a few seconds.
+const running = new Map()
+let taskN = 0
+const task = text => {
+  const id = ++taskN, show = () => send('tasks', [...running.values()])
+  running.set(id, text); show()
+  return { set: t => { running.set(id, t); show() }, end: result => { running.delete(id); show(); if (result) note(result) } }
+}
+const note = (text, error) => send('note', { text, error: !!error })
 
 const run = (cmd, args) => new Promise((res, rej) =>
   execFile(cmd, args, { maxBuffer: 1e7 }, (e, out, err) => e ? rej(new Error(err || e.message)) : res(out)))
@@ -147,7 +156,7 @@ async function save({ src, page }) {
   const file = path.join(dir(), name)
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()))
   const item = record({ file, src, page, time: new Date().toISOString() })
-  if (settings().lookup) relookup(item).catch(e => toast(e.message)) // same matching as a pull, with its toasts, after the reply
+  if (settings().lookup) relookup(item).catch(() => {}) // same matching as a pull, after the reply; it reports its own errors
   return item
 }
 
@@ -183,7 +192,7 @@ const moe = (base, form) => fetch(base + '/post/similar.json', { method: 'POST',
   .then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => (j.posts ?? []).map(p => ({ score: p.similarity, post: p }))) // catch after the body: a timeout can land mid-read
 const SIMILAR = {
   danbooru: form => !danAuth() ? [] : net.fetch('https://danbooru.donmai.us/iqdb_queries.json', { method: 'POST', body: form('search[file]'), signal: AbortSignal.timeout(30000), headers: { Authorization: danAuth() } })
-    .then(r => r.ok ? r.json() : (toast(`IQDB: ${r.status}`), [])).catch(e => (toast(`IQDB: ${e.message}`), [])).then(c => c.filter(x => x.post)),
+    .then(r => r.ok ? r.json() : (note(`IQDB: ${r.status}`, true), [])).catch(e => (note(`IQDB: ${e.message}`, true), [])).then(c => c.filter(x => x.post)),
   yandere: form => moe('https://yande.re', form),
   konachan: form => moe('https://konachan.com', form)
 }
@@ -200,7 +209,7 @@ const iqdbOrg = form => fetch('https://iqdb.org/', { method: 'POST', body: form(
   }))
 const canSimilar = () => settings().sites.some(site => (SIMILAR[site] && (site !== 'danbooru' || danAuth())) || IQDB_ONLY.includes(site))
 const danAuth = () => { const d = readJson(GDL, {}).extractor?.danbooru ?? {}; return d.username && d['api-key'] ? 'Basic ' + Buffer.from(`${d.username}:${d['api-key']}`).toString('base64') : null }
-const lookup = async (j, file) => {
+const lookup = async (j, file, say = () => {}) => { // say: the step it is on, for the task line
   const get = (url, pick) => fetch(url, { signal: AbortSignal.timeout(8000), ...UA })
     .then(r => r.ok ? r.json() : null).then(pick, () => null)
   // one: the tags must name exactly one post (a multi-page pixiv work is several posts; the wrong page would get the wrong tags)
@@ -212,14 +221,18 @@ const lookup = async (j, file) => {
   const key = pix ? `pixiv_id:${pix}` : tw ? `source:*status/${tw}*` : null
   const gel = () => get(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&limit=1&tags=md5:${md5}${gelCreds()}`, r => r?.post?.[0] ? { ...r.post[0], category: 'gelbooru' } : null)
   // Exact bytes first, then the source id, then similarity.
-  let hit = await dan(`md5:${md5}`) || await gel() || (key && await dan(key, true))
+  say('same file on danbooru')
+  let hit = await dan(`md5:${md5}`)
+  if (!hit) { say('same file on gelbooru'); hit = await gel() }
+  if (!hit && key) { say('source on danbooru'); hit = await dan(key, true) }
   if (!hit) {
     // Same picture, different bytes (watermark, rescale, scan): ask every enabled site that can search by similarity.
     const bytes = fs.readFileSync(file)
     const form = field => { const d = new FormData(); d.append(field, new Blob([bytes]), path.basename(file)); return d }
     const found = []
     const sites = settings().sites
-    for (const site of sites) if (SIMILAR[site]) for (const c of await SIMILAR[site](form)) found.push({ score: Math.round(c.score), post: { ...c.post, category: site } })
+    for (const site of sites) if (SIMILAR[site]) { say(`similar on ${site}`); for (const c of await SIMILAR[site](form)) found.push({ score: Math.round(c.score), post: { ...c.post, category: site } }) }
+    if (sites.some(s => IQDB_ONLY.includes(s))) say('similar on iqdb.org')
     if (sites.some(s => IQDB_ONLY.includes(s))) for (const c of await iqdbOrg(form)) if (!found.some(f => f.post.category === c.post.category && f.post.id === c.post.id)) found.push(c)
     const near = found.filter(x => x.score >= 70).sort((a, b) => b.score - a.score).slice(0, 4)
     // Settings decide how sure a similarity match must be to skip the human; exact id/md5 hits above never ask.
@@ -242,7 +255,12 @@ const lookup = async (j, file) => {
 // time (two at once would each take the other's), and a picture already recorded is skipped (a right-click save's lookup writes
 // its sidecar mid-pull).
 let pulling = Promise.resolve()
-const pull = q => pulling = pulling.then(() => pullOne(q), () => pullOne(q))
+const pull = q => {
+  const host = URL.canParse(q.page) ? new URL(q.page).host : q.page, t = task(`Waiting to pull from ${host}`)
+  const run = () => { t.set(`Pulling from ${host}`); return pullOne(q) }
+  pulling = pulling.then(run, run)
+  return pulling.then(items => { t.end(`${items.length} from ${host}`); return items }, e => { t.end(); throw e })
+}
 async function pullOne({ page }) {
   web(page)
   const d = dir()
@@ -261,12 +279,11 @@ async function pullOne({ page }) {
     items.push(item)
     // The site's own tags caption it right away; a booru match (below) replaces that.
     if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), caption(prof, meta(j)))
-    if (s.lookup && !BOORU.has(j.category)) later.push([item, j])
+    if (s.lookup && !BOORU.has(j.category)) later.push(item)
   }
   if (!items.length) throw new Error('nothing new from ' + page)
-  toast(`${items.length} from ${new URL(page).host}`)
   // After the grid has them, and after the extension gets its answer: IQDB uploads take seconds each.
-  ;(async () => { for (const [item, j] of later) await resolve(item, j) })().catch(e => toast(e.message))
+  if (later.length) lookupAll(later)
   return items
 }
 
@@ -376,21 +393,20 @@ const adopt = async (item, j, hit) => {
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
 // A non-booru picture: its booru post by exact ids/md5, then by similarity; close calls become candidates.
-const resolve = async (item, j) => {
+const resolve = async (item, j, say) => {
   delete j.candidates
   // Pulled from a booru: its own tags are the caption, nothing to look up (this re-renders it under the current profile).
   if (BOORU.has(j.category)) { if (j.tagged) { delete j.tagged; writeJson(item.file + '.json', j) }; fs.writeFileSync(txt(item.file), caption(profile(), meta(j))); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
-  const hit = await lookup(j, item.file)
+  const hit = await lookup(j, item.file, say)
   if (hit) await adopt(item, j, hit)
   else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
-  else if (!j.tagger && settings().autotag && hasTagger()) await tagIt(item, j).catch(e => toast(`Tagger: ${e.message}`)) // no booru has it
+  else if (!j.tagger && settings().autotag && hasTagger()) { say?.('tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
   return hit
 }
 const relookup = async item => {
-  toast('Looking up…')
-  const j = readJson(item.file + '.json', { category: new URL(item.page).host, page: item.page })
-  const hit = await resolve(item, j)
-  toast(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : j.tagger ? 'No match; tags from the tagger' : canSimilar() ? 'No match' : 'No exact match; for similarity add a danbooru account or enable yande.re / konachan in Sites')
+  const t = task('Looking up'), j = readJson(item.file + '.json', { category: new URL(item.page).host, page: item.page })
+  const hit = await resolve(item, j, s => t.set(`Looking up: ${s}`)).catch(e => { t.end(); note(e.message, true); throw e })
+  t.end(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : j.tagger ? 'No match; tags from the tagger' : canSimilar() ? 'No match' : 'No exact match; for similarity add a danbooru account or enable yande.re / konachan in Sites')
   return hit
 }
 
@@ -447,9 +463,18 @@ const tagIt = async (item, j = readJson(item.file + '.json', { category: new URL
   fs.writeFileSync(txt(item.file), caption(profile(), meta(tagPost(j.tagger))))
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
-const tag = item => hasTagger() ? tagIt(item).then(() => toast('Tags from the tagger'), e => toast(`Tagger: ${e.message}`)) : toast('Install the tagger first: Settings > Instruments')
+const tag = async items => {
+  if (!hasTagger()) return note('Install the tagger first: Settings > Instruments')
+  const t = task('Tagging with the tagger')
+  let done = 0
+  for (const [k, item] of items.entries()) {
+    if (items.length > 1) t.set(`Tagging with the tagger ${k + 1}/${items.length}`)
+    await tagIt(item).then(() => done++, e => note(`Tagger: ${e.message}`, true))
+  }
+  t.end(items.length > 1 ? `${done} tagged by the tagger` : done ? 'Tags from the tagger' : '')
+}
 let installing
-const installTagger = () => installing ??= (async () => {
+const installTagger = () => installing ??= (async t => {
   fs.mkdirSync(TAGGER, { recursive: true })
   for (const [f, sha] of Object.entries(TAGGER_FILES)) {
     const r = await fetch(TAGGER_URL + f)
@@ -457,13 +482,13 @@ const installTagger = () => installing ??= (async () => {
     const total = Number(r.headers.get('content-length')), hash = crypto.createHash('sha256'), part = path.join(TAGGER, f + '.part')
     let got = 0, shown = 0
     await pipeline(Readable.fromWeb(r.body), async function* (src) {
-      for await (const c of src) { hash.update(c); got += c.length; if (total > 1e7 && got / total * 100 >= shown + 1) toast(`Downloading the tagger ${++shown}%`, true); yield c }
+      for await (const c of src) { hash.update(c); got += c.length; if (total > 1e7 && got / total * 100 >= shown + 1) t.set(`Downloading the tagger ${++shown}%`); yield c }
     }, fs.createWriteStream(part))
     if (hash.digest('hex') !== sha) { fs.rmSync(part); throw new Error(`${f}: checksum mismatch`) }
     fs.renameSync(part, path.join(TAGGER, f))
   }
-  toast('Tagger installed')
-})().catch(e => toast(`Tagger: ${e.message}`)).finally(() => installing = null)
+  t.end('Tagger installed')
+})(task('Downloading the tagger')).catch(e => note(`Tagger: ${e.message}`, true)).finally(() => installing = null)
 const removeTagger = () => { clearTimeout(idle); release(); fs.rmSync(TAGGER, { recursive: true, force: true }) } // a download, not the user's data
 // Projects: right-click. Delete goes to the Recycle Bin; the active project falls back to the first one left.
 const removeProject = async name => {
@@ -488,20 +513,20 @@ const exportItems = async items => {
     fs.copyFileSync(it.file, path.join(d, name))
     if (fs.existsSync(txt(it.file))) { fs.copyFileSync(txt(it.file), txt(path.join(d, name))); captions++ }
   }
-  toast(`${items.length} pictures, ${captions} captions → ${path.basename(d)}`)
+  note(`${items.length} pictures, ${captions} captions → ${path.basename(d)}`)
   shell.showItemInFolder(d)
 }
-// Several at once, one toast at the end.
+// Several at once, one result at the end.
 const lookupAll = async items => {
-  toast(`Looking up ${items.length}…`)
+  const t = task(`Looking up 0/${items.length}`)
   let matched = 0, unsure = 0, tagged = 0
-  for (const item of items) {
+  for (const [k, item] of items.entries()) {
     const j = readJson(item.file + '.json', { category: new URL(item.page).host, page: item.page })
-    if (await resolve(item, j)) matched++
+    if (await resolve(item, j, s => t.set(`Looking up ${k + 1}/${items.length}: ${s}`)).catch(e => note(e.message, true))) matched++
     else if (j.candidates) unsure++
     else if (j.tagger) tagged++
   }
-  toast(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} from the tagger, ` : ''}${items.length - matched - unsure - tagged} none`)
+  t.end(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} from the tagger, ` : ''}${items.length - matched - unsure - tagged} none`)
 }
 // The user picked one of the close matches.
 const pick = (item, i) => { const j = readJson(item.file + '.json', {}); adopt(item, j, j.candidates[i].post) }
@@ -525,7 +550,7 @@ const SEARCH = {
   artstation: t => `https://www.artstation.com/search?query=${encodeURIComponent(t)}`
 }
 
-const search = (site, q) => { toast(`Pulling "${q}" from ${site}…`); return pull({ page: SEARCH[site](q) }).catch(e => { toast(e.message); throw e }) }
+const search = (site, q) => pull({ page: SEARCH[site](q) }).catch(e => { note(e.message, true); throw e })
 
 const tagMenu = tag => {
   // A caption tag shows spaces; boorus spell it with underscores.
@@ -542,7 +567,7 @@ const menu = item => void Menu.buildFromTemplate([
   { label: 'Open original site', click: () => shell.openExternal(item.page) },
   { label: 'Open project', click: () => send('openProject', item.project) },
   { label: 'Look up tags', click: () => relookup(item) },
-  { label: 'Run the tagger', click: () => tag(item) },
+  { label: 'Run the tagger', click: () => tag([item]) },
   { type: 'separator' },
   { label: 'Delete', click: () => remove(item) }
 ]).popup({ window: win })
@@ -585,8 +610,9 @@ const PORTABLE = process.env.PORTABLE_EXECUTABLE_FILE
 const RELEASES = 'https://api.github.com/repos/P3lerA/Epiphany/releases/latest'
 autoUpdater.autoDownload = false
 autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall())
-autoUpdater.on('download-progress', p => toast(`Downloading ${Math.round(p.percent)}%`, true))
-autoUpdater.on('error', e => toast(`Update: ${e.message}`))
+let updating
+autoUpdater.on('download-progress', p => (updating ??= task('Downloading the update')).set(`Downloading the update ${Math.round(p.percent)}%`))
+autoUpdater.on('error', e => { updating?.end(); updating = null; note(`Update: ${e.message}`, true) })
 let latestRelease
 
 const checkUpdate = async () => {
@@ -600,7 +626,7 @@ const update = async () => {
   if (!PORTABLE) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
   const asset = latestRelease.assets.find(a => /^Epiphany[ .][0-9.]+\.exe$/.test(a.name)) // GitHub swaps spaces for dots in asset names
   if (!asset) throw new Error('no portable exe in ' + latestRelease.tag_name)
-  toast('Downloading ' + asset.name + '…')
+  task('Downloading ' + asset.name) // until the app quits for it
   const buf = Buffer.from(await fetch(asset.browser_download_url).then(r => r.arrayBuffer()))
   if (buf.length !== asset.size) throw new Error('download incomplete')
   const nw = PORTABLE + '.new'
@@ -624,12 +650,13 @@ const exportExtension = async () => {
   const out = path.join(d, 'epiphany-extension')
   fs.cpSync(EXT, out, { recursive: true })
   shell.showItemInFolder(out)
-  toast('Load it unpacked from chrome://extensions')
+  note('Load it unpacked from chrome://extensions')
 }
 
 // Stable executables are published on Codeberg, with SHA256SUMS alongside.
 const installGdl = async () => {
-  toast('Downloading gallery-dl…')
+  const t = task('Downloading gallery-dl')
+  try {
   const get = url => fetch(url, { signal: AbortSignal.timeout(120000) }).then(r => { if (!r.ok) throw new Error(`${r.status} ${url}`); return r })
   const rel = await get('https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest').then(r => r.json())
   const asset = n => rel.assets.find(a => a.name === n)?.browser_download_url
@@ -640,8 +667,9 @@ const installGdl = async () => {
   fs.mkdirSync(path.dirname(GDL_EXE), { recursive: true })
   fs.writeFileSync(GDL_EXE, buf)
   const v = await gdl(['--version']).then(v => v.trim())
-  toast(`gallery-dl ${v} installed`)
+  t.end(`gallery-dl ${v} installed`)
   return v
+  } catch (e) { t.end(); note(e.message, true) }
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open, editTemplate, templateInfo, resetTemplate,
@@ -671,7 +699,7 @@ app.whenReady().then(() => {
       try { q = JSON.parse(body) } catch { return res.writeHead(400).end() }
       ;(q.src ? save(q) : pull(q)).then(
         r => res.end(JSON.stringify(r)),
-        err => { console.error(err.message); toast(err.message); res.writeHead(500).end(err.message) }
+        err => { console.error(err.message); note(err.message, true); res.writeHead(500).end(err.message) }
       )
     })
   }).listen(PORT, '127.0.0.1')

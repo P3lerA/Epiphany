@@ -55,7 +55,7 @@ interface Api {
   installGdl(): Promise<string>
   export(items: Item[]): Promise<void>
   tagWiki(tag: string): Promise<string | null> // null: no wiki, or not reachable now
-  tag(item: Item): Promise<void>
+  tag(items: Item[]): Promise<void>
   installTagger(): Promise<void>
   removeTagger(): Promise<void>
   devtools(): Promise<void>
@@ -64,7 +64,8 @@ interface Api {
   onSaved(cb: (item: Item) => void): void
   onRemoved(cb: (file: string) => void): void
   onProjectRemoved(cb: (name: string) => void): void
-  onToast(cb: (toast: { text: string; hold?: boolean }) => void): void // hold: progress, stays up
+  onTasks(cb: (running: string[]) => void): void // every task's current line, oldest first
+  onNote(cb: (note: { text: string; error: boolean }) => void): void
   onSearch(cb: (tag: string) => void): void
   onOpenProject(cb: (name: string) => void): void
 }

@@ -53,9 +53,10 @@ h1 { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr)
 h1 > span { grid-area: 1 / 1; line-height: 24px; display: none }
 body:has(#lobby:target) .t-lobby, body:has(#projects:target) .t-projects, body:has(#settings :target) .t-settings { display: block }
 /* Clickable (another quote, or the tag's wiki), so it lights up like the tabs; capped so the rest of the bar still drags the window. */
-.t-lobby { justify-self: start; max-width: min(70%, 40rem); margin-left: -8px; padding: 4px 8px; border-radius: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer; -webkit-app-region: no-drag; transition: background .15s }
+.t-lobby { justify-self: start; max-width: min(60%, 32rem); margin-left: -8px; padding: 4px 8px; border-radius: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer; -webkit-app-region: no-drag; transition: background .15s }
 .t-lobby:hover { background: var(--hover) }
 .t-lobby:empty { padding: 0 }
+body.crowded .t-lobby { visibility: hidden } /* the right side took the bar (tasks.js) */
 .pills { display: flex; gap: .5rem; margin-left: auto }
 nav { display: flex; gap: .25rem; margin-left: 1rem }
 nav a, main aside a { display: flex; align-items: center; gap: .75rem; padding: .5rem 1rem; border-radius: 6px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s }
@@ -111,7 +112,12 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .seg button:hover { color: var(--fg) }
 .seg button.on { color: var(--fg); background: var(--active) }
 
-#toast { position: fixed; left: 1.5rem; bottom: 1.5rem; max-width: 32rem; padding: .5rem .9rem; border-radius: 6px; background: var(--fg); color: var(--bg); font-size: .85rem; box-shadow: 0 6px 20px rgb(0 0 0 / .18); transition: opacity .15s; @starting-style { opacity: 0 } }
+/* The task line (tasks.js), left of the tabs: muted, a braille spinner while anything runs, an error in full ink. */
+#tasks { display: flex; align-items: center; gap: .5rem; max-width: 22rem; font-size: .85rem; color: var(--muted); white-space: nowrap; transition: opacity .15s; @starting-style { opacity: 0 } }
+#tasks > span:last-child { overflow: hidden; text-overflow: ellipsis }
+#tasks .spin { display: none; flex: none; font: 1.2em/1 'Segoe UI Symbol', sans-serif } /* braille frames, 1-4 wide (spinners.js) */
+#tasks.busy .spin { display: block }
+#tasks.error { color: var(--fg) }
 
 /* Pages swap instantly: nothing to watch between two places. A page is a scroller that #hash navigation focuses; it is not a control, so no ring. */
 main { flex: 1; min-height: 0; display: grid }

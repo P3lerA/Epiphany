@@ -94,6 +94,7 @@ addEventListener('keydown', e => {
 selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
 selUI.querySelector('.export').onclick = () => api.export(items.filter(i => sel.has(i.file)))
 selUI.querySelector('.lookup').onclick = () => api.lookupAll(items.filter(i => sel.has(i.file))) // booru-pulled ones just re-render their caption
+selUI.querySelector('.tag').onclick = () => api.tag(items.filter(i => sel.has(i.file)))
 // Pictures waiting for a pick: a pill that toggles the unsure filter.
 const unsureUI = $('#unsure')
 const drawUnsure = () => {
@@ -176,9 +177,6 @@ addEventListener('DOMContentLoaded', () => Promise.all([api.list(), api.projects
   settingsUI(profiles)
 }))
 api.onOpenProject(openProject)
-const toastEl = $('#toast')
-let toastTimer
-api.onToast(({ text, hold }) => { toastEl.textContent = text; toastEl.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.hidden = true, hold ? 60000 : 2500) }) // a held one still goes if its progress stalls
 api.onRemoved(file => {
   items = items.filter(i => i.file !== file)
   if (sel.delete(file)) drawSel()
