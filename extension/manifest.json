@@ -18,6 +18,12 @@
   "background": {
     "service_worker": "background.js"
   },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+P" },
+      "description": "Pull this page into Epiphany"
+    }
+  },
   "action": {
     "default_title": "Pull into Epiphany",
     "default_icon": {
