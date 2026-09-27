@@ -256,7 +256,7 @@ const explain = () => {
   if (!t || !items?.some(i => `, ${i.tags}, ${i.character}, ${i.copyright}, ${i.artist?.replace(/@/g, '')}, `.includes(`, ${t}, `))) { explained = ''; return title(line) } // a word being typed is not a tag
   api.tagWiki(t).then(text => { if (asked !== t) return; explained = text ? t : ''; title(text || line) })
 }
-const quote = () => api.quote().then(q => { line = q || ''; if (!explained) title(line) })
+const quote = () => api.quote().then(q => { if (q === null) return; line = q; if (!explained) title(line) }) // null: unreachable, the last one stays
 h1.onclick = () => explained ? api.open(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(explained)}`) : quote()
 addEventListener('DOMContentLoaded', quote) // title() needs motion.js
 

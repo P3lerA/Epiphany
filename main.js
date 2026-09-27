@@ -554,16 +554,18 @@ const QUOTES = {
   advice: ['https://api.adviceslip.com/advice', j => j.slip.advice],
   animechan: ['https://api.animechan.io/v1/quotes/random', j => j.data.content],
   zenquotes: ['https://zenquotes.io/api/random', j => j[0].q],
-  hitokoto: ['https://v1.hitokoto.cn/?c=a&c=b&c=c&c=d&max_length=28', j => j.hitokoto],
+  hitokoto: ['https://v1.hitokoto.cn/?c=a&c=b&c=c&c=d&max_length=28', j => j.hitokoto, true], // true: Cloudflare caches it, a unique query gets a new one
   none: null
 }
 
 const quote = () => {
   const src = QUOTES[settings().quote]
-  if (!src) return null
-  const [url, pick] = src
-  return fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { signal: AbortSignal.timeout(3000), cache: 'no-store' })
-    .then(r => r.json()).then(pick, () => null)
+  if (!src) return '' // none: no quote
+  if (Math.random() < .01) return 'Too many requests. Obtain an auth key for unlimited access.' // zenquotes' 429, as an egg
+  const [url, pick, bust] = src
+  // null: not reachable now (zenquotes takes ~1.5 s, and answers 429 past 5 a 30 s). Only where needed: animechan refuses a query.
+  return fetch(bust ? url + '&t=' + Date.now() : url, { signal: AbortSignal.timeout(5000), cache: 'no-store' })
+    .then(r => r.ok ? r.json() : Promise.reject()).then(pick).catch(() => null)
 }
 
 const getCreds = () => readJson(GDL, {}).extractor ?? {}
