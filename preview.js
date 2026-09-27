@@ -24,8 +24,9 @@ const preview = async (item, root) => {
   dlg.querySelector('.time').textContent = new Date(item.time).toLocaleString()
   dlg.querySelector('.rating').textContent = { g: 'general', s: 'sensitive', q: 'questionable', e: 'explicit' }[item.rating] ?? ''
   const tagged = dlg.querySelector('.tagged')
-  tagged.textContent = { booru: 'Tags: booru', none: 'Tags: none', unsure: 'Tags: pick a match' }[item.tagged]
-  if (item.tagged !== 'booru') tagged.append(' ', Object.assign(document.createElement('a'), { href: '#', textContent: 'Look up', onclick: e => { e.preventDefault(); api.lookup(item) } }))
+  tagged.textContent = { booru: 'Tags: booru', none: 'Tags: none', unsure: 'Tags: pick a match', tagger: 'Tags: tagger' }[item.tagged]
+  const act = (text, f) => tagged.append(tagged.lastElementChild ? ' / ' : ' ', Object.assign(document.createElement('a'), { href: '#', textContent: text, onclick: e => { e.preventDefault(); f() } }))
+  if (item.tagged !== 'booru') { act('Look up', () => api.lookup(item)); act('Tag', () => api.tag(item)) } // booru tags need neither; an emptied caption counts as none
   // Close IQDB matches: click one to see its caption in the box, Use to keep it.
   const picks = dlg.querySelector('.picks'), use = dlg.querySelector('.use')
   use.hidden = true
@@ -53,7 +54,7 @@ const preview = async (item, root) => {
   src.onclick = e => { e.preventDefault(); api.open(item.page) }
   const ta = dlg.querySelector('textarea')
   ta.value = await api.getCaption(item.file)
-  ta.onchange = () => api.setCaption(item.file, ta.value)
+  ta.onchange = () => api.setCaption(item, ta.value)
   if (!dlg.open) { bar(true); dlg.showModal() }
   dlg.focus()
 }

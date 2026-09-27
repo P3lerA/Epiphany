@@ -9,7 +9,7 @@ interface Item {
   site: string; ai: boolean
   rating: 'g' | 's' | 'q' | 'e' | '' // '' = no booru match yet
   artist?: string; tags?: string // tags: comma-joined, underscores kept
-  tagged: 'booru' | 'unsure' | 'none'
+  tagged: 'booru' | 'unsure' | 'tagger' | 'none' // tagger: no booru has it, the tagger guessed
   candidates?: { score: number; url: string; caption: string; plus: string[] }[] // close matches waiting for a pick
   from?: string // the post the caption's tags came from
   replace?: true // onSaved: same picture, fresher facts
@@ -18,7 +18,7 @@ interface Item {
 interface Profile { caption: string; ratings: string; scores: string; spaces: boolean }
 
 interface Settings {
-  project: string; quote: string; lookup: boolean; sites: string[]; accept: number; debug?: boolean
+  project: string; quote: string; lookup: boolean; sites: string[]; accept: number; autotag: boolean; debug?: boolean
   profile: string; overrides: Partial<Record<keyof Profile, string | boolean>>
 }
 
@@ -30,7 +30,7 @@ interface Api {
   setSettings(s: Settings): Promise<void>
   profiles(): Promise<Record<string, Profile>>
   getCaption(file: string): Promise<string>
-  setCaption(file: string, text: string): Promise<void>
+  setCaption(item: Item, text: string): Promise<void> // emptied: the picture counts as untagged
   open(url: string): Promise<void>
   editTemplate(): Promise<string>
   templateInfo(): Promise<{ text: string; custom: boolean }>
@@ -55,13 +55,16 @@ interface Api {
   installGdl(): Promise<string>
   export(items: Item[]): Promise<void>
   tagWiki(tag: string): Promise<string | null> // null: no wiki, or not reachable now
+  tag(item: Item): Promise<void>
+  installTagger(): Promise<void>
+  removeTagger(): Promise<void>
   devtools(): Promise<void>
   restart(): Promise<void>
   theme(theme: 'system' | 'light' | 'dark', bar: { color: string; symbolColor: string; height: number }): void
   onSaved(cb: (item: Item) => void): void
   onRemoved(cb: (file: string) => void): void
   onProjectRemoved(cb: (name: string) => void): void
-  onToast(cb: (text: string) => void): void
+  onToast(cb: (toast: { text: string; hold?: boolean }) => void): void // hold: progress, stays up
   onSearch(cb: (tag: string) => void): void
   onOpenProject(cb: (name: string) => void): void
 }

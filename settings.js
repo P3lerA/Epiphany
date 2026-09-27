@@ -15,6 +15,7 @@ const settingsUI = profiles => {
   })
   general.querySelector('[name=theme]').value = localStorage.theme || 'system'
   general.querySelector('[name=lookup]').checked = s.lookup
+  general.querySelector('[name=autotag]').checked = s.autotag
   general.querySelector('[name=accept]').value = s.accept
   general.querySelector('[name=debug]').checked = !!s.debug
   general.querySelector('[name=slow]').value = localStorage.slow || '1'
@@ -111,6 +112,7 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
     const n = e.target.dataset.act
     if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
     if (n === 'extension') api.exportExtension()
+    if (n === 'tagger') (e.target.textContent === 'Remove' ? api.removeTagger() : api.installTagger()).then(drawInstruments)
     if (n === 'Epiphany') (newer && u.how !== 'dev' ? api.update() : Promise.resolve()).then(drawInstruments)
   }
 })

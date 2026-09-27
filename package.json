@@ -27,7 +27,12 @@
       "index.html",
       "style.css",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**"
+    ],
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/bin/**"
     ],
     "win": {
       "target": [
@@ -52,6 +57,7 @@
     }
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "onnxruntime-node": "^1.30.0"
   }
 }

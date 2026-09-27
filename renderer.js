@@ -178,7 +178,7 @@ addEventListener('DOMContentLoaded', () => Promise.all([api.list(), api.projects
 api.onOpenProject(openProject)
 const toastEl = $('#toast')
 let toastTimer
-api.onToast(t => { toastEl.textContent = t; toastEl.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.hidden = true, 2500) })
+api.onToast(({ text, hold }) => { toastEl.textContent = text; toastEl.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.hidden = true, hold ? 60000 : 2500) }) // a held one still goes if its progress stalls
 api.onRemoved(file => {
   items = items.filter(i => i.file !== file)
   if (sel.delete(file)) drawSel()
