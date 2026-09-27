@@ -15,16 +15,23 @@ a { color: inherit; text-decoration: none }
   --active: color-mix(in srgb, var(--fg) 10%, transparent);
   --field: color-mix(in srgb, var(--fg) 3%, var(--bg));
   --bar: 56px; /* = titleBarOverlay height in main.js and theme.js */
+  --print: 0 1px 2px rgb(0 0 0 / .12), 0 4px 14px rgb(0 0 0 / .12); /* a pile's print lifts off the table */
+  --paper: var(--bg); /* a print's frame */
+  --toggle-fill: transparent; --toggle-preview: currentColor; /* the theme button: an empty circle in light, filled in dark, the other on hover */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #1C1C20; --fg: #E6E6EA; --muted: #8D8E98; --rule: #2D2D33; --accent: #8FA1FF;
+    --paper: #D2D2CE; --print: 0 1px 2px rgb(0 0 0 / .45), 0 4px 14px rgb(0 0 0 / .4); /* prints stay paper on a dark table, a little dimmed */
+    --toggle-fill: currentColor; --toggle-preview: transparent;
   }
 }
 [data-theme="dark"] {
   color-scheme: dark;
   --bg: #1C1C20; --fg: #E6E6EA; --muted: #8D8E98; --rule: #2D2D33; --accent: #8FA1FF;
+  --paper: #D2D2CE; --print: 0 1px 2px rgb(0 0 0 / .45), 0 4px 14px rgb(0 0 0 / .4); /* prints stay paper on a dark table, a little dimmed */
+  --toggle-fill: currentColor; --toggle-preview: transparent;
 }
 
 body { background: var(--bg); color: var(--fg); margin: 0; height: 100vh; display: flex; flex-direction: column }
@@ -63,7 +70,7 @@ main aside a.on::before { background: currentColor }
 #selection .clear { color: var(--muted) } /* an end cap, not a third button: a box against the pill's edge reads as a chip stuck on */
 #selection .clear:hover { background: none; color: var(--fg) }
 
-.fab { position: fixed; right: 1.5rem; bottom: 1.5rem; display: flex; gap: .5rem; --active: color-mix(in srgb, var(--fg) 10%, var(--bg)) } /* opaque: pictures scroll under it */
+.fab { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 2; display: flex; gap: .5rem; --active: color-mix(in srgb, var(--fg) 10%, var(--bg)) } /* opaque: pictures scroll under it */
 .fab > * { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%; background: var(--surface); border: 1px solid var(--rule); color: var(--muted); transition: background .15s, color .15s, transform .1s }
 .fab > *:hover { color: var(--fg); background: var(--active) }
 .fab > *:active { transform: scale(.94) }
@@ -75,6 +82,14 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .search select { padding: 0 .25rem 0 .75rem }
 .search input { width: 11rem; padding: 0 .75rem 0 .25rem }
 .filter-toggle { anchor-name: --filters }
+.theme-toggle::before { content: ''; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid currentColor; background: var(--toggle-fill); transition: background .15s }
+.theme-toggle:hover::before { background: var(--toggle-preview) }
+/* Grid or piles: a switch with both sides named, the thumb under the one showing. */
+.fab .piles-toggle, .fab .piles-toggle:hover, .fab .piles-toggle.on { position: relative; width: 4.5rem; justify-content: space-between; padding: 0 calc(1.25rem - 10px); border-radius: 999px; background: var(--surface); border-color: var(--rule) }
+.piles-toggle::before { content: ''; position: absolute; top: 3px; left: 3px; width: calc(2.5rem - 8px); height: calc(2.5rem - 8px); border-radius: 50%; background: var(--active); transition: translate .25s cubic-bezier(.2, 0, 0, 1) }
+.piles-toggle.on::before { translate: 2rem } /* the pill is 2rem longer than it is tall */
+.piles-toggle svg { position: relative; color: var(--muted); transition: color .15s }
+.piles-toggle:not(.on) svg:first-child, .piles-toggle.on svg:last-child { color: var(--fg) }
 
 /* Native popover: light dismiss and Esc for free; opens above its button. */
 #filters { position-anchor: --filters; inset: auto; bottom: anchor(top); right: anchor(right); margin: 0 0 .5rem; overflow: visible; padding: 14px; color: inherit; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 14px }
@@ -95,7 +110,7 @@ section { outline: none; grid-area: 1 / 1; display: none; min-height: 0; overflo
 section:target { display: block }
 #settings:has(:target), #projects:target { display: grid }
 
-:is(#lobby, #pgrid) h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 1rem 0 .5rem }
+:is(#lobby, #pgrid, #ghosts) h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 1rem 0 .5rem }
 :is(#lobby, #pgrid) > div:first-child h3 { margin-top: 0 }
 :is(#lobby, #pgrid) > div:not(:has(img:not([hidden]))) { display: none }
 #lobby:empty::before { content: 'Pictures you save from the browser show up here.'; color: var(--muted) }
@@ -103,9 +118,20 @@ section:target { display: block }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem }
 .grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer }
 .grid img:not(.in) { opacity: 0 }
-.grid img.in { animation: rise .35s cubic-bezier(.2, 0, 0, 1) both }
-@keyframes rise { from { opacity: 0; transform: translateY(8px) scale(.98) } }
 .grid img.sel { outline: 2px solid var(--accent); outline-offset: 2px }
+
+/* Tag piles: prints dropped in stacks, one stack per tag. */
+.piling > :not(.piles) { display: none }
+.piles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1.5rem 1.75rem; padding: .75rem .5rem }
+.pile { padding: 0; border: none; background: none; color: var(--fg); text-align: left; min-width: 0 }
+.pile > span:first-child { position: relative; display: block; aspect-ratio: 1; transition: translate .2s cubic-bezier(.2, 0, 0, 1) }
+.pile:hover > span:first-child { translate: 0 -3px }
+.print { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border: 3px solid var(--paper); border-radius: 5px; box-shadow: var(--print); will-change: transform } /* ponytail: a GPU layer per print (~70MB at 340) so landing doesn't repaint every shadow in one frame; drop it for off-screen piles if memory bites */
+.pile > span:last-child { display: block; margin-top: .6rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pile small { margin-left: .4rem; color: var(--muted); font-size: .85rem; font-weight: 400 }
+.flying { z-index: 1 } /* over the rest while it moves; not in the keyframes, which must stay compositor-only */
+#ghosts { position: fixed; inset: var(--bar) 0 0; overflow: hidden; pointer-events: none }
+#ghosts > img { object-fit: cover; border-radius: 6px }
 
 /* The preview dims the title bar too: while it is open the caption buttons' strip is transparent (theme.js bar), so the backdrop shows through. */
 dialog { inset: var(--bar) 0 0; width: min(92vw, 1100px); height: min(86vh - var(--bar), 760px); padding: 1rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); outline: none; grid-template-columns: minmax(0, 1fr) 20rem; gap: 1rem; opacity: 0; transition: opacity .15s, display .15s allow-discrete, overlay .15s allow-discrete }

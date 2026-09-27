@@ -1,13 +1,8 @@
-const SITES = ['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34',
-  'zerochan', 'animepictures', 'pixiv', 'twitter', 'deviantart', 'artstation', 'fanbox', 'fantia', 'bluesky']
+// Shared state and helpers, the picture grid and its selection, filters and search, projects; starts the page. Loaded first:
+// motion.js, piles.js, preview.js, settings.js follow and share its globals.
+
 const $ = s => document.querySelector(s)
 const esc = s => String(s).replace(/"/g, '&quot;')
-// What gallery-dl needs per site. 'oauth' = a browser login flow, the rest are config fields.
-const CREDS = { danbooru: ['username', 'api-key'], gelbooru: ['api-key', 'user-id'], e621: ['username', 'api-key'],
-  sankaku: ['username', 'password'], twitter: ['username', 'password'], pixiv: 'oauth' }
-const SECRET = /key|password|token/
-const KEY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.9 12.1 21 2m-3 3 3 3m-6 0 2 2"/></svg>'
-
 let s, projects, items
 const save = () => api.setSettings(s)
 
@@ -27,7 +22,10 @@ const groupIn = (root, t, front) => {
 const add = (root, item, front) => {
   const grid = groupIn(root, item.time, front)
   const img = new Image()
-  img.onload = () => { img.style.animationDelay = 100 + Math.random() * 200 + 'ms'; img.classList.add('in') } // cached thumbs all land in the same frame; a little scatter reads as one-by-one
+  img.onload = () => { // rises in once; a CSS animation would replay whenever a filter or the piles hide and show it again
+    img.classList.add('in')
+    if (!calm.matches && !img.getAnimations().length) play(img, [{ opacity: 0, transform: 'translateY(8px) scale(.98)' }, {}], { duration: 350, delay: 100 + Math.random() * 200, easing: EASE, fill: 'backwards' }) // cached thumbs all land in the same frame; a little scatter reads as one-by-one. Not while a swap moves or holds it: a print landing on it already shows it
+  }
   img.src = item.thumb || item.url
   img.loading = 'lazy'
   img.decoding = 'async'
@@ -52,7 +50,10 @@ const decorate = (img, item) => {
 const sel = new Set()
 let anchor
 const selUI = $('#selection')
-const visible = () => [...(location.hash === '#projects' ? pgrid : $('#lobby')).querySelectorAll('.grid img')].filter(i => !i.hidden)
+const page = () => location.hash === '#projects' ? pgrid : $('#lobby')
+const scroller = () => page().closest('section')
+const shown = root => [...root.querySelectorAll('.grid img')].filter(i => !i.hidden)
+const visible = () => shown(page())
 const drawSel = () => {
   document.querySelectorAll('.grid img').forEach(i => i.classList.toggle('sel', sel.has(i.dataset.file)))
   selUI.hidden = !sel.size
@@ -84,7 +85,7 @@ addEventListener('mouseover', e => {
 })
 addEventListener('keydown', e => {
   if (dlg.open || e.target.matches?.('input, textarea')) return
-  if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); visible().forEach(i => sel.add(i.dataset.file)); drawSel() }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); if (!piling) { visible().forEach(i => sel.add(i.dataset.file)); drawSel() } } // the piles hide the grid it would select
   if (e.key === 'Escape' && sel.size) { sel.clear(); drawSel() }
 })
 selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
@@ -98,7 +99,7 @@ const drawUnsure = () => {
   unsureUI.textContent = n + ' to pick'
   unsureUI.classList.toggle('on', F.tagged === 'unsure')
 }
-unsureUI.onclick = () => { F.tagged = F.tagged === 'unsure' ? '' : 'unsure'; saveF(); applyFilters() }
+unsureUI.onclick = () => swap(() => { F.tagged = F.tagged === 'unsure' ? '' : 'unsure'; saveF(); applyFilters() })
 
 // View filters: never touch files, only what is shown. Kept per machine.
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
@@ -109,6 +110,7 @@ const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
   filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[seg.dataset.name] || ''))))
   if (items) drawUnsure()
+  if (piling) drawPiles(page())
   $('.filter-toggle').classList.toggle('on', Object.entries(F).some(([k, v]) => k === 'ai' ? !v : v))
 }
 const drawSites = () => {
@@ -119,13 +121,12 @@ const drawSites = () => {
 // Search box: local scope filters the grid as you type; a site scope pulls that site's tag search on Enter.
 const search = $('.search input'), scope = $('.search select')
 const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters() }
-search.oninput = localQ
-scope.onchange = localQ
+search.oninput = scope.onchange = () => swap(() => { localQ(); backToPiles() }) // filter changes move the pictures, see swap
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
-filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') { F[seg.dataset.name] = e.target.value; saveF(); applyFilters() } } })
-filters.onchange = e => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() }
-const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)) }
+filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') swap(() => { F[seg.dataset.name] = e.target.value; saveF(); applyFilters() }) } })
+filters.onchange = e => swap(() => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() })
+const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root) }
 
 // Projects: sidebar picks the active project (where pulls land) and shows its grid.
 const plist = $('#plist'), pgrid = $('#pgrid')
@@ -144,6 +145,7 @@ api.onProjectRemoved(async name => {
   ;[projects, s] = await Promise.all([api.projects(), api.getSettings()])
   drawProjects(true)
   drawSites()
+  refreshPiles()
 })
 plist.onkeydown = e => {
   const v = e.target.value?.trim()
@@ -151,149 +153,8 @@ plist.onkeydown = e => {
   api.newProject(v).then(() => { projects.push(v); openProject(v) })
 }
 
-// Preview: big image + editable caption. Reusable for any item.
-const dlg = $('#preview')
-let cur // which grid the preview walks, and where it is
-const siblings = () => {
-  const imgs = [...cur.root.querySelectorAll('.grid img')].filter(i => !i.hidden)
-  const i = imgs.findIndex(x => x.dataset.file === cur.file)
-  return { prev: imgs[i - 1], next: imgs[i + 1] }
-}
-const step = d => { const n = d < 0 ? siblings().prev : siblings().next; if (n) preview(n.item) }
-dlg.querySelector('.prev').onclick = () => step(-1)
-dlg.querySelector('.next').onclick = () => step(1)
-dlg.tabIndex = -1
-dlg.onkeydown = e => {
-  if (e.target.tagName === 'TEXTAREA') return
-  if (e.key === 'ArrowLeft') step(-1)
-  if (e.key === 'ArrowRight') step(1)
-}
-const preview = async (item, root) => {
-  cur = { root: root ?? cur.root, file: item.file }
-  const { prev, next } = siblings()
-  dlg.querySelector('.prev').hidden = !prev
-  dlg.querySelector('.next').hidden = !next
-  dlg.querySelector('img').src = item.url
-  dlg.querySelector('.time').textContent = new Date(item.time).toLocaleString()
-  dlg.querySelector('.rating').textContent = { g: 'general', s: 'sensitive', q: 'questionable', e: 'explicit' }[item.rating] ?? ''
-  const tagged = dlg.querySelector('.tagged')
-  tagged.textContent = { booru: 'Tags: booru', none: 'Tags: none', unsure: 'Tags: pick a match' }[item.tagged]
-  if (item.tagged !== 'booru') tagged.append(' ', Object.assign(document.createElement('a'), { href: '#', textContent: 'Look up', onclick: e => { e.preventDefault(); api.lookup(item) } }))
-  // Close IQDB matches: click one to see its caption in the box, Use to keep it.
-  const picks = dlg.querySelector('.picks'), use = dlg.querySelector('.use')
-  use.hidden = true
-  picks.replaceChildren(...(item.candidates ?? []).map((c, i) => {
-    const b = document.createElement('button')
-    b.innerHTML = `<img src="${esc(c.url ?? '')}"><span>${c.score}% · +${c.plus.length}</span>`
-    b.title = c.plus.join(', ') || 'no tags of its own'
-    b.onclick = () => {
-      picks.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b))
-      dlg.querySelector('textarea').value = c.caption
-      use.hidden = false
-      use.onclick = () => api.pick(item, i)
-    }
-    return b
-  }))
-  const proj = dlg.querySelector('.proj')
-  proj.textContent = item.project
-  proj.onclick = e => { e.preventDefault(); dlg.close(); openProject(item.project) }
-  const from = dlg.querySelector('.from')
-  from.hidden = !item.from
-  if (item.from) { from.replaceChildren('caption from ', Object.assign(document.createElement('b'), { textContent: new URL(item.from).host })); from.onclick = e => { e.preventDefault(); api.open(item.from) } }
-  const src = dlg.querySelector('.src')
-  const u = new URL(item.page)
-  src.replaceChildren(u.protocol + '//', Object.assign(document.createElement('b'), { textContent: u.host }), u.pathname + u.search)
-  src.onclick = e => { e.preventDefault(); api.open(item.page) }
-  const ta = dlg.querySelector('textarea')
-  ta.value = await api.getCaption(item.file)
-  ta.onchange = () => api.setCaption(item.file, ta.value)
-  if (!dlg.open) { bar(true); dlg.showModal() }
-  dlg.focus()
-}
-dlg.onclick = e => { if (e.target === dlg) dlg.close() }
-dlg.onclose = () => setTimeout(() => dlg.open || bar(), 150) // the strip turns opaque again once the backdrop has faded
-// Right-click a tag in the caption: the selection, or the comma-delimited piece under the caret.
-const tagAt = ta => {
-  const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim()
-  if (sel) return sel
-  const a = ta.value.lastIndexOf(',', ta.selectionStart - 1) + 1
-  const b = ta.value.indexOf(',', ta.selectionStart)
-  return ta.value.slice(a, b < 0 ? undefined : b).trim()
-}
-dlg.querySelector('textarea').oncontextmenu = e => { const t = tagAt(e.target); if (t) api.tagMenu(t) }
-api.onSearch(tag => { dlg.close(); scope.value = ''; search.value = tag; localQ(); search.focus() })
-
-const settingsUI = profiles => {
-  const general = $('#general ul')
-  api.quoteSources().then(names => {
-    general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
-  })
-  general.querySelector('[name=theme]').value = localStorage.theme || 'system'
-  general.querySelector('[name=lookup]').checked = s.lookup
-  general.querySelector('[name=accept]').value = s.accept
-  general.onchange = e => {
-    if (e.target.name === 'theme') return setTheme(e.target.value) // per machine, like the filters
-    s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.name === 'accept' ? Number(e.target.value) : e.target.value
-    save()
-    if (e.target.name === 'quote') quote()
-  }
-
-  const sites = $('#sites ul')
-  api.getCreds().then(creds => {
-    sites.innerHTML = SITES.map(site => {
-      const c = CREDS[site]
-      const fields = c === 'oauth' ? `<button data-oauth="${site}">Log in</button>`
-        : (c || []).map(k => `<input name="${k}" placeholder="${k}" type="${SECRET.test(k) ? 'password' : 'text'}" value="${esc(creds[site]?.[k] ?? '')}" spellcheck="false">`).join('')
-      return `<li data-site="${site}"><label>${site}<input type="checkbox" value="${site}" ${s.sites.includes(site) ? 'checked' : ''}></label>${c ? `<button class="key" aria-label="Credentials">${KEY}</button><div class="creds" hidden>${fields}</div>` : ''}</li>`
-    }).join('')
-  })
-  sites.onclick = e => {
-    const key = e.target.closest('.key'), oauth = e.target.closest('[data-oauth]')
-    if (key) { const d = key.nextElementSibling; d.hidden = !d.hidden }
-    if (oauth) api.oauth(oauth.dataset.oauth)
-  }
-  sites.onchange = e => {
-    if (e.target.type === 'checkbox') { s.sites = [...sites.querySelectorAll(':checked')].map(c => c.value); save() }
-    else api.setCred(e.target.closest('li').dataset.site, e.target.name, e.target.value)
-  }
-
-  const sel = $('#profile select')
-  const rows = $('#profile ul')
-  sel.innerHTML = Object.keys(profiles).map(n => `<option ${n === s.profile ? 'selected' : ''}>${n}</option>`).join('')
-  const draw = () => {
-    rows.innerHTML = Object.entries(profiles[s.profile]).map(([k, v]) => {
-      if (k === 'caption') return '<li><span>caption</span><button class="template" title="Edit in your text editor"><span></span>Edit</button></li>' // a long template is edited as a file, not in a one-line box
-      const cur = s.overrides[k] ?? v
-      const reset = k in s.overrides ? ` <a href="#profile" data-reset="${k}">reset</a>` : ''
-      const input = typeof v === 'boolean'
-        ? `<input type="checkbox" name="${k}" ${cur ? 'checked' : ''}>`
-        : `<input type="text" name="${k}" value="${esc(cur)}">`
-      return `<li><span>${k}${reset}</span>${input}</li>`
-    }).join('')
-    drawTemplate()
-  }
-  const drawTemplate = () => api.templateInfo().then(({ text, custom }) => {
-    const b = rows.querySelector('.template')
-    b.firstElementChild.textContent = text
-    b.previousElementSibling.innerHTML = 'caption' + (custom ? ' <a href="#profile" data-reset="caption">reset</a>' : '')
-  })
-  addEventListener('focus', () => { if (location.hash === '#profile') drawTemplate() }) // back from the editor
-  draw()
-  sel.onchange = () => { s.profile = sel.value; s.overrides = {}; save(); draw() }
-  rows.onchange = e => { // no redraw: it would drop the focus Tab just moved to the next field
-    s.overrides[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value
-    save()
-    const label = e.target.closest('li').firstElementChild
-    if (!label.querySelector('a')) label.insertAdjacentHTML('beforeend', ` <a href="#profile" data-reset="${e.target.name}">reset</a>`)
-  }
-  rows.onclick = e => {
-    if (e.target.closest('.template')) api.editTemplate()
-    if (e.target.dataset.reset === 'caption') api.resetTemplate().then(drawTemplate)
-    else if (e.target.dataset.reset) { delete s.overrides[e.target.dataset.reset]; save(); draw() }
-  }
-}
-
-Promise.all([api.list(), api.projects(), api.getSettings(), api.profiles()]).then(([list, ps, settings, profiles]) => {
+// Once every script is in: an IPC answer can land between two of them, before piles.js has run.
+addEventListener('DOMContentLoaded', () => Promise.all([api.list(), api.projects(), api.getSettings(), api.profiles()]).then(([list, ps, settings, profiles]) => {
   items = list.sort((a, b) => b.time.localeCompare(a.time))
   projects = ps
   s = settings
@@ -303,7 +164,7 @@ Promise.all([api.list(), api.projects(), api.getSettings(), api.profiles()]).the
   api.searchSites().then(names => scope.innerHTML = '<option value="">local</option>' + names.filter(n => s.sites.includes(n)).map(n => `<option>${n}</option>`).join(''))
   applyFilters()
   settingsUI(profiles)
-})
+}))
 api.onOpenProject(openProject)
 const toastEl = $('#toast')
 let toastTimer
@@ -313,6 +174,7 @@ api.onRemoved(file => {
   if (sel.delete(file)) drawSel()
   drawUnsure()
   document.querySelectorAll('.grid img').forEach(i => { if (i.dataset.file === file) i.remove() })
+  refreshPiles()
 })
 api.onSaved(i => {
   if (i.replace) { // same picture, fresher facts (tags looked up)
@@ -320,29 +182,14 @@ api.onSaved(i => {
     document.querySelectorAll('.grid img').forEach(img => { if (img.dataset.file === i.file) decorate(img, i) })
     if (dlg.open && cur.file === i.file) preview(i)
     drawUnsure()
-    return
+    return refreshPiles()
   }
   items.unshift(i)
   drawSites()
   add($('#lobby'), i, true)
   if (i.project === s.project) add(pgrid, i, true)
+  refreshPiles()
 })
-
-const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]).then(([v, u]) => {
-  const ul = $('#instruments ul')
-  const newer = u.latest && u.latest !== u.current
-  const rows = { Epiphany: { status: u.current, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v }
-  ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
-    `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
-  ).join('')
-  ul.onclick = e => {
-    const n = e.target.dataset.act
-    if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
-    if (n === 'extension') api.exportExtension()
-    if (n === 'Epiphany') (newer && u.how !== 'dev' ? api.update() : Promise.resolve()).then(drawInstruments)
-  }
-})
-drawInstruments()
 
 // Lobby has no title of its own: a random line is the title. Click for another.
 const h1 = $('h1 .t-lobby')
@@ -352,5 +199,9 @@ quote()
 
 const mark = () => document.querySelectorAll('#settings aside a').forEach(a => a.classList.toggle('on', a.hash === location.hash))
 addEventListener('hashchange', mark)
+// A page keeps its scroll while another shows: display:none drops it.
+const tops = new Map()
+for (const sec of document.querySelectorAll('main > section')) sec.addEventListener('scroll', () => tops.set(sec, sec.scrollTop), { passive: true })
+addEventListener('hashchange', () => { for (const [sec, top] of tops) if (sec.checkVisibility()) sec.scrollTop = top })
 location.hash ||= '#lobby'
 mark()

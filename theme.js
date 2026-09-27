@@ -11,4 +11,4 @@ const setTheme = t => {
   bar()
 }
 setTheme(localStorage.theme || 'system')
-matchMedia('(prefers-color-scheme: dark)').onchange = () => bar() // system flips, and nativeTheme catching up after a switch
+matchMedia('(prefers-color-scheme: dark)').onchange = () => bar(document.getElementById('preview').open) // system flips, and nativeTheme catching up after a switch; the preview keeps the strip clear

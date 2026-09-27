@@ -36,7 +36,7 @@ chrome.runtime.onInstalled.addListener(() => {
 })
 
 // Floating button on listed sites (content.js) -> gallery-dl.
-chrome.runtime.onMessage.addListener((msg, sender, reply) => { send(sender.tab.id, msg).then(reply); return true })
+chrome.runtime.onMessage.addListener((msg, sender, reply) => { send(sender.tab.id, msg).then(reply, () => reply(false)); return true }) // the page's button shows ! rather than hang
 
 // Toolbar icon on any site -> gallery-dl.
 chrome.action.onClicked.addListener(tab => send(tab.id, { page: tab.url }))
