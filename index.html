@@ -12,7 +12,7 @@
     <h1><span class="t-lobby"></span><span class="t-projects">Projects</span><span class="t-settings">Settings</span></h1>
     <div class="pills">
       <button id="pending" hidden></button>
-      <div id="selection" hidden><span></span><button class="lookup">Look up</button><button class="tag">Tag</button><button class="export">Export</button><button class="clear" aria-label="Clear selection">&#x2715;</button></div>
+      <div id="selection" hidden><span></span><button class="lookup">Look up</button><button class="tag">Tag</button><button class="clear" aria-label="Clear selection">&#x2715;</button></div>
       <div id="tasks" hidden><span class="spin"></span><span></span></div>
     </div>
     <nav>
@@ -67,6 +67,7 @@
     <span>Piles</span><div class="seg" data-name="piles" title="What the tag view piles by; none chosen: tags"><button value="copyright">Series</button><button value="character">Characters</button><button value="artist">Artists</button></div>
     <details><summary>More</summary><div><label><span>AI-generated</span><input type="checkbox" name="ai" checked></label><span>Source</span><select name="site"><option value="">All sources</option></select></div></details>
   </div>
+  <form id="edit" popover><input list="edit-names" spellcheck="false" autocomplete="off"><datalist id="edit-names"></datalist></form>
   <dialog id="preview">
     <figure>
       <button class="nav prev" aria-label="Previous"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>

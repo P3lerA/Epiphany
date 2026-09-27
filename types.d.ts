@@ -31,6 +31,7 @@ interface Api {
   profiles(): Promise<Record<string, Profile>>
   getCaption(file: string): Promise<string>
   setCaption(item: Item, text: string): Promise<void> // emptied: the picture counts as untagged
+  setField(items: Item[], field: 'copyright' | 'character' | 'artist', text: string): Promise<void> // comma-separated names, over the booru's or the tagger's
   open(url: string): Promise<void>
   editTemplate(): Promise<string>
   templateInfo(): Promise<{ text: string; custom: boolean }>
@@ -42,7 +43,7 @@ interface Api {
   searchSites(): Promise<string[]>
   search(site: string, q: string): Promise<Item[]>
   tagMenu(tag: string): Promise<void>
-  menu(item: Item): Promise<void>
+  menu(items: Item[]): Promise<void> // right-click: the selection the picture is in, or just it
   quoteSources(): Promise<string[]>
   quote(): Promise<string | null>
   getCreds(): Promise<Record<string, Record<string, string>>>
@@ -68,6 +69,7 @@ interface Api {
   onNote(cb: (note: { text: string; error: boolean }) => void): void
   onSearch(cb: (tag: string) => void): void
   onOpenProject(cb: (name: string) => void): void
+  onEdit(cb: (e: { items: Item[]; field: 'copyright' | 'character' | 'artist'; label: string }) => void): void // right-click > Edit
 }
 declare const api: Api
 

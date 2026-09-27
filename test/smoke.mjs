@@ -83,6 +83,11 @@ step('an emptied caption is pending, a written one lifts it', async () => {
   await js(`await api.setCaption(items.find(i => i.file.endsWith('booru1.webp')), '')`); await until(`pendingUI.textContent === '3 pending'`, 'pending up')
   await js(`await api.setCaption(items.find(i => i.file.endsWith('booru1.webp')), '1girl, solo')`); await until(`pendingUI.textContent === '2 pending'`, 'pending down')
 })
+step('a field written by hand for several: the page and the captions follow', async () => {
+  await js(`await api.setField(items.filter(i => i.file.includes('booru')), 'character', 'kagamine rin, hatsune miku')`)
+  await until(`items.filter(i => i.character === 'kagamine_rin, hatsune_miku').length === 2`, 'characters on the page')
+  assert.match(await js(`return api.getCaption(items.find(i => i.file.endsWith('booru2.webp')).file)`), /kagamine rin, hatsune miku/)
+})
 step('settings pages draw, Instruments lists the tools', async () => {
   for (const h of ['general', 'profile', 'sites']) { await js(`location.hash = '#${h}'`); await until(`$('#${h} ul').children.length > 1`, h) }
   await js(`location.hash = '#instruments'`); await until(`$('#instruments ul').children.length === 4`, 'instruments', 20000)

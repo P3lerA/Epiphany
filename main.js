@@ -63,10 +63,15 @@ const rating = j => {
   return r.startsWith('safe') || (!four && r === 's') ? 'g' : (r[0] ?? '')
 }
 
+// Where a picture's tags come from: a booru match looked up for a non-booru source, the booru it was pulled from, or the tagger's guess.
+const source = j => j.booru ?? (j.tagger && !BOORU.has(j.category) ? tagger.post(j.tagger) : j)
+// Its caption fields: the source's, with series, characters and artists written by hand over them (j.edit, booru-style strings).
+const facts = j => ({ ...meta(source(j)), ...Object.fromEntries(Object.entries(j.edit ?? {}).map(([k, v]) => [k, words(v).join(k === 'artist' ? ', @' : ', ')])) })
+const recaption = (item, j) => fs.writeFileSync(txt(item.file), caption(profile(), facts(j)))
 const info = item => {
   const j = sidecar(item, null)
   if (!j) return { site: new URL(item.page).host, ai: false, rating: '', tagged: 'none' }
-  const b = j.booru ?? (j.tagger && !BOORU.has(j.category) ? tagger.post(j.tagger) : j) // a booru match looked up for a non-booru source, else the tagger's guess
+  const b = source(j)
   const tags = [b.tag_string, b.tags, b.tag_string_meta, b.tags_metadata].flatMap(words)
   // booru: booru-vocabulary tags (pulled from one, or matched); unsure: close matches await a pick; tagger: no booru has it, the
   // tagger guessed; none: no tags.
@@ -76,7 +81,7 @@ const info = item => {
   const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb ? pathToFileURL(c.thumb).href : c.post.preview_file_url, caption: caption(profile(), meta(c.post)), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
   const from = j.booru ? postUrl(j.booru) : BOORU.has(j.category) ? postUrl(j) : undefined
-  const m = meta(b)
+  const m = facts(j)
   return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, tagged, candidates, from }
 }
 
@@ -391,18 +396,18 @@ const adopt = async (item, j, hit) => {
   delete j.candidates
   delete j.tagged
   writeJson(item.file + '.json', j)
-  fs.writeFileSync(txt(item.file), caption(profile(), meta(j.booru)))
+  recaption(item, j)
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
 // A non-booru picture: its booru post by exact ids/md5, then by similarity; close calls become candidates.
 const resolve = async (item, j, say) => {
   delete j.candidates
   // Pulled from a booru: its own tags are the caption, nothing to look up (this re-renders it under the current profile).
-  if (BOORU.has(j.category)) { if (j.tagged) { delete j.tagged; writeJson(item.file + '.json', j) }; fs.writeFileSync(txt(item.file), caption(profile(), meta(j))); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
+  if (BOORU.has(j.category)) { if (j.tagged) { delete j.tagged; writeJson(item.file + '.json', j) }; recaption(item, j); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
   const hit = await lookup(j, item.file, say)
   if (hit) await adopt(item, j, hit)
   else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
-  else if ((!j.tagger || j.tagged) && settings().autotag && tagger.has()) { say?.('tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it (j.tagged: its caption was emptied)
+  else if (!j.booru && (!j.tagger || j.tagged) && settings().autotag && tagger.has()) { say?.('tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it (j.tagged: its caption was emptied)
   return hit
 }
 const relookup = async item => {
@@ -419,7 +424,7 @@ const tagIt = async (item, j = sidecar(item)) => {
   delete j.candidates
   delete j.tagged
   writeJson(item.file + '.json', j)
-  fs.writeFileSync(txt(item.file), caption(profile(), meta(tagger.post(j.tagger))))
+  recaption(item, j)
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
 // Booru tags stay: the tagger is for pictures without them (their caption would stop matching what the page shows).
@@ -484,6 +489,18 @@ const lookupAll = async items => {
   }
   t.end(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} from the tagger, ` : ''}${items.length - matched - unsure - tagged} none`)
 }
+// Series, characters or artists written by hand (right-click > Edit), for the tagger's misses and mistakes: one field of several
+// pictures, overwritten whatever each had. Kept through lookups and tagger runs; '' leaves the field empty.
+const setField = (items, field, text) => {
+  const v = text.split(',').map(t => t.trim().replace(/^@/, '').replace(/\s+/g, '_')).filter(Boolean).join(' ')
+  for (const item of items) {
+    const j = sidecar(item)
+    ;(j.edit ??= {})[field] = v
+    writeJson(item.file + '.json', j)
+    recaption(item, j)
+    enrich(item).then(e => send('saved', { ...e, replace: true }))
+  }
+}
 // The user picked one of the close matches.
 const pick = (item, i) => { const j = sidecar(item); adopt(item, j, j.candidates[i].post) }
 // Tag search pages per site. The query arrives in the site's own syntax (booru: space-separated tags).
@@ -517,15 +534,20 @@ const tagMenu = tag => {
   ]).popup({ window: win })
 }
 
-// void: popup() answers with the window it opened on, which the IPC reply can't carry (the renderer logged an error per right-click)
-const menu = item => void Menu.buildFromTemplate([
-  { label: 'Open in Explorer', click: () => shell.showItemInFolder(item.file) },
-  { label: 'Open original site', click: () => shell.openExternal(item.page) },
-  { label: 'Open project', click: () => send('openProject', item.project) },
-  { label: 'Look up tags', click: () => relookup(item) },
-  { label: 'Run the tagger', click: () => tag([item]) },
+// Right-click, on one picture or the selection it is in (as Explorer does): everything acts on all of them. Edit asks the page
+// for the text. void: popup() answers with the window it opened on, which the IPC reply can't carry.
+const menu = items => void Menu.buildFromTemplate([
+  { label: 'Open', submenu: [
+    { label: 'In Explorer', click: () => new Map(items.map(i => [path.dirname(i.file), i.file])).forEach(f => shell.showItemInFolder(f)) },
+    { label: 'Original site', click: () => new Set(items.map(i => i.page)).forEach(u => shell.openExternal(u)) },
+    ...new Set(items.map(i => i.project)).size === 1 ? [{ label: 'Project', click: () => send('openProject', items[0].project) }] : []
+  ] },
+  { label: 'Look up tags', click: () => items.length > 1 ? lookupAll(items) : relookup(items[0]) },
+  { label: 'Run the tagger', click: () => tag(items) },
+  { label: 'Edit', submenu: [['copyright', 'Series'], ['character', 'Characters'], ['artist', 'Artists']].map(([field, label]) => ({ label: label + '…', click: () => send('edit', { items, field, label }) })) },
+  { label: 'Export', click: () => exportItems(items) },
   { type: 'separator' },
-  { label: 'Delete', click: () => remove(item) }
+  { label: 'Delete', click: async () => { for (const i of items) await remove(i) } }
 ]).popup({ window: win })
 
 const QUOTES = {
@@ -628,7 +650,7 @@ const installGdl = async () => {
   } catch (e) { t.end(); note(e.message, true) }
 }
 
-const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open, editTemplate, templateInfo, resetTemplate,
+const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
   tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved

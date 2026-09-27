@@ -1,10 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 // One name per main.js handler; events the main side pushes get an on* listener.
-const CALLS = ['list', 'projects', 'newProject', 'getSettings', 'setSettings', 'profiles', 'getCaption', 'setCaption', 'open', 'editTemplate', 'templateInfo', 'resetTemplate',
+const CALLS = ['list', 'projects', 'newProject', 'getSettings', 'setSettings', 'profiles', 'getCaption', 'setCaption', 'setField', 'open', 'editTemplate', 'templateInfo', 'resetTemplate',
   'lookup', 'lookupAll', 'pick', 'projectMenu', 'searchSites', 'search', 'tagMenu', 'menu', 'quoteSources', 'quote', 'getCreds', 'setCred', 'oauth',
   'checkUpdate', 'update', 'instruments', 'exportExtension', 'installGdl', 'export', 'tagWiki', 'tag', 'installTagger', 'removeTagger', 'devtools', 'restart']
-const EVENTS = ['saved', 'removed', 'projectRemoved', 'tasks', 'note', 'search', 'openProject']
+const EVENTS = ['saved', 'removed', 'projectRemoved', 'tasks', 'note', 'search', 'openProject', 'edit']
 const api = { theme: (t, bar) => ipcRenderer.send('theme', t, bar) }
 for (const n of CALLS) api[n] = (...a) => ipcRenderer.invoke(n, ...a)
 for (const n of EVENTS) api['on' + n[0].toUpperCase() + n.slice(1)] = cb => ipcRenderer.on(n, (_, v) => cb(v))

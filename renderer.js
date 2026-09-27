@@ -36,7 +36,7 @@ const add = (root, item, front) => {
 const decorate = (img, item) => {
   img.item = item
   img.onclick = e => e.shiftKey ? select(img, e) : e.ctrlKey || e.metaKey ? null : preview(item, img.closest('section')) // Ctrl toggles on press, see paint
-  img.oncontextmenu = () => api.menu(item)
+  img.oncontextmenu = () => api.menu(sel.has(item.file) ? items.filter(i => sel.has(i.file)) : [item]) // the selection it is in, or itself
   img.dataset.file = item.file
   img.dataset.q = `${item.artist || ''} ${item.character || ''} ${item.copyright || ''} ${item.tags || ''}`.toLowerCase()
   img.dataset.site = item.site
@@ -92,9 +92,26 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape' && sel.size) { sel.clear(); drawSel() }
 })
 selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
-selUI.querySelector('.export').onclick = () => api.export(items.filter(i => sel.has(i.file)))
 selUI.querySelector('.lookup').onclick = () => api.lookupAll(items.filter(i => sel.has(i.file))) // booru-pulled ones just re-render their caption
 selUI.querySelector('.tag').onclick = () => api.tag(items.filter(i => sel.has(i.file)))
+// Right-click > Edit > a field: one line where the menu was, what they all share filled in, the library's names to pick from.
+// Enter writes it to every one of them; Esc or a click away leaves them be.
+const editUI = $('#edit'), editIn = editUI.querySelector('input')
+let menuAt = [0, 0], editing
+addEventListener('contextmenu', e => menuAt = [e.clientX, e.clientY])
+const names = v => (v || '').split(', ').map(t => t.replace(/^@/, '').replace(/_/g, ' ')).filter(Boolean)
+api.onEdit(e => {
+  editing = e
+  const now = new Set(e.items.map(i => names(i[e.field]).join(', ')))
+  editIn.value = now.size === 1 ? [...now][0] : ''
+  editIn.placeholder = `${e.label}${e.items.length > 1 ? ` of ${e.items.length} pictures` : ''}, comma between`
+  editUI.querySelector('datalist').innerHTML = [...new Set(items.flatMap(i => names(i[e.field])))].sort().map(n => `<option value="${esc(n)}">`).join('')
+  editUI.style.left = Math.min(menuAt[0], innerWidth - 340) + 'px'
+  editUI.style.top = Math.min(menuAt[1], innerHeight - 56) + 'px'
+  editUI.showPopover()
+  editIn.select()
+})
+editUI.onsubmit = e => { e.preventDefault(); api.setField(editing.items, editing.field, editIn.value); editUI.hidePopover() }
 // Pending: no tags yet (none), or close matches waiting for a pick (unsure). A pill that toggles the pending filter.
 const pending = t => t === 'none' || t === 'unsure'
 const pendingUI = $('#pending')
