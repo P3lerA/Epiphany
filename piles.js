@@ -6,11 +6,12 @@ const pilesUI = $('.fab .piles-toggle')
 let piling = false, gridTop = 0
 const covers = new Map() // tag -> pictures that have lain on top, latest first: what shows on top stays there while it's in the pile
 const tilt = s => { let h = 7; for (const c of s) h = h * 31 + c.charCodeAt(0) | 0; return (h >>> 0) / 2 ** 32 - .5 } // steady per pile across redraws
-const drawPiles = root => {
+const buildPiles = root => {
   const by = new Map()
   for (const img of shown(root)) for (const t of img.item[F.piles || 'tags']?.split(', ') ?? []) if (t) { const k = t.replace(/^@/, ''); by.has(k) ? by.get(k).push(img) : by.set(k, [img]) } // the kind the filters pick; artists come as 'a, @b'
   const el = document.createElement('div')
   el.className = 'piles'
+  el.picks = new Map()
   const seen = new Set() // pictures a bigger pile already shows: otherwise the newest few top every pile
   // ponytail: the 120 biggest piles of 2+; virtualize if the long tail is wanted
   for (const [t, l] of [...by].filter(([, l]) => l.length > 1).sort((a, b) => b[1].length - a[1].length).slice(0, 120)) {
@@ -21,7 +22,7 @@ const drawPiles = root => {
     const stack = b.appendChild(document.createElement('span'))
     const kept = (covers.get(t) ?? []).map(f => l.find(i => i.dataset.file === f)).filter(Boolean) // filters and trips to the grid don't reshuffle what lies on top
     const pick = [...new Set([...kept, ...l.filter(i => !seen.has(i)), ...l.filter(i => seen.has(i))])].slice(0, 3)
-    covers.set(t, [...new Set([...pick.map(i => i.dataset.file), ...covers.get(t) ?? []])])
+    el.picks.set(t, pick.map(i => i.dataset.file)) // into covers once shown (drawPiles): piles built ahead and never shown must not reshape them
     pick.forEach(i => seen.add(i))
     pick.reverse().forEach((src, i, a) => {
       const img = stack.appendChild(new Image())
@@ -34,8 +35,18 @@ const drawPiles = root => {
     })
     b.appendChild(document.createElement('span')).append(t.replace(/_/g, ' '), Object.assign(document.createElement('small'), { textContent: l.length }))
   }
+  return el
+}
+// The piles for the grid on show are built ahead while idle (the tag count over a big library is most of a toggle's first
+// frame); anything that changes what they'd hold (changed(), leaving the piles, another page) builds them again.
+let ahead = null
+const buildAhead = () => { ahead = null; requestIdleCallback(() => { if (!piling && items) ahead = { root: page(), el: buildPiles(page()) } }, { timeout: 2000 }) }
+const drawPiles = root => {
+  const el = ahead?.root === root ? ahead.el : buildPiles(root)
+  ahead = null
   root.querySelector(':scope > .piles')?.remove()
   root.append(el)
+  for (const [t, f] of el.picks) covers.set(t, [...new Set([...f, ...covers.get(t) ?? []])])
   face()
 }
 const setPiling = (on, root = page()) => {
@@ -44,7 +55,7 @@ const setPiling = (on, root = page()) => {
   piling = on
   pilesUI.classList.toggle('on', on)
   for (const r of [$('#lobby'), pgrid]) { r.classList.remove('piling'); r.querySelector(':scope > .piles')?.remove() }
-  if (on) { root.classList.add('piling'); drawPiles(root) }
+  if (on) { root.classList.add('piling'); drawPiles(root) } else buildAhead()
   sec.scrollTop = on ? 0 : gridTop
 }
 const swap = (change, key) => {
@@ -71,11 +82,11 @@ const swap = (change, key) => {
       used.add(a)
       if (onScreen(a) || onScreen(b)) fly(b.el, a, b, b.box, { duration: 650, delay: d, easing: EASE, fill: 'backwards' })
     }
-    const appear = el => play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: delay() + 150, easing: EASE, fill: 'backwards' })
+    const appear = (el, d = delay() + 150) => play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: d, easing: EASE, fill: 'backwards' })
     for (const [k, b] of blocks()) {
       const a = same ? marks.get(k) : undefined
       if (a?.box.width && b.box.width) move(a, b)
-      else if (onScreen(b)) appear(piling && !same ? b.el.lastElementChild : b.el) // a pile arriving with the view: only its label, the prints fly in
+      else if (onScreen(b)) piling && !same ? appear(b.el.lastElementChild, pileDelay(b.el) + 650 * (1 - FRAME)) : appear(b.el) // a pile arriving with the view: only its label, as its prints land and take their frames; the prints fly in
     }
     if (was && piling) { // piles to piles: the prints ride in their piles; one new on a pile fades in, one gone fades where it was
       const now = pics(), lies = new Set(now.map(lay)), stays = new Set(blocks().keys())
@@ -130,7 +141,7 @@ pilesUI.onclick = () => { // again mid-flight: everything flies back
   if (flight?.key === 'piles') { pilesUI.classList.toggle('on'); rewind() }
   else { const root = page(); swap(() => setPiling(!piling, root), 'piles') } // its undo may run after the page changed
 }
-addEventListener('hashchange', () => { back = null; if (flight) land(flight, true); if (piling && !page().classList.contains('piling')) { gridTop = 0; setPiling(true) } })
+addEventListener('hashchange', () => { back = null; buildAhead(); if (flight) land(flight, true); if (piling && !page().classList.contains('piling')) { gridTop = 0; setPiling(true) } })
 // Pulls, lookups and deletes reach the piles in one redraw once they stop coming: a pull saves dozens in a row.
 let refresh
 const refreshPiles = () => { clearTimeout(refresh); refresh = setTimeout(() => piling && swap(() => drawPiles(page())), 300) }

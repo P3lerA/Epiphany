@@ -23,9 +23,13 @@ const lifted = el => el.closest('.pile') ?? el
 const fly = (el, a, b, box, o) => {
   lifted(el).classList.add('flying')
   play(el, [at(a, box), at(b, box)], o).finished.then(() => lifted(el).classList.remove('flying'), () => {}) // one by one: all at once stalls a frame
-  if (a.frame !== undefined && a.frame !== b.frame) play(el, [frame(a), frame(b)], o)
+  if (a.frame !== undefined && a.frame !== b.frame) { // a frame grows in the last quarter of the flight, or goes in the first: while it
+    const d = o.duration * FRAME                    // changes, the print repaints every frame, so the rest of the flight stays a move
+    play(el, [frame(a), frame(b)], { ...o, duration: d, delay: (o.delay ?? 0) + (b.frame ? o.duration - d : 0) })
+  }
 }
 const EASE = 'cubic-bezier(.2, 0, 0, 1)'
+const FRAME = .25 // the share of a flight a print's frame takes to come or go (fly)
 let SLOW = 1 // slow motion for looking closely: Settings > General > Animation speed, in debug mode
 // The swap still in the air: its animations, the ghosts it left, and the change, to take it back when piles are toggled again.
 /** @type {Flight?} */ let flight = null
