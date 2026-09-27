@@ -53,7 +53,7 @@ h1 { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr)
 h1 > span { grid-area: 1 / 1; line-height: 24px; display: none }
 body:has(#lobby:target) .t-lobby, body:has(#projects:target) .t-projects, body:has(#settings :target) .t-settings { display: block }
 /* Clickable (another quote, or the tag's wiki), so it lights up like the tabs; capped so the rest of the bar still drags the window. */
-.t-lobby { justify-self: start; max-width: min(60%, 32rem); margin-left: -8px; padding: 4px 8px; border-radius: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer; -webkit-app-region: no-drag; transition: background .15s }
+.t-lobby { justify-self: start; max-width: 60%; margin-left: -8px; padding: 4px 8px; border-radius: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer; -webkit-app-region: no-drag; transition: background .15s }
 .t-lobby:hover { background: var(--hover) }
 .t-lobby:empty { padding: 0 }
 body.crowded .t-lobby { visibility: hidden } /* the right side took the bar (tasks.js) */
