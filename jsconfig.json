@@ -1,0 +1,4 @@
+{
+  "compilerOptions": { "target": "esnext", "lib": ["esnext", "dom", "dom.iterable"], "checkJs": false, "noEmit": true },
+  "include": ["theme.js", "renderer.js", "motion.js", "piles.js", "preview.js", "settings.js", "types.d.ts"]
+}

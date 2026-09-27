@@ -2,6 +2,7 @@
 // can be taken back mid-air (rewind), and leaves ghosts, copies that fly or fade where something was. See piles.js for the swaps.
 
 // Where something sits: its layout box, the pose a pile gives a print, and whether it wears a print's frame.
+/** @type {(el: HTMLElement) => Pose} */
 const pose = el => el.classList.contains('print')
   ? { el, box: el.parentElement.getBoundingClientRect(), translate: el.style.translate, rotate: el.style.rotate, frame: true }
   : { el, box: el.getBoundingClientRect(), translate: '0px 0px', rotate: '0deg', frame: el.tagName === 'IMG' ? false : undefined }
@@ -27,7 +28,8 @@ const fly = (el, a, b, box, o) => {
 const EASE = 'cubic-bezier(.2, 0, 0, 1)'
 let SLOW = 1 // slow motion for looking closely: Settings > General > Animation speed, in debug mode
 // The swap still in the air: its animations, the ghosts it left, and the change, to take it back when piles are toggled again.
-let flight = null, air = null
+/** @type {Flight?} */ let flight = null
+/** @type {Flight?} */ let air = null // set only while a swap records its animations
 const play = (el, keys, o) => { const a = el.animate(keys, o); a.playbackRate = 1 / SLOW; air?.anims.push(a); return a }
 const settle = f => { const gen = f.gen = (f.gen ?? 0) + 1; Promise.all(f.anims.map(a => a.finished)).then(() => f.gen === gen && land(f), () => {}) }
 const land = (f, now) => {
