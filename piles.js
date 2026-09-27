@@ -39,8 +39,8 @@ const buildPiles = root => {
 }
 // The piles for the grid on show are built ahead while idle (the tag count over a big library is most of a toggle's first
 // frame); anything that changes what they'd hold (changed(), leaving the piles, another page) builds them again.
-let ahead = null
-const buildAhead = () => { ahead = null; requestIdleCallback(() => { if (!piling && items) ahead = { root: page(), el: buildPiles(page()) } }, { timeout: 2000 }) }
+let ahead = null, aheadCb
+const buildAhead = () => { ahead = null; cancelIdleCallback(aheadCb); aheadCb = requestIdleCallback(() => { if (!piling && items) ahead = { root: page(), el: buildPiles(page()) } }, { timeout: 2000 }) }
 const drawPiles = root => {
   const el = ahead?.root === root ? ahead.el : buildPiles(root)
   ahead = null

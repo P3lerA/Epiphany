@@ -4,7 +4,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --publish never"
+    "dist": "electron-builder --win --publish never",
+    "test": "node test/extension-queue.mjs && electron test/tagger.js"
   },
   "devDependencies": {
     "electron": "^44.4.5",
@@ -25,6 +26,7 @@
       "spinners.js",
       "tasks.js",
       "profiles.js",
+      "tagger.js",
       "theme.js",
       "index.html",
       "style.css",

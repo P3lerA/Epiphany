@@ -5,9 +5,8 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 const { execFile, spawn } = require('child_process')
 const crypto = require('crypto')
-const { Readable } = require('stream')
-const { pipeline } = require('stream/promises')
 const { PROFILES, caption } = require('./profiles')
+const Tagger = require('./tagger')
 const { autoUpdater } = require('electron-updater')
 
 const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIRI, 67xx is a Windows reserved range; env override keeps test runs off the real app
@@ -64,10 +63,10 @@ const rating = j => {
   return r.startsWith('safe') || (!four && r === 's') ? 'g' : (r[0] ?? '')
 }
 
-const info = ({ file, page }) => {
-  const j = readJson(file + '.json', null)
-  if (!j) return { site: new URL(page).host, ai: false, rating: '', tagged: 'none' }
-  const b = j.booru ?? (j.tagger && !BOORU.has(j.category) ? tagPost(j.tagger) : j) // a booru match looked up for a non-booru source, else the tagger's guess
+const info = item => {
+  const j = sidecar(item, null)
+  if (!j) return { site: new URL(item.page).host, ai: false, rating: '', tagged: 'none' }
+  const b = j.booru ?? (j.tagger && !BOORU.has(j.category) ? tagger.post(j.tagger) : j) // a booru match looked up for a non-booru source, else the tagger's guess
   const tags = [b.tag_string, b.tags, b.tag_string_meta, b.tags_metadata].flatMap(words)
   // booru: booru-vocabulary tags (pulled from one, or matched); unsure: close matches await a pick; tagger: no booru has it, the
   // tagger guessed; none: no tags.
@@ -77,7 +76,8 @@ const info = ({ file, page }) => {
   const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb ? pathToFileURL(c.thumb).href : c.post.preview_file_url, caption: caption(profile(), meta(c.post)), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
   const from = j.booru ? postUrl(j.booru) : BOORU.has(j.category) ? postUrl(j) : undefined
-  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), ...(({ artist, character, copyright, tags }) => ({ artist, character, copyright, tags }))(meta(b)), tagged, candidates, from }
+  const m = meta(b)
+  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, tagged, candidates, from }
 }
 
 // Grid thumbnails live beside the dataset, never inside it. OS thumbnailer, cached as JPEG.
@@ -93,6 +93,9 @@ const thumb = async item => {
   return pathToFileURL(t).href
 }
 
+// A picture's sidecar; a right-click save has none until a lookup writes one, and one cut off mid-write reads as none (the
+// library still loads; the next lookup writes it afresh).
+const sidecar = (item, none = { category: new URL(item.page).host, page: item.page }) => { try { return readJson(item.file + '.json', none) } catch { return none } }
 const enrich = async item => { const e = withUrl({ ...item, ...info(item) }); e.thumb = await thumb(e); return e }
 
 const record = item => {
@@ -232,8 +235,7 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
     const found = []
     const sites = settings().sites
     for (const site of sites) if (SIMILAR[site]) { say(`similar on ${site}`); for (const c of await SIMILAR[site](form)) found.push({ score: Math.round(c.score), post: { ...c.post, category: site } }) }
-    if (sites.some(s => IQDB_ONLY.includes(s))) say('similar on iqdb.org')
-    if (sites.some(s => IQDB_ONLY.includes(s))) for (const c of await iqdbOrg(form)) if (!found.some(f => f.post.category === c.post.category && f.post.id === c.post.id)) found.push(c)
+    if (sites.some(s => IQDB_ONLY.includes(s))) { say('similar on iqdb.org'); for (const c of await iqdbOrg(form)) if (!found.some(f => f.post.category === c.post.category && f.post.id === c.post.id)) found.push(c) }
     const near = found.filter(x => x.score >= 70).sort((a, b) => b.score - a.score).slice(0, 4)
     // Settings decide how sure a similarity match must be to skip the human; exact id/md5 hits above never ask.
     if (near.length && near[0].score >= settings().accept && (near.length === 1 || near[0].score - near[1].score >= 15)) hit = near[0].post
@@ -299,7 +301,7 @@ const getCaption = file => fs.existsSync(txt(file)) ? fs.readFileSync(txt(file),
 // written there lifts that.
 const setCaption = (item, text) => {
   fs.writeFileSync(txt(item.file), text)
-  const j = readJson(item.file + '.json', null), empty = !text.split(',').some(t => t.trim())
+  const j = sidecar(item, null), empty = !text.split(',').some(t => t.trim())
   if (!j || !!j.tagged === empty) return
   if (empty) j.tagged = 'none'; else delete j.tagged
   writeJson(item.file + '.json', j)
@@ -400,96 +402,48 @@ const resolve = async (item, j, say) => {
   const hit = await lookup(j, item.file, say)
   if (hit) await adopt(item, j, hit)
   else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
-  else if (!j.tagger && settings().autotag && hasTagger()) { say?.('tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
+  else if ((!j.tagger || j.tagged) && settings().autotag && tagger.has()) { say?.('tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it (j.tagged: its caption was emptied)
   return hit
 }
 const relookup = async item => {
-  const t = task('Looking up'), j = readJson(item.file + '.json', { category: new URL(item.page).host, page: item.page })
+  const t = task('Looking up'), j = sidecar(item)
   const hit = await resolve(item, j, s => t.set(`Looking up: ${s}`)).catch(e => { t.end(); note(e.message, true); throw e })
-  t.end(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : j.tagger ? 'No match; tags from the tagger' : canSimilar() ? 'No match' : 'No exact match; for similarity add a danbooru account or enable yande.re / konachan in Sites')
+  t.end(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : j.tagger && !j.tagged ? 'No match; tags from the tagger' : canSimilar() ? 'No match' : 'No exact match; for similarity add a danbooru account or enable yande.re / konachan in Sites')
   return hit
 }
 
-// Tagger, for pictures no booru has: PixAI tagger v1.0 as fp16 ONNX (our copy, pinned), on the GPU through WebGPU. DirectML
-// can't load it, and a CPU crawls through it. Installed from Settings > Instruments into HOME/models.
-const TAGGER = path.join(HOME, 'models', 'pixai-tagger-v1.0-fp16')
-const TAGGER_URL = 'https://huggingface.co/A1yCE/pixai-tagger-v1.0-onnx-fp16/resolve/10a70bc4fc002fdc5b9378be1068faa71cf61203/'
-const TAGGER_FILES = { 'model.onnx': 'c5157c2037e71022a04e4a217af77400183dac34b7da1587727f3e089c087123', 'tags.json': '0d34f2078016798808dc066dc206b18fb6ce7622f64241002ecd24172a4da068' }
-// Thresholds per category, fitted for fp16 on 398 recent posts of four boorus against their own tags. style = artist; meta only
-// feeds the AI-generated check. ponytail: fixed here; make them settings if captions come out too long or too sparse.
-const TAGGER_AT = { general: .4, character: .5, copyright: .6, style: .25, meta: .4 }
-const hasTagger = () => Object.keys(TAGGER_FILES).every(f => fs.existsSync(path.join(TAGGER, f)))
-// The guess as a post, so info/meta/caption read it like any booru's. Kept probabilities (>= .1) let thresholds change later.
-const above = (t, c) => Object.entries(t[c] ?? {}).filter(([, p]) => p >= TAGGER_AT[c]).sort((a, b) => b[1] - a[1]).map(([k]) => k).join(' ')
-const tagPost = t => {
-  const r = Object.entries(t.rating ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0].slice(-1) // rating:g/s/q/e
-  return { tag_string_general: above(t, 'general'), tag_string_character: above(t, 'character'), tag_string_copyright: above(t, 'copyright'),
-    tag_string_artist: above(t, 'style'), tag_string_meta: above(t, 'meta'), rating: { g: 'general', s: 'sensitive', q: 'questionable', e: 'explicit' }[r] ?? '' }
-}
-let session, idle
-const tagger = () => session ??= (async () => {
-  const ort = require('onnxruntime-node')
-  const s = await ort.InferenceSession.create(path.join(TAGGER, 'model.onnx'), { executionProviders: ['webgpu'], intraOpNumThreads: 1, extra: { session: { intra_op: { allow_spinning: '0' } } } })
-  return { ort, s, cats: readJson(path.join(TAGGER, 'tags.json')).categories }
-})().catch(e => { session = null; throw e })
-const release = () => { session?.then(t => t.s.release(), () => {}); session = null }
-// The picture as the model takes it: RGB over white, letterboxed with black to 1008 square, scaled to -1..1, planar.
-const SIDE = 1008
-const pixels = file => {
-  const img = nativeImage.createFromPath(file)
-  if (img.isEmpty()) throw new Error(`can't read ${path.basename(file)}`)
-  const { width: w, height: h } = img.getSize(), k = Math.min(SIDE / w, SIDE / h), nw = Math.max(1, Math.floor(w * k)), nh = Math.max(1, Math.floor(h * k))
-  const bmp = img.resize({ width: nw, height: nh, quality: 'best' }).toBitmap() // BGRA, premultiplied
-  const x = new Float32Array(3 * SIDE * SIDE).fill(-1), plane = SIDE * SIDE, ox = (SIDE - nw) >> 1, oy = (SIDE - nh) >> 1
-  for (let y = 0; y < nh; y++) for (let i = 0; i < nw; i++) {
-    const p = (y * nw + i) * 4, a = 255 - bmp[p + 3], o = (oy + y) * SIDE + ox + i
-    x[o] = (bmp[p + 2] + a) / 127.5 - 1; x[plane + o] = (bmp[p + 1] + a) / 127.5 - 1; x[2 * plane + o] = (bmp[p] + a) / 127.5 - 1
-  }
-  return x
-}
-const tagIt = async (item, j = readJson(item.file + '.json', { category: new URL(item.page).host, page: item.page })) => {
-  clearTimeout(idle)
-  const { ort, s, cats } = await tagger()
-  const logits = (await s.run({ pixel_values: new ort.Tensor('float32', pixels(item.file), [1, 3, SIDE, SIDE]) })).logits.data
-  idle = setTimeout(release, 120000) // ~3GB of GPU memory goes back two minutes after the last picture
-  j.tagger = { model: 'pixai-tagger-v1.0-fp16' }
-  for (const c of cats) {
-    const m = j.tagger[c.name] = {}
-    c.tags.forEach((t, i) => { const p = 1 / (1 + Math.exp(-logits[c.offset + i])); if (p >= .1 || c.name === 'rating') m[t] = +p.toFixed(3) })
-  }
+// The tagger (tagger.js), for pictures no booru has. What it guesses goes into the sidecar (j.tagger) and the caption.
+const tagger = Tagger(path.join(HOME, 'models'))
+const tagIt = async (item, j = sidecar(item)) => {
+  j.tagger = await tagger.guess(item.file)
   delete j.candidates
   delete j.tagged
   writeJson(item.file + '.json', j)
-  fs.writeFileSync(txt(item.file), caption(profile(), meta(tagPost(j.tagger))))
+  fs.writeFileSync(txt(item.file), caption(profile(), meta(tagger.post(j.tagger))))
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
+// Booru tags stay: the tagger is for pictures without them (their caption would stop matching what the page shows).
 const tag = async items => {
-  if (!hasTagger()) return note('Install the tagger first: Settings > Instruments')
+  if (!tagger.has()) return note('Install the tagger first: Settings > Instruments')
   const t = task('Tagging with the tagger')
-  let done = 0
+  let done = 0, kept = 0
   for (const [k, item] of items.entries()) {
     if (items.length > 1) t.set(`Tagging with the tagger ${k + 1}/${items.length}`)
-    await tagIt(item).then(() => done++, e => note(`Tagger: ${e.message}`, true))
+    try {
+      const j = sidecar(item)
+      if (j.booru || BOORU.has(j.category)) kept++
+      else { await tagIt(item, j); done++ }
+    } catch (e) { note(`Tagger: ${e.message}`, true) }
   }
-  t.end(items.length > 1 ? `${done} tagged by the tagger` : done ? 'Tags from the tagger' : '')
+  t.end(items.length > 1 ? `${done} tagged by the tagger${kept ? `, ${kept} kept their booru tags` : ''}` : done ? 'Tags from the tagger' : kept ? 'Booru tags kept; the tagger is for pictures without them' : '')
 }
 let installing
-const installTagger = () => installing ??= (async t => {
-  fs.mkdirSync(TAGGER, { recursive: true })
-  for (const [f, sha] of Object.entries(TAGGER_FILES)) {
-    const r = await fetch(TAGGER_URL + f)
-    if (!r.ok) throw new Error(`${r.status} ${f}`)
-    const total = Number(r.headers.get('content-length')), hash = crypto.createHash('sha256'), part = path.join(TAGGER, f + '.part')
-    let got = 0, shown = 0
-    await pipeline(Readable.fromWeb(r.body), async function* (src) {
-      for await (const c of src) { hash.update(c); got += c.length; if (total > 1e7 && got / total * 100 >= shown + 1) t.set(`Downloading the tagger ${++shown}%`); yield c }
-    }, fs.createWriteStream(part))
-    if (hash.digest('hex') !== sha) { fs.rmSync(part); throw new Error(`${f}: checksum mismatch`) }
-    fs.renameSync(part, path.join(TAGGER, f))
-  }
-  t.end('Tagger installed')
-})(task('Downloading the tagger')).catch(e => note(`Tagger: ${e.message}`, true)).finally(() => installing = null)
-const removeTagger = () => { clearTimeout(idle); release(); fs.rmSync(TAGGER, { recursive: true, force: true }) } // a download, not the user's data
+const installTagger = () => installing ??= (async () => {
+  const t = task('Downloading the tagger')
+  try { await tagger.install(p => t.set(`Downloading the tagger ${p}%`)); t.end('Tagger installed') }
+  catch (e) { t.end(); note(`Tagger: ${e.message}`, true) }
+  finally { installing = null }
+})()
 // Projects: right-click. Delete goes to the Recycle Bin; the active project falls back to the first one left.
 const removeProject = async name => {
   await shell.trashItem(path.join(PROJ, name))
@@ -521,15 +475,17 @@ const lookupAll = async items => {
   const t = task(`Looking up 0/${items.length}`)
   let matched = 0, unsure = 0, tagged = 0
   for (const [k, item] of items.entries()) {
-    const j = readJson(item.file + '.json', { category: new URL(item.page).host, page: item.page })
-    if (await resolve(item, j, s => t.set(`Looking up ${k + 1}/${items.length}: ${s}`)).catch(e => note(e.message, true))) matched++
-    else if (j.candidates) unsure++
-    else if (j.tagger) tagged++
+    try {
+      const j = sidecar(item)
+      if (await resolve(item, j, s => t.set(`Looking up ${k + 1}/${items.length}: ${s}`))) matched++
+      else if (j.candidates) unsure++
+      else if (j.tagger && !j.tagged) tagged++
+    } catch (e) { note(e.message, true) }
   }
   t.end(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} from the tagger, ` : ''}${items.length - matched - unsure - tagged} none`)
 }
 // The user picked one of the close matches.
-const pick = (item, i) => { const j = readJson(item.file + '.json', {}); adopt(item, j, j.candidates[i].post) }
+const pick = (item, i) => { const j = sidecar(item); adopt(item, j, j.candidates[i].post) }
 // Tag search pages per site. The query arrives in the site's own syntax (booru: space-separated tags).
 const booru = t => encodeURIComponent(t)
 
@@ -626,9 +582,9 @@ const update = async () => {
   if (!PORTABLE) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
   const asset = latestRelease.assets.find(a => /^Epiphany[ .][0-9.]+\.exe$/.test(a.name)) // GitHub swaps spaces for dots in asset names
   if (!asset) throw new Error('no portable exe in ' + latestRelease.tag_name)
-  task('Downloading ' + asset.name) // until the app quits for it
-  const buf = Buffer.from(await fetch(asset.browser_download_url).then(r => r.arrayBuffer()))
-  if (buf.length !== asset.size) throw new Error('download incomplete')
+  const t = task('Downloading ' + asset.name) // until the app quits for it
+  const buf = await fetch(asset.browser_download_url).then(r => r.arrayBuffer()).then(Buffer.from).catch(e => { t.end(); throw e })
+  if (buf.length !== asset.size) { t.end(); throw new Error('download incomplete') }
   const nw = PORTABLE + '.new'
   fs.writeFileSync(nw, buf)
   spawn('cmd.exe', ['/c', `ping -n 2 127.0.0.1 >nul & move /y "${nw}" "${PORTABLE}" & start "" "${PORTABLE}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
@@ -640,7 +596,7 @@ const instruments = async () => {
   return {
     'gallery-dl': { status: v ?? 'not found', action: v ? 'Update' : 'Install' },
     extension: { status: readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?', action: 'Export' },
-    tagger: installing ? { status: 'downloading…', action: 'Install' } : hasTagger() ? { status: 'PixAI v1.0', action: 'Remove' } : { status: 'not installed (1 GB)', action: 'Install' }
+    tagger: installing ? { status: 'downloading…', action: 'Install' } : tagger.has() ? { status: 'PixAI v1.0', action: 'Remove' } : { status: 'not installed (1 GB)', action: 'Install' }
   }
 }
 
@@ -675,7 +631,7 @@ const installGdl = async () => {
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
-  tagWiki, tag, installTagger, removeTagger, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
+  tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
 ipcMain.on('theme', (_, t, bar) => { nativeTheme.themeSource = t; win?.setTitleBarOverlay(bar) }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 
