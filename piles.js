@@ -38,9 +38,10 @@ const buildPiles = root => {
   return el
 }
 // The piles for the grid on show are built ahead while idle (the tag count over a big library is most of a toggle's first
-// frame); anything that changes what they'd hold (changed(), leaving the piles, another page) builds them again.
+// frame); anything that changes what they'd hold (changed(), leaving the piles, another page) builds them again. Not mid-flight:
+// the build (~35 ms at 2k pictures) would take an idle slot between two frames and stall the next.
 let ahead = null, aheadCb
-const buildAhead = () => { ahead = null; cancelIdleCallback(aheadCb); aheadCb = requestIdleCallback(() => { if (!piling && items) ahead = { root: page(), el: buildPiles(page()) } }, { timeout: 2000 }) }
+const buildAhead = () => { ahead = null; cancelIdleCallback(aheadCb); aheadCb = requestIdleCallback(() => { if (flight) return buildAhead(); if (!piling && items) ahead = { root: page(), el: buildPiles(page()) } }, { timeout: 2000 }) }
 const drawPiles = root => {
   const el = ahead?.root === root ? ahead.el : buildPiles(root)
   ahead = null
@@ -101,7 +102,7 @@ const swap = (change, key) => {
           if (!b) continue
           used.add(a)
           ghost(a, b, false, d)
-          if (!held.has(b)) { held.add(b); play(b.el, [{ opacity: 0 }, { opacity: 0 }], { duration: d + 650 }) }
+          if (!held.has(b)) { held.add(b); if (onScreen(b)) play(b.el, [{ opacity: 0 }, { opacity: 0 }], { duration: d + 650 }) } // off screen, nobody sees it wait
         }
         for (const b of now) if (!held.has(b) && onScreen(b)) appear(b.el)
       } else {

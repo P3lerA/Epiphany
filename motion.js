@@ -23,8 +23,11 @@ const lifted = el => el.closest('.pile') ?? el
 const fly = (el, a, b, box, o) => {
   lifted(el).classList.add('flying')
   play(el, [at(a, box), at(b, box)], o).finished.then(() => lifted(el).classList.remove('flying'), () => {}) // one by one: all at once stalls a frame
-  if (a.frame !== undefined && a.frame !== b.frame) { // a frame grows in the last quarter of the flight, or goes in the first: while it
-    const d = o.duration * FRAME                    // changes, the print repaints every frame, so the rest of the flight stays a move
+  // A frame grows in the last quarter of the flight, or goes in the first: while it changes, the print repaints every frame, so
+  // the rest of the flight stays a move. One flying off the screen keeps its frame: at 4K, 200 frames going at once were most of
+  // piles -> grid's cost, for pictures nobody sees land.
+  if (a.frame !== undefined && a.frame !== b.frame && (b.frame || onScreen(b))) {
+    const d = o.duration * FRAME
     play(el, [frame(a), frame(b)], { ...o, duration: d, delay: (o.delay ?? 0) + (b.frame ? o.duration - d : 0) })
   }
 }
@@ -59,15 +62,16 @@ const rewind = () => {
 const calm = matchMedia('(prefers-reduced-motion: reduce)')
 const ghosts = $('main').insertAdjacentElement('afterend', Object.assign(document.createElement('div'), { id: 'ghosts' }))
 let ghostsTop = 0 // read once per swap: reading it per ghost laid the page out once per ghost
-// A copy left where something was: it flies to `to` and melts into what is there, or with nowhere to go fades in place.
+// A copy left where something was: it flies to `to` and lies over what is there (the same picture) until the flight lands, or with
+// nowhere to go fades in place. Not faded out on landing: a zero-length step after a delay runs on the main thread, and ticked
+// every frame while it waited.
 const ghost = (a, to, bare, d = 0) => {
-  const g = a.el.cloneNode(true)
+  const g = a.el.cloneNode(!bare)
   g.hidden = false // a picture a filter just hid still fades where it was
   bare ? ghosts.prepend(g) : ghosts.append(g) // a pile's label under the flying prints
   air.ghosts.push(g)
-  if (bare) g.firstElementChild.style.visibility = 'hidden' // a pile leaving with the view: its prints fly on their own
+  if (bare) g.append(a.el.firstElementChild.cloneNode(false), a.el.lastElementChild.cloneNode(true)) // a pile leaving with the view: its label, over its empty place; the prints fly on their own
   Object.assign(g.style, { position: 'absolute', margin: 0, left: a.box.left + 'px', top: a.box.top - ghostsTop + 'px', width: a.box.width + 'px', height: a.box.height + 'px', translate: a.translate, rotate: a.rotate })
-  if (to) fly(g, a, to, a.box, { duration: 650, delay: d, easing: EASE, fill: 'both' }) // gone when its flight lands
-  if (to) play(g, [{ opacity: 1 }, { opacity: 0 }], { duration: 0, delay: d + 650, fill: 'both' }) // lands, then trades places with the picture in one frame
+  if (to) fly(g, a, to, a.box, { duration: 650, delay: d, easing: EASE, fill: 'both' })
   else play(g, [{ opacity: 1 }, { opacity: 0, scale: .96 }], { duration: 250, easing: EASE, fill: 'both' })
 }
