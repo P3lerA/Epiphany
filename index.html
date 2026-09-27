@@ -11,7 +11,7 @@
   <header>
     <h1><span class="t-lobby"></span><span class="t-projects">Projects</span><span class="t-settings">Settings</span></h1>
     <div class="pills">
-      <button id="unsure" hidden></button>
+      <button id="pending" hidden></button>
       <div id="selection" hidden><span></span><button class="lookup">Look up</button><button class="tag">Tag</button><button class="export">Export</button><button class="clear" aria-label="Clear selection">&#x2715;</button></div>
       <div id="tasks" hidden><span class="spin"></span><span></span></div>
     </div>
@@ -62,10 +62,10 @@
     <a href="#general" aria-label="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
   </div>
   <div id="filters" popover>
-    <label>Show AI-generated<input type="checkbox" name="ai" checked></label>
-    <span>Rating</span><div class="seg" data-name="rating"><button value="g">General</button><button value="gs">Sensitive</button><button value="">Any</button></div>
-    <span>Tags</span><div class="seg" data-name="tagged"><button value="booru">Booru</button><button value="unsure">Unsure</button><button value="tagger">Tagger</button><button value="none">None</button><button value="">Any</button></div>
-    <span>Source</span><select name="site"><option value="">All sources</option></select>
+    <span>Rating</span><div class="seg" data-name="rating" title="Click the chosen one again for any"><button value="g">General</button><button value="gs">Sensitive</button></div>
+    <span>Tags</span><div class="seg" data-name="tagged" title="Click the chosen one again for any"><button value="booru">Booru</button><button value="tagger">Tagger</button><button value="pending">Pending</button></div>
+    <span>Piles</span><div class="seg" data-name="piles" title="What the tag view piles by; none chosen: tags"><button value="copyright">Series</button><button value="character">Characters</button><button value="artist">Artists</button></div>
+    <details><summary>More</summary><div><label><span>AI-generated</span><input type="checkbox" name="ai" checked></label><span>Source</span><select name="site"><option value="">All sources</option></select></div></details>
   </div>
   <dialog id="preview">
     <figure>

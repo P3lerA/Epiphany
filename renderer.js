@@ -38,7 +38,7 @@ const decorate = (img, item) => {
   img.onclick = e => e.shiftKey ? select(img, e) : e.ctrlKey || e.metaKey ? null : preview(item, img.closest('section')) // Ctrl toggles on press, see paint
   img.oncontextmenu = () => api.menu(item)
   img.dataset.file = item.file
-  img.dataset.q = `${item.artist || ''} ${item.tags || ''}`.toLowerCase()
+  img.dataset.q = `${item.artist || ''} ${item.character || ''} ${item.copyright || ''} ${item.tags || ''}`.toLowerCase()
   img.dataset.site = item.site
   if (item.ai) img.dataset.ai = 1
   img.dataset.rating = item.rating || 'e' // unrated (no booru match yet) is treated as explicit by the filter
@@ -95,27 +95,33 @@ selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
 selUI.querySelector('.export').onclick = () => api.export(items.filter(i => sel.has(i.file)))
 selUI.querySelector('.lookup').onclick = () => api.lookupAll(items.filter(i => sel.has(i.file))) // booru-pulled ones just re-render their caption
 selUI.querySelector('.tag').onclick = () => api.tag(items.filter(i => sel.has(i.file)))
-// Pictures waiting for a pick: a pill that toggles the unsure filter.
-const unsureUI = $('#unsure')
-const drawUnsure = () => {
-  const n = items.filter(i => i.tagged === 'unsure').length
-  unsureUI.hidden = !n
-  unsureUI.textContent = n + ' to pick'
-  unsureUI.classList.toggle('on', F.tagged === 'unsure')
+// Pending: no tags yet (none), or close matches waiting for a pick (unsure). A pill that toggles the pending filter.
+const pending = t => t === 'none' || t === 'unsure'
+const pendingUI = $('#pending')
+const drawPending = () => {
+  const n = items.filter(i => pending(i.tagged)).length
+  pendingUI.hidden = !n
+  pendingUI.textContent = n + ' pending'
+  pendingUI.classList.toggle('on', F.tagged === 'pending')
+  // Nothing left pending (the last one tagged or picked): the filter lets go rather than hold an empty page. After this redraw,
+  // not inside it: it may run within a swap.
+  if (!n && F.tagged === 'pending') setTimeout(() => { if (F.tagged === 'pending' && !items.some(i => pending(i.tagged))) swap(() => { F.tagged = ''; saveF(); applyFilters() }) })
 }
-unsureUI.onclick = () => swap(() => { F.tagged = F.tagged === 'unsure' ? '' : 'unsure'; saveF(); applyFilters() })
+pendingUI.onclick = () => swap(() => { F.tagged = F.tagged === 'pending' ? '' : 'pending'; saveF(); applyFilters() })
 
 // View filters: never touch files, only what is shown. Kept per machine.
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
+if (pending(F.tagged)) F.tagged = 'pending' // saved before none and unsure were one
 const filters = $('#filters')
 const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '' }) // the search box is not remembered
-const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && img.dataset.tagged !== F.tagged) || (F.site && img.dataset.site !== F.site) || (F.q && !img.dataset.q.includes(F.q)))
+const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && (F.tagged === 'pending' ? !pending(img.dataset.tagged) : img.dataset.tagged !== F.tagged)) || (F.site && img.dataset.site !== F.site) || (F.q && !img.dataset.q.includes(F.q)))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
   filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[seg.dataset.name] || ''))))
   if (piling) drawPiles(page())
   changed()
-  $('.filter-toggle').classList.toggle('on', Object.entries(F).some(([k, v]) => k === 'ai' ? !v : v))
+  if (!F.ai || F.site) filters.querySelector('details').open = true // a filter at work is never folded away
+  $('.filter-toggle').classList.toggle('on', Object.entries(F).some(([k, v]) => k === 'ai' ? !v : k !== 'piles' && v)) // piles hides nothing
 }
 const drawSites = () => {
   const sel = filters.querySelector('[name=site]')
@@ -130,12 +136,18 @@ search.oninput = scope.onchange = () => { clearTimeout(typing); typing = setTime
 $('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')); search.focus() }
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
-filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') swap(() => { F[seg.dataset.name] = e.target.value; saveF(); applyFilters() }) } })
+// A segment's choice clicked again goes off: none chosen means any (piles: by tags). Choosing a kind of pile shows the piles.
+filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') swap(() => {
+  const k = seg.dataset.name
+  F[k] = F[k] === e.target.value ? '' : e.target.value
+  saveF(); applyFilters()
+  if (k === 'piles' && F.piles && !piling) setPiling(true)
+}) } })
 filters.onchange = e => swap(() => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() })
 const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root); changed() }
-// Everything drawn from the library or from what is on show, redrawn after any change to either: the pick pill, the source list,
+// Everything drawn from the library or from what is on show, redrawn after any change to either: the pending pill, the source list,
 // the empty face, the foot. New ones go here. (The piles follow through applyFilters in a swap, or refreshPiles after a pull.)
-const changed = () => { if (!items) return; drawUnsure(); drawSites(); face(); tally() }
+const changed = () => { if (!items) return; drawPending(); drawSites(); face(); tally() }
 // The Lobby's foot (style.css): the pictures on show and the distinct tags they carry.
 const plural = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`
 const tally = () => {
@@ -224,7 +236,7 @@ const explain = () => {
   const t = F.q
   asked = t // before any return: a late answer for the last tag must not land
   if (t === explained) return
-  if (!t || !items?.some(i => `, ${i.tags}, `.includes(`, ${t}, `))) { explained = ''; return title(line) } // a word being typed is not a tag
+  if (!t || !items?.some(i => `, ${i.tags}, ${i.character}, ${i.copyright}, ${i.artist?.replace(/@/g, '')}, `.includes(`, ${t}, `))) { explained = ''; return title(line) } // a word being typed is not a tag
   api.tagWiki(t).then(text => { if (asked !== t) return; explained = text ? t : ''; title(text || line) })
 }
 const quote = () => api.quote().then(q => { line = q || ''; if (!explained) title(line) })

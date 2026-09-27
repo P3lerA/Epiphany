@@ -77,7 +77,7 @@ const info = ({ file, page }) => {
   const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb ? pathToFileURL(c.thumb).href : c.post.preview_file_url, caption: caption(profile(), meta(c.post)), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
   const from = j.booru ? postUrl(j.booru) : BOORU.has(j.category) ? postUrl(j) : undefined
-  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: meta(b).artist, tags: meta(b).tags, tagged, candidates, from }
+  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), ...(({ artist, character, copyright, tags }) => ({ artist, character, copyright, tags }))(meta(b)), tagged, candidates, from }
 }
 
 // Grid thumbnails live beside the dataset, never inside it. OS thumbnailer, cached as JPEG.

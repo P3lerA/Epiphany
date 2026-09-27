@@ -1,4 +1,4 @@
-// Tag piles: one pile per general tag over the pictures on show, most common first. And swap(change): the choreography between
+// Tag piles: one pile per tag over the pictures on show (general tags, or series, characters, artists as the filters pick), most common first. And swap(change): the choreography between
 // grid and piles and across filter changes. Pictures fly from where they were to where change puts them; one can land on several
 // piles, one coming from off screen enters at the edge, what truly goes away fades.
 
@@ -8,7 +8,7 @@ const covers = new Map() // tag -> pictures that have lain on top, latest first:
 const tilt = s => { let h = 7; for (const c of s) h = h * 31 + c.charCodeAt(0) | 0; return (h >>> 0) / 2 ** 32 - .5 } // steady per pile across redraws
 const drawPiles = root => {
   const by = new Map()
-  for (const img of shown(root)) for (const t of img.item.tags?.split(', ') ?? []) if (t) by.has(t) ? by.get(t).push(img) : by.set(t, [img])
+  for (const img of shown(root)) for (const t of img.item[F.piles || 'tags']?.split(', ') ?? []) if (t) { const k = t.replace(/^@/, ''); by.has(k) ? by.get(k).push(img) : by.set(k, [img]) } // the kind the filters pick; artists come as 'a, @b'
   const el = document.createElement('div')
   el.className = 'piles'
   const seen = new Set() // pictures a bigger pile already shows: otherwise the newest few top every pile

@@ -8,7 +8,7 @@ interface Item {
   url: string; thumb: string // file: URLs; thumb falls back to url
   site: string; ai: boolean
   rating: 'g' | 's' | 'q' | 'e' | '' // '' = no booru match yet
-  artist?: string; tags?: string // tags: comma-joined, underscores kept
+  artist?: string; character?: string; copyright?: string; tags?: string // comma-joined, underscores kept (artist: 'a, @b')
   tagged: 'booru' | 'unsure' | 'tagger' | 'none' // tagger: no booru has it, the tagger guessed
   candidates?: { score: number; url: string; caption: string; plus: string[] }[] // close matches waiting for a pick
   from?: string // the post the caption's tags came from

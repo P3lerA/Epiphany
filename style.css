@@ -65,10 +65,10 @@ body:has(#lobby:target) nav a[href="#lobby"], body:has(#projects:target) nav a[h
 main aside a::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; transition: background .15s }
 main aside a.on::before { background: currentColor }
 
-#unsure, #selection { display: flex; align-items: center; gap: .25rem; padding: .25rem .25rem .25rem .75rem; border: none; border-radius: 6px; background: var(--active); font-size: .85rem }
-#unsure { padding-right: .75rem }
-#unsure:hover { background: var(--hover) }
-#unsure.on { color: var(--accent) }
+#pending, #selection { display: flex; align-items: center; gap: .25rem; padding: .25rem .25rem .25rem .75rem; border: none; border-radius: 6px; background: var(--active); font-size: .85rem }
+#pending { padding-right: .75rem }
+#pending:hover { background: var(--hover) }
+#pending.on { color: var(--accent) }
 #selection button { padding: .25rem .6rem; border: none; border-radius: 4px; background: none; transition: background .15s, color .15s }
 #selection button:hover { background: var(--hover) }
 #selection .export { font-weight: 600 }
@@ -102,15 +102,24 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .piles-toggle:not(.on) svg:first-child, .piles-toggle.on svg:last-child { color: var(--fg) }
 
 /* Native popover: light dismiss and Esc for free; opens above its button. */
-#filters { position-anchor: --filters; inset: auto; bottom: anchor(top); right: anchor(right); margin: 0 0 .5rem; overflow: visible; padding: 14px; color: inherit; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 14px }
+#filters { position-anchor: --filters; inset: auto; bottom: anchor(top); right: anchor(right); margin: 0 0 .5rem; overflow: visible; padding: 14px; color: inherit; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: 10px 14px }
+/* More: the filters used less, folded (renderer.js opens it while one of them is on). Same columns as the rows above. */
+#filters details { grid-column: 1 / -1 }
+#filters summary { display: flex; align-items: center; gap: .4rem; width: max-content; font-size: 12px; color: var(--muted); cursor: pointer; list-style: none; transition: color .15s }
+#filters summary:hover { color: var(--fg) }
+#filters summary::after { content: ''; width: .38em; height: .38em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; rotate: 45deg; translate: 0 -.15em; transition: rotate .15s, translate .15s }
+#filters details[open] summary::after { rotate: 225deg; translate: 0 .1em }
+#filters details > div { display: grid; grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: 10px 14px; margin-top: 10px }
 #filters:popover-open { display: grid }
-#filters > span { font-size: 12px; color: var(--muted) }
-#filters label { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; cursor: pointer }
-#filters select { justify-self: start; padding-left: 0 }
+#filters > span, #filters details span { font-size: 12px; color: var(--muted) }
+#filters label { display: contents; cursor: pointer } /* its name and switch sit in the two columns like any row */
+#filters label input { justify-self: end } /* right, like the settings rows: the panel sits balanced */
+#filters select { justify-self: end; padding-right: 0 } /* controls sit right, like the switch above it */
 .seg { display: flex; gap: 2px; padding: 2px; background: var(--field); border: 1px solid var(--rule); border-radius: 6px }
 .seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem }
 .seg button:hover { color: var(--fg) }
 .seg button.on { color: var(--fg); background: var(--active) }
+.seg button.on:hover { background: var(--hover) } /* lifts: clicking it again turns it off */
 
 /* The task line (tasks.js), left of the tabs: muted, a braille spinner while anything runs, an error in full ink. */
 #tasks { display: flex; align-items: center; gap: .5rem; max-width: 22rem; font-size: .85rem; color: var(--muted); white-space: nowrap; transition: opacity .15s; @starting-style { opacity: 0 } }
