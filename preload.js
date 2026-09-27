@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 // One name per main.js handler; events the main side pushes get an on* listener.
 const CALLS = ['list', 'projects', 'newProject', 'getSettings', 'setSettings', 'profiles', 'getCaption', 'setCaption', 'open', 'editTemplate', 'templateInfo', 'resetTemplate',
   'lookup', 'lookupAll', 'pick', 'projectMenu', 'searchSites', 'search', 'tagMenu', 'menu', 'quoteSources', 'quote', 'getCreds', 'setCred', 'oauth',
-  'checkUpdate', 'update', 'instruments', 'exportExtension', 'installGdl', 'export', 'devtools', 'restart']
+  'checkUpdate', 'update', 'instruments', 'exportExtension', 'installGdl', 'export', 'tagWiki', 'devtools', 'restart']
 const EVENTS = ['saved', 'removed', 'projectRemoved', 'toast', 'search', 'openProject']
 const api = { theme: (t, bar) => ipcRenderer.send('theme', t, bar) }
 for (const n of CALLS) api[n] = (...a) => ipcRenderer.invoke(n, ...a)

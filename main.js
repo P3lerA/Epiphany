@@ -291,6 +291,41 @@ const artists = async site => {
 }
 // The post as the site has it now: iqdb.org's index lags, and a similarity hit may carry an old tag list.
 const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
+
+// A tag's explanation: the first paragraph of its danbooru wiki, DText links and markup turned to plain text. Kept in
+// HOME/cache for good, a tag without a wiki as null; a failed request isn't kept, so it is asked again next time.
+const WIKI = path.join(HOME, 'cache', 'tag-wiki.json')
+let wiki
+const plain = body => body.split(/\r?\n\s*\r?\n/).map(p => p.trim()).find(p => p && !/^(h\d\.|\*|!post|\[(table|expand|quote|spoiler))/i.test(p))
+  ?.replace(/\[\[([^\]|]+)\|\]\]/g, (_, t) => t.replace(/\s*\(.*\)$/, '')) // [[poster (object)|]]: the pipe trick drops the qualifier
+  .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1').replace(/\[\[([^\]]+)\]\]/g, '$1')
+  .replace(/"([^"]+)":\[[^\]]*\]/g, '$1').replace(/"([^"]+)":\S+/g, '$1')
+  .replace(/\[\/?[a-z]+(=[^\]]*)?\]/gi, '').replace(/\s+/g, ' ').trim() || null
+// First start pulls the lot: every general tag on 100+ danbooru posts (~24k; 25 requests, ~17MB down, ~4MB kept, 97% of a
+// sample library's tags). Anything rarer is asked for when it comes up. '' (no tag has that name) marks the pull done.
+const pullWikis = async () => {
+  wiki ??= readJson(WIKI, {})
+  if (wiki['']) return
+  for (let page = 1; ; page++) {
+    const l = await fetch(`https://danbooru.donmai.us/wiki_pages.json?search[tag][category]=0&search[tag][post_count]=>=100&search[is_deleted]=false&limit=1000&only=title,body&page=${page}`, { signal: AbortSignal.timeout(30000), ...UA }).then(r => r.ok ? r.json() : null, () => null)
+    if (!l) return // offline or refused: the next start tries again
+    for (const w of l) wiki[w.title] ??= plain(w.body ?? '')
+    if (l.length < 1000) break
+  }
+  wiki[''] = new Date().toISOString()
+  fs.mkdirSync(path.dirname(WIKI), { recursive: true })
+  writeJson(WIKI, wiki)
+}
+const tagWiki = async tag => {
+  wiki ??= readJson(WIKI, {})
+  if (tag in wiki) return wiki[tag]
+  const r = await fetch(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(tag)}.json`, { signal: AbortSignal.timeout(8000), ...UA }).catch(() => null)
+  if (!r || (!r.ok && r.status !== 404)) return null
+  wiki[tag] = r.ok ? plain((await r.json()).body ?? '') : null
+  fs.mkdirSync(path.dirname(WIKI), { recursive: true })
+  writeJson(WIKI, wiki)
+  return wiki[tag]
+}
 const gelCreds = () => { const g = readJson(GDL, {}).extractor?.gelbooru ?? {}; return `&api_key=${g['api-key'] ?? ''}&user_id=${g['user-id'] ?? ''}` }
 const live = p => {
   if (p.category === 'danbooru') return fetch(`https://danbooru.donmai.us/posts/${p.id}.json`, UA).then(r => r.ok ? r.json() : null, () => null)
@@ -510,7 +545,7 @@ const installGdl = async () => {
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
-  devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
+  tagWiki, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
 ipcMain.on('theme', (_, t, bar) => { nativeTheme.themeSource = t; win?.setTitleBarOverlay(bar) }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 
@@ -538,6 +573,7 @@ app.whenReady().then(() => {
     })
   }).listen(PORT, '127.0.0.1')
   createWindow()
+  pullWikis()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

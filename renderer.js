@@ -120,7 +120,7 @@ const drawSites = () => {
 }
 // Search box: local scope filters the grid as you type; a site scope pulls that site's tag search on Enter.
 const search = $('.search input'), scope = $('.search select')
-const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters() }
+const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters(); explain() }
 search.oninput = scope.onchange = () => swap(() => { localQ(); backToPiles() }) // filter changes move the pictures, see swap
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
@@ -191,10 +191,28 @@ api.onSaved(i => {
   refreshPiles()
 })
 
-// Lobby has no title of its own: a random line is the title. Click for another.
+// Lobby has no title of its own: a random line is the title. Click for another. While the search is one tag of the library, its
+// danbooru explanation is the title instead, and a click opens its wiki.
 const h1 = $('h1 .t-lobby')
-const quote = () => api.quote().then(q => { h1.textContent = h1.title = q || '' })
-h1.onclick = quote
+let line = '', explained = '', asked = ''
+const title = text => {
+  if (h1.textContent === text) return
+  h1.getAnimations().forEach(a => a.cancel())
+  if (calm.matches) return h1.textContent = h1.title = text
+  h1.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'ease-in' }).onfinish = () => { // not play(): a swap would take it for one of its fliers
+    h1.textContent = h1.title = text
+    h1.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: EASE })
+  }
+}
+const explain = () => {
+  const t = F.q
+  if (t === explained) return
+  asked = t
+  if (!t || !items?.some(i => `, ${i.tags}, `.includes(`, ${t}, `))) { explained = ''; return title(line) } // a word being typed is not a tag
+  api.tagWiki(t).then(text => { if (asked !== t) return; explained = text ? t : ''; title(text || line) })
+}
+const quote = () => api.quote().then(q => { line = q || ''; if (!explained) title(line) })
+h1.onclick = () => explained ? api.open(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(explained)}`) : quote()
 quote()
 
 const mark = () => document.querySelectorAll('#settings aside a').forEach(a => a.classList.toggle('on', a.hash === location.hash))
