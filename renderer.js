@@ -104,7 +104,7 @@ api.onEdit(e => {
   editing = e
   const now = new Set(e.items.map(i => names(i[e.field]).join(', ')))
   editIn.value = now.size === 1 ? [...now][0] : ''
-  editIn.placeholder = `${e.label}${e.items.length > 1 ? ` of ${e.items.length} pictures` : ''}, comma between`
+  editIn.placeholder = `${e.label}, comma-separated`
   editUI.querySelector('datalist').innerHTML = [...new Set(items.flatMap(i => names(i[e.field])))].sort().map(n => `<option value="${esc(n)}">`).join('')
   editUI.style.left = Math.min(menuAt[0], innerWidth - 340) + 'px'
   editUI.style.top = Math.min(menuAt[1], innerHeight - 56) + 'px'

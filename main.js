@@ -288,7 +288,7 @@ async function pullOne({ page }) {
     if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), caption(prof, meta(j)))
     if (s.lookup && !BOORU.has(j.category)) later.push(item)
   }
-  if (!items.length) throw new Error('nothing new from ' + page)
+  if (!items.length) throw new Error('Nothing new from ' + new URL(page).host)
   // After the grid has them, and after the extension gets its answer: IQDB uploads take seconds each.
   if (later.length) lookupAll(later)
   return items
@@ -413,7 +413,7 @@ const resolve = async (item, j, say) => {
 const relookup = async item => {
   const t = task('Looking up'), j = sidecar(item)
   const hit = await resolve(item, j, s => t.set(`Looking up: ${s}`)).catch(e => { t.end(); note(e.message, true); throw e })
-  t.end(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches, pick one in the preview` : j.tagger && !j.tagged ? 'No match; tags from the tagger' : canSimilar() ? 'No match' : 'No exact match; for similarity add a danbooru account or enable yande.re / konachan in Sites')
+  t.end(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches` : j.tagger && !j.tagged ? 'No match, tagged' : canSimilar() ? 'No match' : 'No exact match')
   return hit
 }
 
@@ -429,23 +429,23 @@ const tagIt = async (item, j = sidecar(item)) => {
 }
 // Booru tags stay: the tagger is for pictures without them (their caption would stop matching what the page shows).
 const tag = async items => {
-  if (!tagger.has()) return note('Install the tagger first: Settings > Instruments')
-  const t = task('Tagging with the tagger')
+  if (!tagger.has()) return note('Install tagger in Instruments')
+  const t = task('Tagging')
   let done = 0, kept = 0
   for (const [k, item] of items.entries()) {
-    if (items.length > 1) t.set(`Tagging with the tagger ${k + 1}/${items.length}`)
+    if (items.length > 1) t.set(`Tagging ${k + 1}/${items.length}`)
     try {
       const j = sidecar(item)
       if (j.booru || BOORU.has(j.category)) kept++
       else { await tagIt(item, j); done++ }
     } catch (e) { note(`Tagger: ${e.message}`, true) }
   }
-  t.end(items.length > 1 ? `${done} tagged by the tagger${kept ? `, ${kept} kept their booru tags` : ''}` : done ? 'Tags from the tagger' : kept ? 'Booru tags kept; the tagger is for pictures without them' : '')
+  t.end(items.length > 1 ? `${done} tagged${kept ? `, ${kept} had booru tags` : ''}` : done ? 'Tagged' : kept ? 'Has booru tags' : '')
 }
 let installing
 const installTagger = () => installing ??= (async () => {
-  const t = task('Downloading the tagger')
-  try { await tagger.install(p => t.set(`Downloading the tagger ${p}%`)); t.end('Tagger installed') }
+  const t = task('Downloading tagger')
+  try { await tagger.install(p => t.set(`Downloading tagger ${p}%`)); t.end('Tagger installed') }
   catch (e) { t.end(); note(`Tagger: ${e.message}`, true) }
   finally { installing = null }
 })()
@@ -487,7 +487,7 @@ const lookupAll = async items => {
       else if (j.tagger && !j.tagged) tagged++
     } catch (e) { note(e.message, true) }
   }
-  t.end(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} from the tagger, ` : ''}${items.length - matched - unsure - tagged} none`)
+  t.end(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} tagged, ` : ''}${items.length - matched - unsure - tagged} none`)
 }
 // Series, characters or artists written by hand (right-click > Edit), for the tagger's misses and mistakes: one field of several
 // pictures, overwritten whatever each had. Kept through lookups and tagger runs; '' leaves the field empty.
@@ -618,7 +618,7 @@ const instruments = async () => {
   return {
     'gallery-dl': { status: v ?? 'not found', action: v ? 'Update' : 'Install' },
     extension: { status: readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?', action: 'Export' },
-    tagger: installing ? { status: 'downloading…', action: 'Install' } : tagger.has() ? { status: 'PixAI v1.0', action: 'Remove' } : { status: 'not installed (1 GB)', action: 'Install' }
+    tagger: installing ? { status: 'downloading…', action: 'Install' } : tagger.has() ? { status: 'PixAI v1.0', action: 'Remove' } : { status: 'not installed', action: 'Install' }
   }
 }
 
