@@ -142,6 +142,15 @@ pilesUI.onclick = () => { // again mid-flight: everything flies back
   if (flight?.key === 'piles') { pilesUI.classList.toggle('on'); rewind() }
   else { const root = page(); swap(() => setPiling(!piling, root), 'piles') } // its undo may run after the page changed
 }
+// Lobby <-> Projects while piling: the page to show gets its piles before it shows. hashchange comes a frame after :target has
+// switched, so the new page flashed its grid; navigate runs before the switch.
+navigation.addEventListener('navigate', e => {
+  const to = { '#lobby': $('#lobby'), '#projects': pgrid }[new URL(e.destination.url).hash]
+  if (!piling || !e.hashChange || !to || to.classList.contains('piling')) return
+  if (flight) land(flight, true)
+  gridTop = 0
+  setPiling(true, to)
+})
 addEventListener('hashchange', () => { back = null; buildAhead(); if (flight) land(flight, true); if (piling && !page().classList.contains('piling')) { gridTop = 0; setPiling(true) } })
 // Pulls, lookups and deletes reach the piles in one redraw once they stop coming: a pull saves dozens in a row.
 let refresh
