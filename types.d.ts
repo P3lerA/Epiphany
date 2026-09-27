@@ -18,7 +18,7 @@ interface Item {
 interface Profile { caption: string; ratings: string; scores: string; spaces: boolean }
 
 interface Settings {
-  project: string; quote: string; lookup: boolean; sites: string[]; accept: number; autotag: boolean; debug?: boolean
+  project: string; quote: string; lookup: boolean; sites: string[]; accept: number; autotag: boolean; safe?: boolean; debug?: boolean
   profile: string; overrides: Partial<Record<keyof Profile, string | boolean>>
 }
 
@@ -56,6 +56,7 @@ interface Api {
   installGdl(): Promise<string>
   export(items: Item[]): Promise<void>
   tagWiki(tag: string): Promise<string | null> // null: no wiki, or not reachable now
+  safe(): Promise<boolean> // launched with -safe: safe mode on, whatever Settings say
   tag(items: Item[]): Promise<void>
   installTagger(): Promise<void>
   removeTagger(): Promise<void>

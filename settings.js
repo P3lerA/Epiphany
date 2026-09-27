@@ -16,6 +16,7 @@ const settingsUI = profiles => {
   general.querySelector('[name=theme]').value = localStorage.theme || 'system'
   general.querySelector('[name=lookup]').checked = s.lookup
   general.querySelector('[name=autotag]').checked = s.autotag
+  Object.assign(general.querySelector('[name=safe]'), { checked: !!s.safe || safeCli, disabled: safeCli })
   general.querySelector('[name=accept]').value = s.accept
   general.querySelector('[name=debug]').checked = !!s.debug
   general.querySelector('[name=slow]').value = localStorage.slow || '1'
@@ -27,6 +28,7 @@ const settingsUI = profiles => {
     save()
     if (e.target.name === 'quote') quote()
     if (e.target.name === 'debug') debug()
+    if (e.target.name === 'safe') { setSafe(s.safe); applyFilters() }
   }
 
   const sites = $('#sites ul')

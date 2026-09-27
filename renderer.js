@@ -130,7 +130,16 @@ pendingUI.onclick = () => swap(() => { F.tagged = F.tagged === 'pending' ? '' : 
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
 if (pending(F.tagged)) F.tagged = 'pending' // saved before none and unsure were one
 const filters = $('#filters')
-const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '' }) // the search box is not remembered
+// Safe mode (Settings > General, or -safe at launch): Rating locked on General; the rating saved before stays saved for when it's off.
+let safe = null, safeCli = false // that saved rating, while locked; launched with -safe (Settings can't turn it off)
+const ratingUI = filters.querySelector('[data-name=rating]'), ratingTip = ratingUI.title
+const setSafe = on => {
+  if (on === (safe !== null)) return
+  if (on) { safe = F.rating; F.rating = 'g' } else { F.rating = safe; safe = null }
+  ratingUI.inert = on
+  ratingUI.title = on ? 'Safe mode' : ratingTip
+}
+const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '', ...safe !== null && { rating: safe } }) // the search box is not remembered
 const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && (F.tagged === 'pending' ? !pending(img.dataset.tagged) : img.dataset.tagged !== F.tagged)) || (F.site && source(img.dataset.site) !== source(F.site)) || (F.q && !img.dataset.q.includes(F.q)))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
@@ -156,7 +165,7 @@ $('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 // A segment's choice clicked again goes off: none chosen means any (piles: by tags). Choosing a kind of pile shows the piles.
-filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') swap(() => {
+filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON' && !seg.inert) swap(() => {
   const k = seg.dataset.name
   F[k] = F[k] === e.target.value ? '' : e.target.value
   saveF(); applyFilters()
@@ -205,7 +214,9 @@ plist.onkeydown = e => {
 }
 
 // Once every script is in: an IPC answer can land between two of them, before piles.js has run.
-addEventListener('DOMContentLoaded', () => Promise.all([api.list(), api.projects(), api.getSettings(), api.profiles()]).then(([list, ps, settings, profiles]) => {
+addEventListener('DOMContentLoaded', () => Promise.all([api.list(), api.projects(), api.getSettings(), api.profiles(), api.safe()]).then(([list, ps, settings, profiles, cli]) => {
+  safeCli = cli
+  setSafe(cli || !!settings.safe) // before anything shows
   items = list.sort((a, b) => b.time.localeCompare(a.time))
   projects = ps
   s = settings
