@@ -113,9 +113,8 @@ const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
   filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[seg.dataset.name] || ''))))
-  if (items) drawUnsure()
   if (piling) drawPiles(page())
-  face()
+  changed()
   $('.filter-toggle').classList.toggle('on', Object.entries(F).some(([k, v]) => k === 'ai' ? !v : v))
 }
 const drawSites = () => {
@@ -133,7 +132,18 @@ search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.t
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON') swap(() => { F[seg.dataset.name] = e.target.value; saveF(); applyFilters() }) } })
 filters.onchange = e => swap(() => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() })
-const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root); face() }
+const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root); changed() }
+// Everything drawn from the library or from what is on show, redrawn after any change to either: the pick pill, the source list,
+// the empty face, the foot. New ones go here. (The piles follow through applyFilters in a swap, or refreshPiles after a pull.)
+const changed = () => { if (!items) return; drawUnsure(); drawSites(); face(); tally() }
+// The Lobby's foot (style.css): the pictures on show and the distinct tags they carry.
+const plural = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`
+const tally = () => {
+  const lobby = $('#lobby'), imgs = shown(lobby), tags = new Set(imgs.flatMap(i => i.item.tags?.split(', ') ?? []))
+  tags.delete('')
+  if (imgs.length) lobby.dataset.tally = `${plural(imgs.length, 'image')}, ${plural(tags.size, 'tag')}`
+  else delete lobby.dataset.tally
+}
 // Nothing on show (no pictures yet, a search that finds none, no piles): a face in the middle, no words (style.css). Picked anew
 // while it is hidden, so each time it comes up it is another one.
 const FACES = ['(・_・)', '(´・ω・`)', '(・∀・)', '(￣▽￣)', '(°ー°〃)', '(´-ω-`)', '(・ε・)', '(o_O)', '(>_<)', '( ˘ω˘ )', 'ヽ(・∀・)ﾉ', '(ﾟДﾟ)', '(=^・ω・^=)', '¯\\_(ツ)_/¯', '(っ´ω`c)', '(・・?)']
@@ -152,10 +162,9 @@ plist.oncontextmenu = e => { if (e.target.dataset.p) api.projectMenu(e.target.da
 api.onProjectRemoved(async name => {
   items = items.filter(i => i.project !== name)
   document.querySelectorAll('.grid img').forEach(i => { if (i.item.project === name) { sel.delete(i.dataset.file); i.remove() } })
-  drawSel(); drawUnsure()
+  drawSel(); changed()
   ;[projects, s] = await Promise.all([api.projects(), api.getSettings()])
   drawProjects(true)
-  drawSites()
   refreshPiles()
 })
 plist.onkeydown = e => {
@@ -171,7 +180,6 @@ addEventListener('DOMContentLoaded', () => Promise.all([api.list(), api.projects
   s = settings
   render($('#lobby'), items)
   drawProjects()
-  drawSites()
   api.searchSites().then(names => scope.innerHTML = '<option value="">local</option>' + names.filter(n => s.sites.includes(n)).map(n => `<option>${n}</option>`).join(''))
   applyFilters()
   settingsUI(profiles)
@@ -180,8 +188,8 @@ api.onOpenProject(openProject)
 api.onRemoved(file => {
   items = items.filter(i => i.file !== file)
   if (sel.delete(file)) drawSel()
-  drawUnsure()
   document.querySelectorAll('.grid img').forEach(i => { if (i.dataset.file === file) i.remove() })
+  changed()
   refreshPiles()
 })
 api.onSaved(i => {
@@ -189,13 +197,12 @@ api.onSaved(i => {
     items[items.findIndex(x => x.file === i.file)] = i
     document.querySelectorAll('.grid img').forEach(img => { if (img.dataset.file === i.file) decorate(img, i) })
     if (dlg.open && cur.file === i.file) preview(i)
-    drawUnsure()
-    return refreshPiles()
+  } else {
+    items.unshift(i)
+    add($('#lobby'), i, true)
+    if (i.project === s.project) add(pgrid, i, true)
   }
-  items.unshift(i)
-  drawSites()
-  add($('#lobby'), i, true)
-  if (i.project === s.project) add(pgrid, i, true)
+  changed()
   refreshPiles()
 })
 
