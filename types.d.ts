@@ -10,7 +10,7 @@ interface Item {
   rating: 'g' | 's' | 'q' | 'e' | '' // '' = no booru match yet
   artist?: string; character?: string; copyright?: string; tags?: string // comma-joined, underscores kept (artist: 'a, @b')
   tagged: 'booru' | 'unsure' | 'tagger' | 'none' // tagger: no booru has it, the tagger guessed
-  candidates?: { score: number; url: string; caption: string; plus: string[] }[] // close matches waiting for a pick
+  candidates?: { score: number; url: string; caption: string; post?: string; plus: string[] }[] // close matches waiting for a pick
   from?: string // the post the caption's tags came from
   replace?: true // onSaved: same picture, fresher facts
 }

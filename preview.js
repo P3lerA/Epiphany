@@ -28,9 +28,9 @@ const preview = async (item, root) => {
   const act = (text, f) => tagged.append(tagged.lastElementChild ? ' / ' : ' ', Object.assign(document.createElement('a'), { href: '#', textContent: text, onclick: e => { e.preventDefault(); f() } }))
   if (item.tagged !== 'booru') act('Look up', () => api.lookup(item)) // an emptied caption counts as none
   act('Tag', () => api.tag([item])) // a booru match may be a variant; one pulled from a booru is kept (main.js)
-  // Close IQDB matches: click one to see its caption in the box, Use to keep it.
-  const picks = dlg.querySelector('.picks'), use = dlg.querySelector('.use')
-  use.hidden = true
+  // Close IQDB matches: click one to see its caption in the box, Use to keep it, View post to see it on its booru.
+  const picks = dlg.querySelector('.picks'), use = dlg.querySelector('.use'), post = dlg.querySelector('.post')
+  use.hidden = post.hidden = true
   picks.replaceChildren(...(item.candidates ?? []).map((c, i) => {
     const b = document.createElement('button')
     b.innerHTML = `<img src="${esc(c.url ?? '')}"><span>${c.score}% · +${c.plus.length}</span>`
@@ -40,6 +40,8 @@ const preview = async (item, root) => {
       dlg.querySelector('textarea').value = c.caption
       use.hidden = false
       use.onclick = () => api.pick(item, i)
+      post.hidden = !c.post // iqdb.org's zerochan and anime-pictures have no post link here
+      post.onclick = e => { e.preventDefault(); api.open(c.post) }
     }
     return b
   }))
