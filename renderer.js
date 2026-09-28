@@ -120,9 +120,13 @@ const drawPending = () => {
   pendingUI.hidden = !n
   pendingUI.textContent = n + ' pending'
   pendingUI.classList.toggle('on', F.tagged === 'pending')
-  // Nothing left pending (the last one tagged or picked): the filter lets go rather than hold an empty page. After this redraw,
-  // not inside it: it may run within a swap.
-  if (!n && F.tagged === 'pending') setTimeout(() => { if (F.tagged === 'pending' && !items.some(i => pending(i.tagged))) swap(() => { F.tagged = ''; saveF(); applyFilters() }) })
+  // Nothing left pending (the last one tagged or picked): the empty page says so for a moment, in the face's place, then the
+  // filter lets go. After this redraw, not inside it: it may run within a swap.
+  if (!n && F.tagged === 'pending') setTimeout(() => {
+    if (F.tagged !== 'pending' || items.some(i => pending(i.tagged))) return
+    Object.assign(page().dataset, { face: 'No pending!', say: '' }) // face() picks a face again once pictures show
+    setTimeout(() => { if (F.tagged === 'pending') swap(() => { F.tagged = ''; saveF(); applyFilters() }) }, 800)
+  })
 }
 pendingUI.onclick = () => swap(() => { F.tagged = F.tagged === 'pending' ? '' : 'pending'; saveF(); applyFilters() })
 
@@ -187,7 +191,7 @@ const tally = () => {
 // Nothing on show (no pictures yet, a search that finds none, no piles): a face in the middle, no words (style.css). Picked anew
 // while it is hidden, so each time it comes up it is another one.
 const FACES = ['(・_・)', '(´・ω・`)', '(・∀・)', '(￣▽￣)', '(°ー°〃)', '(´-ω-`)', '(・ε・)', '(o_O)', '(>_<)', '( ˘ω˘ )', 'ヽ(・∀・)ﾉ', '(ﾟДﾟ)', '(=^・ω・^=)', '¯\\_(ツ)_/¯', '(っ´ω`c)', '(・・?)']
-const face = () => { for (const r of [$('#lobby'), pgrid]) if (!r.dataset.face || r.querySelector(r.classList.contains('piling') ? '.pile' : '.grid img:not([hidden])')) r.dataset.face = FACES[Math.random() * FACES.length | 0] }
+const face = () => { for (const r of [$('#lobby'), pgrid]) if (!r.dataset.face || r.querySelector(r.classList.contains('piling') ? '.pile' : '.grid img:not([hidden])')) { r.dataset.face = FACES[Math.random() * FACES.length | 0]; delete r.dataset.say } }
 
 // Projects: sidebar picks the active project (where pulls land) and shows its grid.
 const plist = $('#plist'), pgrid = $('#pgrid')

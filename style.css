@@ -143,8 +143,9 @@ section:target { display: block }
 :is(#lobby, #pgrid) > div:first-child h3 { margin-top: 0 }
 :is(#lobby, #pgrid) > div:not(:has(img:not([hidden]))) { display: none }
 /* Nothing on show: a face in the middle of the window, no words (renderer.js face). */
-:is(#lobby, #pgrid):not(.piling):not(:has(.grid img:not([hidden])))::before, .piling:not(:has(.pile))::before { content: attr(data-face); position: fixed; inset: var(--bar) 0 0; display: grid; place-items: center; font-size: 2rem; color: var(--muted); pointer-events: none; animation: face .3s .15s both }
+:is(#lobby, #pgrid):not(.piling):not(:has(.grid img:not([hidden])))::before, .piling:not(:has(.pile))::before { content: attr(data-face); position: fixed; inset: var(--bar) 0 0; display: grid; place-items: center; font-size: var(--face-size, 2rem); color: var(--muted); pointer-events: none; animation: face .3s .15s both }
 @keyframes face { from { opacity: 0 } }
+[data-say] { --face-size: 1.25rem } /* words in the face's place (renderer.js), smaller than a face */
 #lobby[data-tally]::after { content: attr(data-tally); display: block; padding: 2rem 0 3.5rem; text-align: center; font-size: .85rem; color: var(--muted) } /* renderer.js tally; clear of the fab */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem }
 .grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer }
