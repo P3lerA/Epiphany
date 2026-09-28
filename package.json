@@ -46,6 +46,7 @@
       ]
     },
     "nsis": {
+      "artifactName": "Epiphany-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },

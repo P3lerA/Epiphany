@@ -612,7 +612,9 @@ const update = async () => {
   if (buf.length !== asset.size) { t.end(); throw new Error('download incomplete') }
   const nw = PORTABLE + '.new'
   fs.writeFileSync(nw, buf)
-  spawn('cmd.exe', ['/c', `ping -n 2 127.0.0.1 >nul & move /y "${nw}" "${PORTABLE}" & start "" "${PORTABLE}"`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+  // The portable exe stays locked while its launcher cleans up the unpacked copy, seconds after we quit: retry the move for a minute.
+  const q = s => `'${s.replace(/'/g, "''")}'`
+  spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', `for ($i = 0; $i -lt 60; $i++) { try { Move-Item -LiteralPath ${q(nw)} -Destination ${q(PORTABLE)} -Force -ErrorAction Stop; break } catch { Start-Sleep 1 } }; Start-Process -FilePath ${q(PORTABLE)}`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
   app.quit()
 }
 
