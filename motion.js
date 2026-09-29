@@ -74,4 +74,5 @@ const ghost = (a, to, bare, d = 0) => {
   Object.assign(g.style, { position: 'absolute', margin: 0, left: a.box.left + 'px', top: a.box.top - ghostsTop + 'px', width: a.box.width + 'px', height: a.box.height + 'px', translate: a.translate, rotate: a.rotate })
   if (to) fly(g, a, to, a.box, { duration: 650, delay: d, easing: EASE, fill: 'both' })
   else play(g, [{ opacity: 1 }, { opacity: 0, scale: .96 }], { duration: 250, easing: EASE, fill: 'both' })
+  return g
 }

@@ -99,8 +99,10 @@ const swap = (change, key) => {
         const spot = new Map(now.map(b => [b.el.dataset.file, b])), held = new Set()
         for (const a of before) {
           const b = spot.get(a.el.dataset.file), d = pileDelay(a.el)
-          if (!b) continue
           used.add(a)
+          // No spot for it (a pile opened into its grid): it fades where it lay, in its pile's order and as high as the prints that
+          // fly, or one lying under it jumped over it at the click.
+          if (!b) { ghost(a, null, false).classList.add('flying'); continue }
           ghost(a, b, false, d)
           if (!held.has(b)) { held.add(b); if (onScreen(b)) play(b.el, [{ opacity: 0 }, { opacity: 0 }], { duration: d + 650 }) } // off screen, nobody sees it wait
         }
