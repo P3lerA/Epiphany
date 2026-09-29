@@ -127,8 +127,9 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .seg { display: flex; gap: 2px; padding: 2px; background: var(--field); border: 1px solid var(--rule); border-radius: 6px }
 .seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem }
 .seg button:hover { color: var(--fg) }
-.seg button.on { color: var(--fg); background: var(--active) }
-.seg button.on:hover { background: var(--hover) }
+.seg button:is(.on, .not) { color: var(--fg); background: var(--active) }
+.seg button:is(.on, .not):hover { background: var(--hover) }
+.seg button.not { text-decoration: line-through } /* right-click: everything but it */
 .seg[inert] { opacity: .5 } /* safe mode: Rating locked */ /* lifts: clicking it again turns it off */
 
 /* The task line (tasks.js), left of the tabs: muted, a braille spinner while anything runs, an error in full ink. */

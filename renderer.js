@@ -163,10 +163,12 @@ const setSafe = on => {
   ratingUI.title = on ? 'Safe mode' : ratingTip
 }
 const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '', ...safe !== null && { rating: safe } }) // the search box is not remembered
-const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (F.rating && !F.rating.includes(img.dataset.rating)) || (F.tagged && (F.tagged === 'pending' ? !pending(img.dataset.tagged) : img.dataset.tagged !== F.tagged)) || (F.site && source(img.dataset.site) !== source(F.site)) || (F.q && !img.dataset.q.includes(F.q)))
+// A segment's filter: its choice, or '!' and the choice for everything but (right-click). A picture of no known rating is in none.
+const passes = (f, is) => !f || (f[0] === '!' ? !is(f.slice(1)) : is(f))
+const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || !passes(F.rating, v => !!img.dataset.rating && v.includes(img.dataset.rating)) || !passes(F.tagged, v => v === 'pending' ? pending(img.dataset.tagged) : img.dataset.tagged === v) || (F.site && source(img.dataset.site) !== source(F.site)) || (F.q && !img.dataset.q.includes(F.q)))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
-  filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.value === (F[seg.dataset.name] || ''))))
+  filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => { const f = F[seg.dataset.name] || ''; b.classList.toggle('on', b.value === f); b.classList.toggle('not', f === '!' + b.value) }))
   if (piling) drawPiles(page())
   changed()
   if (!F.ai || F.site) filters.querySelector('details').open = true // a filter at work is never folded away
@@ -193,12 +195,25 @@ const drawScope = () => api.searchSites().then(names => {
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 // A segment's choice clicked again goes off: none chosen means any (piles: by tags). Choosing a kind of pile shows the piles.
-filters.querySelectorAll('.seg').forEach(seg => { seg.onclick = e => { if (e.target.tagName === 'BUTTON' && !seg.inert) swap(() => {
-  const k = seg.dataset.name
-  F[k] = F[k] === e.target.value ? '' : e.target.value
-  saveF(); applyFilters()
-  if (k === 'piles' && F.piles && !piling) setPiling(true)
-}) } })
+// Right-click on Rating or Tags: everything but it (General: s, q, e; Sensitive, which reaches down to General: q, e).
+filters.querySelectorAll('.seg').forEach(seg => {
+  const choose = (e, v) => { if (e.target.tagName === 'BUTTON' && !seg.inert) swap(() => {
+    const k = seg.dataset.name
+    F[k] = F[k] === v ? '' : v
+    saveF(); applyFilters()
+    if (k === 'piles' && F.piles && !piling) setPiling(true)
+  }) }
+  seg.onclick = e => choose(e, e.target.value)
+  if (seg.dataset.name !== 'piles') seg.oncontextmenu = e => choose(e, '!' + e.target.value)
+})
+// Right-click the filter button: everything it lights up for goes off, the search too (Safe mode keeps Rating).
+$('.filter-toggle').oncontextmenu = () => swap(() => {
+  Object.assign(F, { ai: true, tagged: '', site: '', q: '' })
+  if (safe === null) F.rating = ''; else safe = ''
+  search.value = ''
+  filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
+  saveF(); applyFilters(); explain()
+})
 filters.onchange = e => swap(() => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() })
 const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root); changed() }
 // Everything drawn from the library or from what is on show, redrawn after any change to either: the pending pill, the source list,

@@ -61,6 +61,11 @@ step('pending pill filters and lets go', async () => {
   await js('pendingUI.click()'); await until('shown(page()).length === 2', 'pending shown')
   await js('pendingUI.click()'); await until('shown(page()).length === 4', 'all shown')
 })
+step('right-click: everything but a choice; on the filter button, all off', async () => {
+  const rc = sel => js(`${sel}.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }))`)
+  await rc(`filters.querySelector('[data-name=tagged] [value=pending]')`); await until(`shown(page()).length === 2 && F.tagged === '!pending'`, 'all but pending')
+  await rc(`$('.filter-toggle')`); await until(`shown(page()).length === 4 && !F.tagged`, 'all off')
+})
 step('search filters, a tag gets its wiki in the title', async () => {
   await js(`search.value = 'solo'; search.dispatchEvent(new Event('input'))`)
   await until('shown(page()).length === 2', 'search result')
