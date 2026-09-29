@@ -90,6 +90,7 @@ addEventListener('keydown', e => {
   if (dlg.open || e.target.matches?.('input, textarea')) return
   if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); if (!piling) { visible().forEach(i => sel.add(i.dataset.file)); drawSel() } } // the piles hide the grid it would select
   if (e.key === 'Escape' && sel.size) { sel.clear(); drawSel() }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v') api.paste() // the clipboard's links, pulled (main.js)
 })
 selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
 selUI.querySelector('.lookup').onclick = () => api.lookupAll(items.filter(i => sel.has(i.file))) // booru-pulled ones just re-render their caption

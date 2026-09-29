@@ -69,6 +69,8 @@ interface Api {
   onProjectRemoved(cb: (name: string) => void): void
   onTasks(cb: (running: { id: number; text: string; stop: boolean }[]) => void): void // every task's current line, oldest first
   stopTask(id: number): Promise<void> // a task with stop: true
+  paste(): Promise<void> // pulls the clipboard's web addresses, or takes in shared pictures (share.js)
+  share(item: Item): Promise<void> // the picture's share line, onto the clipboard
   onNote(cb: (note: { text: string; error: boolean }) => void): void
   onSearch(cb: (tag: string) => void): void
   onOpenProject(cb: (name: string) => void): void

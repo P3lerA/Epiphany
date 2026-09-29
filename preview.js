@@ -61,6 +61,7 @@ const preview = async (item, root) => {
   const u = new URL(item.page)
   src.replaceChildren(u.protocol + '//', Object.assign(document.createElement('b'), { textContent: u.host }), u.pathname + u.search)
   src.onclick = e => { e.preventDefault(); api.open(item.page) }
+  dlg.querySelector('.share').onclick = e => { e.preventDefault(); api.share(item) } // a line another Epiphany's Ctrl+V takes in (share.js)
   const c = await api.getCaption(item)
   drawHead(c.head) // the profile's part, from the sidecar: shown, not edited
   ta.value = c.tags

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, dialog, nativeTheme, Tray, net } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, dialog, nativeTheme, Tray, net, clipboard } = require('electron')
 const http = require('http')
 const fs = require('fs')
 const path = require('path')
@@ -7,6 +7,9 @@ const { execFile, spawn } = require('child_process')
 const crypto = require('crypto')
 const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
+const share = require('./share')
+const { BOORU, EH, gdlName, postUrl, SEARCH, searchUrl, own, range } = require('./sites')
+const quotes = require('./quotes')
 const { autoUpdater } = require('electron-updater')
 
 const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIRI, 67xx is a Windows reserved range; env override keeps test runs off the real app
@@ -174,7 +177,7 @@ async function save({ src, page }) {
   const file = path.join(dir(), name)
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()))
   const item = record({ file, src, page, time: new Date().toISOString() })
-  if (settings().lookup) relookup(item).catch(() => {}) // same matching as a pull, after the reply; it reports its own errors
+  item.looked = settings().lookup && relookup(item).catch(() => {}) // same matching as a pull, after the reply; it reports its own errors
   return item
 }
 
@@ -190,22 +193,6 @@ const meta = j => ({
   score: j.score ?? ''
 })
 
-// Non-booru sources (pixiv, twitter...) carry no booru tags. Ask danbooru, then gelbooru, for the same picture.
-const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34'])
-// E-Hentai, ExHentai: 'ehentai' in the app, gallery-dl's 'exhentai' (one extractor, one config for both). Its namespaced tags
-// (female:..., other:...) aren't booru words, so its pictures get looked up and tagged like pixiv's.
-const EH = /(^|\.)(e-|ex)hentai\.org$/
-const POST = {
-  danbooru: id => `https://danbooru.donmai.us/posts/${id}`,
-  gelbooru: id => `https://gelbooru.com/index.php?page=post&s=view&id=${id}`,
-  safebooru: id => `https://safebooru.org/index.php?page=post&s=view&id=${id}`,
-  rule34: id => `https://rule34.xxx/index.php?page=post&s=view&id=${id}`,
-  yandere: id => `https://yande.re/post/show/${id}`,
-  konachan: id => `https://konachan.com/post/show/${id}`,
-  sankaku: id => `https://chan.sankakucomplex.com/post/show/${id}`,
-  e621: id => `https://e621.net/posts/${id}`
-}
-const postUrl = p => POST[p.category]?.(p.id)
 
 // Similarity search per site, each answering with whole posts. Danbooru's IQDB needs an account (anonymous uploads are denied;
 // API-key auth also skips Rails CSRF; net.fetch because Cloudflare accepts Chromium's TLS, not Node's). Moebooru's post/similar is open.
@@ -276,6 +263,31 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
 // time (two at once would each take the other's), and a picture already recorded is skipped (a right-click save's lookup writes
 // its sidecar mid-pull).
 let pulling = Promise.resolve()
+// Ctrl+V on the page: every web address on the clipboard is pulled, as the extension's button would. A copied image carries its own.
+const paste = () => {
+  const shared = share.read(clipboard.readText())
+  if (shared.length) return shared.forEach(s => importShared(s).catch(e => note(e.message, !e.quiet)))
+  const urls = clipboard.readText().match(/https?:\/\/[^\s"'<>，。、；！？）]+/g)?.map(u => u.replace(/[.,;:!?)]+$/, '')) ?? clipboard.readHTML().match(/(?<=<img[^>]+src=")[^"]+/g)?.map(u => u.replace(/&amp;/g, '&'))
+  if (!urls) return note('No link to pull')
+  for (const page of new Set(urls)) pull({ page }).catch(e => note(e.message, !e.quiet))
+}
+// A shared picture (share.js): pulled as its sharer got it, then what they wrote by hand, over what the lookups found.
+const importShared = async s => {
+  const got = s.src ? await save({ src: s.src, page: s.page }) : await pull({ page: s.page, range: s.range }), list = [got].flat()
+  await Promise.all([got.looked, ...list.map(i => i.looked)])
+  const item = list.find(i => path.basename(i.file) === s.name) ?? list[0], j = sidecar(item)
+  if (Object.keys(s.edit).length) { j.edit = { ...j.edit, ...s.edit }; writeJson(item.file + '.json', j) }
+  if (s.tags !== undefined) fs.writeFileSync(txt(item.file), s.tags)
+  enrich(item).then(e => send('saved', { ...e, replace: true }))
+}
+// Preview > More > Share: the line on the clipboard; the tags only if they were written by hand. Its source: the picture's own page
+// (sites.js), else where it came from: a right-click save's image, or the page it was pulled from (maybe several: the name finds it).
+const shareItem = item => {
+  const j = sidecar(item), t = tagsOf(item.file)
+  const at = own(j, item.page) ?? { page: item.page, ...item.src !== item.page && { src: item.src }, name: path.basename(item.file) }
+  clipboard.writeText(share.make(at, j.edit, fs.existsSync(txt(item.file)) && t !== tagLine(facts(j).tags) ? t : undefined))
+  note('Share line copied')
+}
 const pull = q => {
   const host = URL.canParse(q.page) ? new URL(q.page).host : q.page, stop = {}
   const t = task(`Waiting to pull from ${host}`, () => { stop.asked = true; stop.child ? kill(stop.child) : t.end() }) // still waiting: gone now
@@ -283,16 +295,13 @@ const pull = q => {
   pulling = pulling.then(run, run)
   return pulling.then(items => { t.end(`${items.length} from ${host}`); return items }, e => { t.end(); throw e })
 }
-// A page showing one picture of a gallery pulls that one: E-Hentai's /s/ (gallery-dl runs on from it), hitomi's reader (#page).
-// ponytail: --range caps anything else (a search, a gallery) at 50; make it a profile field if you want whole ones
-const range = u => { const { host, pathname, hash } = new URL(u); return EH.test(host) && pathname.startsWith('/s/') ? '1' : host.endsWith('hitomi.la') && pathname.startsWith('/reader/') ? String(parseInt(hash.slice(1)) || 1) : '1-50' }
-async function pullOne({ page }, stop = {}) {
+async function pullOne({ page, range: r }, stop = {}) { // r: which of the page's pictures (a shared one)
   web(page)
   // Signed out, E-Hentai hands gallery-dl resamples without a word; with too few GP, gp=stop makes it say so.
   if (EH.test(new URL(page).host) && !readJson(GDL, {}).extractor?.exhentai?.cookies?.ipb_pass_hash) throw new Error('ehentai cookies needed in Sites')
   const d = dir()
   const before = new Set(fs.readdirSync(d))
-  const g = gdl(['--write-metadata', '-o', 'tags=true', '-o', 'gp=stop', '--range', range(page), '-D', d, '--', page])
+  const g = gdl(['--write-metadata', '-o', 'tags=true', '-o', 'gp=stop', '--range', r ?? range(page), '-D', d, '--', page])
   stop.child = g.child
   const failed = await g.then(() => null, e => e) // what arrived before a failure or a stop is kept all the same
   for (const f of fs.readdirSync(d)) if (!before.has(f) && f.endsWith('.part')) fs.rmSync(path.join(d, f), { force: true })
@@ -311,7 +320,7 @@ async function pullOne({ page }, stop = {}) {
     if (s.lookup && !BOORU.has(j.category)) later.push(item)
   }
   // After the grid has them, and after the extension gets its answer: IQDB uploads take seconds each.
-  if (later.length) lookupAll(later)
+  items.looked = later.length && lookupAll(later) // a shared picture's own fields go on once these are done
   if (stop.asked) throw Object.assign(new Error(items.length ? `Stopped, ${items.length} kept` : 'Stopped'), { quiet: true })
   if (failed) throw items.length ? new Error(`${items.length} kept, then: ${failed.message}`) : failed
   if (!items.length) throw new Error('Nothing new from ' + new URL(page).host)
@@ -526,29 +535,8 @@ const setField = (items, field, text) => {
 }
 // The user picked one of the close matches.
 const pick = (item, i) => { const j = sidecar(item); adopt(item, j, j.candidates[i].post) }
-// Tag search pages per site. The query arrives in the site's own syntax (booru: space-separated tags).
-const booru = t => encodeURIComponent(t)
-
-const SEARCH = {
-  danbooru: t => `https://danbooru.donmai.us/posts?tags=${booru(t)}`,
-  gelbooru: t => `https://gelbooru.com/index.php?page=post&s=list&tags=${booru(t)}`,
-  safebooru: t => `https://safebooru.org/index.php?page=post&s=list&tags=${booru(t)}`,
-  yandere: t => `https://yande.re/post?tags=${booru(t)}`,
-  konachan: t => `https://konachan.com/post?tags=${booru(t)}`,
-  sankaku: t => `https://chan.sankakucomplex.com/?tags=${booru(t)}`,
-  e621: t => `https://e621.net/posts?tags=${booru(t)}`,
-  rule34: t => `https://rule34.xxx/index.php?page=post&s=list&tags=${booru(t)}`,
-  animepictures: t => `https://anime-pictures.net/posts?search_tag=${booru(t)}`,
-  zerochan: t => `https://www.zerochan.net/${encodeURIComponent(t)}`,
-  pixiv: t => `https://www.pixiv.net/tags/${encodeURIComponent(t)}`,
-  twitter: t => `https://x.com/search?q=${encodeURIComponent(t)}`,
-  deviantart: t => `https://www.deviantart.com/search?q=${encodeURIComponent(t)}`,
-  artstation: t => `https://www.artstation.com/search?query=${encodeURIComponent(t)}`,
-  ehentai: t => `https://e-hentai.org/?f_search=${encodeURIComponent(t)}`
-}
-
 // A site's search for a tag, in the browser: the search box's site scope and the tag menu.
-const search = (site, tag) => shell.openExternal(SEARCH[site](BOORU.has(site) || site === 'animepictures' ? tag.replace(/ /g, '_') : tag)) // boorus spell it with underscores
+const search = (site, tag) => shell.openExternal(searchUrl(site, tag))
 
 // A caption tag: this library, the search engine (Settings > General), More for the other sites in use.
 const tagMenu = tag => {
@@ -578,25 +566,6 @@ const menu = items => void Menu.buildFromTemplate([
   { label: 'Delete', click: async () => { for (const i of items) await remove(i) } }
 ]).popup({ window: win })
 
-const QUOTES = {
-  advice: ['https://api.adviceslip.com/advice', j => j.slip.advice],
-  animechan: ['https://api.animechan.io/v1/quotes/random', j => j.data.content],
-  zenquotes: ['https://zenquotes.io/api/random', j => j[0].q],
-  hitokoto: ['https://v1.hitokoto.cn/?c=a&c=b&c=c&c=d&max_length=28', j => j.hitokoto, true], // true: Cloudflare caches it, a unique query gets a new one
-  none: null
-}
-
-const quote = () => {
-  const src = QUOTES[settings().quote]
-  if (!src) return '' // none: no quote
-  if (Math.random() < .01) return 'Too many requests. Obtain an auth key for unlimited access.' // zenquotes' 429, as an egg
-  const [url, pick, bust] = src
-  // null: not reachable now (zenquotes takes ~1.5 s, and answers 429 past 5 a 30 s). Only where needed: animechan refuses a query.
-  return fetch(bust ? url + '&t=' + Date.now() : url, { signal: AbortSignal.timeout(5000), cache: 'no-store' })
-    .then(r => r.ok ? r.json() : Promise.reject()).then(pick).catch(() => null)
-}
-
-const gdlName = site => site === 'ehentai' ? 'exhentai' : site
 const getCreds = () => { const e = readJson(GDL, {}).extractor ?? {}; return { ...e, ehentai: e.exhentai } }
 
 const setCred = (site, key, value) => {
@@ -685,7 +654,7 @@ const installGdl = async () => {
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
-  lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth, stopTask,
+  lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
   tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
@@ -710,7 +679,7 @@ app.whenReady().then(() => {
     req.on('end', () => {
       let q
       try { q = JSON.parse(body) } catch { return res.writeHead(400).end() }
-      ;(q.src ? save(q) : pull(q)).then(
+      ;(q.src ? save(q) : pull({ page: q.page })).then(
         r => res.end(JSON.stringify(r)),
         err => { console.error(err.message); note(err.message, !err.quiet); res.writeHead(500).end(err.message) }
       )

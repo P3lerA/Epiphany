@@ -5,7 +5,7 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win --publish never",
-    "test": "node test/extension-queue.mjs && electron test/tagger.js",
+    "test": "node profiles.js && node share.js && node sites.js && node test/extension-queue.mjs && electron test/tagger.js",
     "smoke": "node test/smoke.mjs"
   },
   "devDependencies": {
@@ -28,6 +28,9 @@
       "tasks.js",
       "profiles.js",
       "tagger.js",
+      "share.js",
+      "sites.js",
+      "quotes.js",
       "theme.js",
       "index.html",
       "style.css",
