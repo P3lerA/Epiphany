@@ -83,7 +83,7 @@ const info = (item, prof = profile()) => {
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
   const p = j.booru ?? (BOORU.has(j.category) ? j : null), from = p && { site: p.category, url: postUrl(p) }
   const m = facts(j)
-  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, quality: quality(prof, m), tagged, candidates, from }
+  return { site: j.category === 'exhentai' ? 'ehentai' : j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, quality: quality(prof, m), tagged, candidates, from }
 }
 
 // Grid thumbnails live beside the dataset, never inside it. OS thumbnailer, cached as JPEG.
@@ -116,15 +116,23 @@ const send = (ch, ...a) => win?.webContents.send(ch, ...a)
 // with a result; note(): a result or error on its own. A result stays there a few seconds.
 const running = new Map()
 let taskN = 0
-const task = text => {
-  const id = ++taskN, show = () => send('tasks', [...running.values()])
-  running.set(id, text); show()
-  return { set: t => { running.set(id, t); show() }, end: result => { running.delete(id); show(); if (result) note(result) } }
+// stop: how to cut it short, for the ✕ beside the line (tasks.js); work without one runs to its end.
+const task = (text, stop) => {
+  const id = ++taskN, show = () => send('tasks', [...running].map(([id, t]) => ({ id, text: t.text, stop: !!t.stop })))
+  running.set(id, { text, stop }); show()
+  return { set: t => { running.get(id).text = t; show() }, end: result => { running.delete(id); show(); if (result) note(result) } }
 }
+const stopTask = id => running.get(id)?.stop?.()
 const note = (text, error) => send('note', { text, error: !!error })
 
-const run = (cmd, args) => new Promise((res, rej) =>
-  execFile(cmd, args, { maxBuffer: 1e7 }, (e, out, err) => e ? rej(new Error(err || e.message)) : res(out)))
+const run = (cmd, args) => {
+  let child
+  const p = new Promise((res, rej) => child = execFile(cmd, args, { maxBuffer: 1e7 }, (e, out, err) => e ? rej(new Error(err || e.message)) : res(out)))
+  p.child = child
+  return p
+}
+// The whole tree: gallery-dl.exe unpacks itself and runs as a child of its own.
+const kill = child => execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => {})
 
 // gallery-dl: the standalone exe we downloaded if present, else whatever Python has (dev machines).
 const GDL_EXE = path.join(HOME, 'bin', 'gallery-dl.exe')
@@ -154,9 +162,10 @@ function createWindow() {
 // Only web URLs reach fetch/gallery-dl; anything else (file:, "--exec=...") is refused.
 const web = u => { if (!URL.canParse(u) || !/^https?:$/.test(new URL(u).protocol)) throw new Error(`Not a web URL: ${u}`) }
 
-// Right-click: one image URL, fetched directly.
+// Right-click: one image URL, fetched directly. On E-Hentai's viewer that is a resample: gallery-dl pulls the original instead.
 async function save({ src, page }) {
   web(src); web(page)
+  if (EH.test(new URL(page).host) && new URL(page).pathname.startsWith('/s/')) return pull({ page })
   const res = await fetch(src, { headers: { Referer: page, 'User-Agent': 'Mozilla/5.0 Epiphany/0.1' } })
   if (!res.ok) throw new Error(`${res.status} ${src}`)
   let name = decodeURIComponent(path.basename(new URL(src).pathname)).replace(/[<>:"/\\|?*]/g, '_') || 'image'
@@ -183,6 +192,9 @@ const meta = j => ({
 
 // Non-booru sources (pixiv, twitter...) carry no booru tags. Ask danbooru, then gelbooru, for the same picture.
 const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34'])
+// E-Hentai, ExHentai: 'ehentai' in the app, gallery-dl's 'exhentai' (one extractor, one config for both). Its namespaced tags
+// (female:..., other:...) aren't booru words, so its pictures get looked up and tagged like pixiv's.
+const EH = /(^|\.)(e-|ex)hentai\.org$/
 const POST = {
   danbooru: id => `https://danbooru.donmai.us/posts/${id}`,
   gelbooru: id => `https://gelbooru.com/index.php?page=post&s=view&id=${id}`,
@@ -217,7 +229,7 @@ const iqdbOrg = form => fetch('https://iqdb.org/', { method: 'POST', body: form(
     return category && id ? [{ score: Number(m[7]), post: { id: Number(id), category, tags: m[6], rating: m[4], score: Number(m[5]) || '', preview_url: 'https://iqdb.org' + m[3] } }] : []
   }))
 const canSimilar = () => settings().sites.some(site => (SIMILAR[site] && (site !== 'danbooru' || danAuth())) || IQDB_ONLY.includes(site))
-const danAuth = () => { const d = readJson(GDL, {}).extractor?.danbooru ?? {}; return d.username && d['api-key'] ? 'Basic ' + Buffer.from(`${d.username}:${d['api-key']}`).toString('base64') : null }
+const danAuth = () => { const d = readJson(GDL, {}).extractor?.danbooru ?? {}; return d.username && d.password ? 'Basic ' + Buffer.from(`${d.username}:${d.password}`).toString('base64') : null } // password: the API key, as gallery-dl reads it
 const lookup = async (j, file, say = () => {}) => { // say: the step it is on, for the task line
   const get = (url, pick) => fetch(url, { signal: AbortSignal.timeout(8000), ...UA })
     .then(r => r.ok ? r.json() : null).then(pick, () => null)
@@ -265,17 +277,25 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
 // its sidecar mid-pull).
 let pulling = Promise.resolve()
 const pull = q => {
-  const host = URL.canParse(q.page) ? new URL(q.page).host : q.page, t = task(`Waiting to pull from ${host}`)
-  const run = () => { t.set(`Pulling from ${host}`); return pullOne(q) }
+  const host = URL.canParse(q.page) ? new URL(q.page).host : q.page, stop = {}
+  const t = task(`Waiting to pull from ${host}`, () => { stop.asked = true; stop.child ? kill(stop.child) : t.end() }) // still waiting: gone now
+  const run = () => { if (stop.asked) throw Object.assign(new Error('Stopped'), { quiet: true }); t.set(`Pulling from ${host}`); return pullOne(q, stop) }
   pulling = pulling.then(run, run)
   return pulling.then(items => { t.end(`${items.length} from ${host}`); return items }, e => { t.end(); throw e })
 }
-async function pullOne({ page }) {
+// A page showing one picture of a gallery pulls that one: E-Hentai's /s/ (gallery-dl runs on from it), hitomi's reader (#page).
+// ponytail: --range caps anything else (a search, a gallery) at 50; make it a profile field if you want whole ones
+const range = u => { const { host, pathname, hash } = new URL(u); return EH.test(host) && pathname.startsWith('/s/') ? '1' : host.endsWith('hitomi.la') && pathname.startsWith('/reader/') ? String(parseInt(hash.slice(1)) || 1) : '1-50' }
+async function pullOne({ page }, stop = {}) {
   web(page)
+  // Signed out, E-Hentai hands gallery-dl resamples without a word; with too few GP, gp=stop makes it say so.
+  if (EH.test(new URL(page).host) && !readJson(GDL, {}).extractor?.exhentai?.cookies?.ipb_pass_hash) throw new Error('ehentai cookies needed in Sites')
   const d = dir()
   const before = new Set(fs.readdirSync(d))
-  // ponytail: --range caps a search page at 50 posts; make it a profile field if you want whole searches
-  await gdl(['--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, '--', page])
+  const g = gdl(['--write-metadata', '-o', 'tags=true', '-o', 'gp=stop', '--range', range(page), '-D', d, '--', page])
+  stop.child = g.child
+  const failed = await g.then(() => null, e => e) // what arrived before a failure or a stop is kept all the same
+  for (const f of fs.readdirSync(d)) if (!before.has(f) && f.endsWith('.part')) fs.rmSync(path.join(d, f), { force: true })
   const s = settings(), m = path.join(d, 'meta.jsonl')
   const known = new Set(fs.existsSync(m) ? fs.readFileSync(m, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l).file) : [])
   const items = [], later = []
@@ -290,9 +310,11 @@ async function pullOne({ page }) {
     if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), tagLine(meta(j).tags))
     if (s.lookup && !BOORU.has(j.category)) later.push(item)
   }
-  if (!items.length) throw new Error('Nothing new from ' + new URL(page).host)
   // After the grid has them, and after the extension gets its answer: IQDB uploads take seconds each.
   if (later.length) lookupAll(later)
+  if (stop.asked) throw Object.assign(new Error(items.length ? `Stopped, ${items.length} kept` : 'Stopped'), { quiet: true })
+  if (failed) throw items.length ? new Error(`${items.length} kept, then: ${failed.message}`) : failed
+  if (!items.length) throw new Error('Nothing new from ' + new URL(page).host)
   return items
 }
 
@@ -425,9 +447,11 @@ const tagIt = async (item, j = sidecar(item)) => {
 // A picture pulled from a booru keeps its own tags; a booru match can be replaced (a variant taken for it).
 const tag = async items => {
   if (!tagger.has()) return note('Install tagger in Instruments')
-  const t = task('Tagging')
+  let stopped
+  const t = task('Tagging', () => stopped = true)
   let done = 0, kept = 0
   for (const [k, item] of items.entries()) {
+    if (stopped) break
     t.set(`Tagging${tagger.onCpu() ? ' on CPU' : ''}${items.length > 1 ? ` ${k + 1}/${items.length}` : ''}`)
     try {
       const j = sidecar(item)
@@ -435,7 +459,7 @@ const tag = async items => {
       else { await tagIt(item, j); done++ }
     } catch (e) { note(`Tagger: ${e.message}`, true) }
   }
-  t.end(items.length > 1 ? `${done} tagged${kept ? `, ${kept} from boorus kept` : ''}` : done ? 'Tagged' : kept ? 'From a booru, kept' : '')
+  t.end((stopped ? 'Stopped: ' : '') + (items.length > 1 ? `${done} tagged${kept ? `, ${kept} from boorus kept` : ''}` : done ? 'Tagged' : kept ? 'From a booru, kept' : ''))
 }
 let installing
 const installTagger = () => installing ??= (async () => {
@@ -475,9 +499,11 @@ const exportItems = async items => {
 }
 // Several at once, one result at the end.
 const lookupAll = async items => {
-  const t = task(`Looking up 0/${items.length}`)
+  let stopped
+  const t = task(`Looking up 0/${items.length}`, () => stopped = true)
   let matched = 0, unsure = 0, tagged = 0
   for (const [k, item] of items.entries()) {
+    if (stopped) { items = items.slice(0, k); break }
     try {
       const j = sidecar(item)
       if (await resolve(item, j, s => t.set(`Looking up ${k + 1}/${items.length}: ${s}`))) matched++
@@ -485,7 +511,7 @@ const lookupAll = async items => {
       else if (j.tagger) tagged++
     } catch (e) { note(e.message, true) }
   }
-  t.end(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} tagged, ` : ''}${items.length - matched - unsure - tagged} none`)
+  t.end(`${stopped ? 'Stopped: ' : ''}${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} tagged, ` : ''}${items.length - matched - unsure - tagged} none`)
 }
 // Quality, series, characters or artists written by hand (right-click > Edit), for the tagger's misses and mistakes: one field of several
 // pictures, overwritten whatever each had. Kept through lookups and tagger runs; '' leaves the field empty.
@@ -517,19 +543,20 @@ const SEARCH = {
   pixiv: t => `https://www.pixiv.net/tags/${encodeURIComponent(t)}`,
   twitter: t => `https://x.com/search?q=${encodeURIComponent(t)}`,
   deviantart: t => `https://www.deviantart.com/search?q=${encodeURIComponent(t)}`,
-  artstation: t => `https://www.artstation.com/search?query=${encodeURIComponent(t)}`
+  artstation: t => `https://www.artstation.com/search?query=${encodeURIComponent(t)}`,
+  ehentai: t => `https://e-hentai.org/?f_search=${encodeURIComponent(t)}`
 }
 
-const search = (site, q) => pull({ page: SEARCH[site](q) }).catch(e => { note(e.message, true); throw e })
+// A site's search for a tag, in the browser: the search box's site scope and the tag menu.
+const search = (site, tag) => shell.openExternal(SEARCH[site](BOORU.has(site) || site === 'animepictures' ? tag.replace(/ /g, '_') : tag)) // boorus spell it with underscores
 
 // A caption tag: this library, the search engine (Settings > General), More for the other sites in use.
 const tagMenu = tag => {
   const s = settings()
-  const web = site => () => shell.openExternal(SEARCH[site](BOORU.has(site) || site === 'animepictures' ? tag.replace(/ /g, '_') : tag)) // boorus spell it with underscores
-  const more = s.sites.filter(x => SEARCH[x] && x !== s.engine).map(x => ({ label: x, click: web(x) }))
+  const more = s.sites.filter(x => SEARCH[x] && x !== s.engine).map(x => ({ label: x, click: () => search(x, tag) }))
   Menu.buildFromTemplate([
     { label: 'Search local', click: () => send('search', tag) },
-    { label: `Search ${s.engine}`, click: web(s.engine) },
+    { label: `Search ${s.engine}`, click: () => search(s.engine, tag) },
     ...(more.length ? [{ label: 'More', submenu: more }] : [])
   ]).popup({ window: win })
 }
@@ -569,11 +596,13 @@ const quote = () => {
     .then(r => r.ok ? r.json() : Promise.reject()).then(pick).catch(() => null)
 }
 
-const getCreds = () => readJson(GDL, {}).extractor ?? {}
+const gdlName = site => site === 'ehentai' ? 'exhentai' : site
+const getCreds = () => { const e = readJson(GDL, {}).extractor ?? {}; return { ...e, ehentai: e.exhentai } }
 
 const setCred = (site, key, value) => {
   const c = readJson(GDL, {})
-  ;((c.extractor ??= {})[site] ??= {})[key] = value
+  const ks = key.split('.'), last = ks.pop() // cookies.ipb_member_id: inside 'cookies'
+  ks.reduce((o, k) => o[k] ??= {}, (c.extractor ??= {})[gdlName(site)] ??= {})[last] = value
   fs.mkdirSync(path.dirname(GDL), { recursive: true })
   writeJson(GDL, c)
 }
@@ -656,7 +685,7 @@ const installGdl = async () => {
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
-  lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth,
+  lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => Object.keys(QUOTES), quote, getCreds, setCred, oauth, stopTask,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
   tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
@@ -683,7 +712,7 @@ app.whenReady().then(() => {
       try { q = JSON.parse(body) } catch { return res.writeHead(400).end() }
       ;(q.src ? save(q) : pull(q)).then(
         r => res.end(JSON.stringify(r)),
-        err => { console.error(err.message); note(err.message, true); res.writeHead(500).end(err.message) }
+        err => { console.error(err.message); note(err.message, !err.quiet); res.writeHead(500).end(err.message) }
       )
     })
   }).on('error', () => { // taken, or reserved by Windows (its ranges move): the app runs, only the extension can't reach it

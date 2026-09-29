@@ -134,7 +134,10 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 
 /* The task line (tasks.js), left of the tabs: muted, a braille spinner while anything runs, an error in full ink. */
 #tasks { display: flex; align-items: center; gap: .5rem; max-width: 22rem; font-size: .85rem; color: var(--muted); white-space: nowrap; transition: opacity .15s; @starting-style { opacity: 0 } }
-#tasks > span:last-child { overflow: hidden; text-overflow: ellipsis }
+#tasks > span + span { overflow: hidden; text-overflow: ellipsis }
+#tasks .stop { flex: none; display: flex; padding: .2rem; border: none; border-radius: 4px; background: none; color: var(--muted) }
+#tasks .stop:hover { color: var(--fg); background: var(--active) }
+#tasks .stop[hidden] { display: none }
 #tasks .spin { display: none; flex: none; font: 1.2em/1 'Segoe UI Symbol', sans-serif } /* braille frames, 1-4 wide (spinners.js) */
 #tasks.busy .spin { display: block }
 #tasks.error { color: var(--fg) }

@@ -42,7 +42,7 @@ interface Api {
   pick(item: Item, candidate: number): Promise<void>
   projectMenu(name: string): Promise<void>
   searchSites(): Promise<string[]>
-  search(site: string, q: string): Promise<Item[]>
+  search(site: string, q: string): Promise<void> // opens the site's search in the browser
   tagMenu(tag: string): Promise<void>
   menu(items: Item[]): Promise<void> // right-click: the selection the picture is in, or just it
   quoteSources(): Promise<string[]>
@@ -67,7 +67,8 @@ interface Api {
   onSaved(cb: (item: Item) => void): void
   onRemoved(cb: (file: string) => void): void
   onProjectRemoved(cb: (name: string) => void): void
-  onTasks(cb: (running: string[]) => void): void // every task's current line, oldest first
+  onTasks(cb: (running: { id: number; text: string; stop: boolean }[]) => void): void // every task's current line, oldest first
+  stopTask(id: number): Promise<void> // a task with stop: true
   onNote(cb: (note: { text: string; error: boolean }) => void): void
   onSearch(cb: (tag: string) => void): void
   onOpenProject(cb: (name: string) => void): void

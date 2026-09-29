@@ -181,7 +181,7 @@ const drawSites = () => {
   sel.innerHTML = '<option value="">All sources</option>' + [...new Set(items.map(i => i.site).filter(Boolean).map(source))].sort((a, b) => (a === 'other') - (b === 'other') || a.localeCompare(b))
     .map(x => `<option ${F.site && x === source(F.site) ? 'selected' : ''}>${x}</option>`).join('')
 }
-// Search box: local scope filters the grid as you type; a site scope pulls that site's tag search on Enter.
+// Search box: local scope filters the grid as you type; a site scope opens that site's search in the browser on Enter.
 const search = $('.search input'), scope = $('.search select')
 const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters(); explain() }
 let typing

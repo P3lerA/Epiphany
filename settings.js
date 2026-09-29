@@ -1,11 +1,14 @@
 // Settings pages: General, Profile, Sites (with the credentials gallery-dl reads), Instruments.
 
 const SITES = ['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34',
-  'zerochan', 'animepictures', 'pixiv', 'twitter', 'deviantart', 'artstation', 'fanbox', 'fantia', 'bluesky']
+  'zerochan', 'animepictures', 'ehentai', 'pixiv', 'twitter', 'deviantart', 'artstation', 'fanbox', 'fantia', 'bluesky']
 // What gallery-dl needs per site. 'oauth' = a browser login flow, the rest are config fields.
-const CREDS = { danbooru: ['username', 'api-key'], gelbooru: ['api-key', 'user-id'], e621: ['username', 'api-key'],
-  sankaku: ['username', 'password'], twitter: ['username', 'password'], pixiv: 'oauth' }
-const SECRET = /key|password|token/
+// Field names are gallery-dl's keys, a dot for one inside another; danbooru and e621 take the API key as 'password'. ehentai: the
+// browser's login cookies (Cloudflare stops gallery-dl's own login).
+const CREDS = { danbooru: ['username', 'password'], gelbooru: ['api-key', 'user-id'], e621: ['username', 'password'],
+  sankaku: ['username', 'password'], twitter: ['username', 'password'], ehentai: ['cookies.ipb_member_id', 'cookies.ipb_pass_hash'], pixiv: 'oauth' }
+const SECRET = /key|password|token|hash/
+const HINT = { danbooru: { password: 'api-key' }, e621: { password: 'api-key' } } // what to paste, where the key's name says otherwise
 const KEY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.9 12.1 21 2m-3 3 3 3m-6 0 2 2"/></svg>'
 
 const settingsUI = profiles => {
@@ -40,7 +43,7 @@ const settingsUI = profiles => {
     sites.innerHTML = SITES.map(site => {
       const c = CREDS[site]
       const fields = c === 'oauth' ? `<button data-oauth="${site}">Log in</button>`
-        : (c || []).map(k => `<input name="${k}" placeholder="${k}" type="${SECRET.test(k) ? 'password' : 'text'}" value="${esc(creds[site]?.[k] ?? '')}" spellcheck="false">`).join('')
+        : (c || []).map(k => `<input name="${k}" placeholder="${HINT[site]?.[k] ?? k.split('.').pop()}" type="${SECRET.test(k) ? 'password' : 'text'}" value="${esc(k.split('.').reduce((o, p) => o?.[p], creds[site]) ?? '')}" spellcheck="false">`).join('')
       return `<li data-site="${site}"><label>${site}<input type="checkbox" value="${site}" ${s.sites.includes(site) ? 'checked' : ''}></label>${c ? `<button class="key" aria-label="Credentials">${KEY}</button><div class="creds" hidden>${fields}</div>` : ''}</li>`
     }).join('')
   })
