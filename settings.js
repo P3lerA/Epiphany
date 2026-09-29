@@ -13,6 +13,9 @@ const settingsUI = profiles => {
   api.quoteSources().then(names => {
     general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
   })
+  api.searchSites().then(names => {
+    general.querySelector('[name=engine]').innerHTML = names.map(n => `<option ${n === s.engine ? 'selected' : ''}>${n}</option>`).join('')
+  })
   general.querySelector('[name=theme]').value = localStorage.theme || 'system'
   general.querySelector('[name=lookup]').checked = s.lookup
   general.querySelector('[name=autotag]').checked = s.autotag
@@ -27,6 +30,7 @@ const settingsUI = profiles => {
     s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.name === 'accept' ? Number(e.target.value) : e.target.value
     save()
     if (e.target.name === 'quote') quote()
+    if (e.target.name === 'engine') drawScope()
     if (e.target.name === 'debug') debug()
     if (e.target.name === 'safe') { setSafe(s.safe); applyFilters() }
   }
@@ -46,7 +50,7 @@ const settingsUI = profiles => {
     if (oauth) api.oauth(oauth.dataset.oauth)
   }
   sites.onchange = e => {
-    if (e.target.type === 'checkbox') { s.sites = [...sites.querySelectorAll(':checked')].map(c => c.value); save() }
+    if (e.target.type === 'checkbox') { s.sites = [...sites.querySelectorAll(':checked')].map(c => c.value); save(); drawScope() }
     else api.setCred(e.target.closest('li').dataset.site, e.target.name, e.target.value)
   }
 

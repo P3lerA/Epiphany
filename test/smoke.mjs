@@ -74,11 +74,11 @@ step('piles by tags and by characters', async () => {
   await js(`filters.querySelector('[data-name=piles] [value=character]').click(); pilesUI.click()`)
   await until(`!page().querySelector('.piles') && !flight`, 'back to the grid')
 })
-step('preview shows the head from the sidecar over the tags', async () => {
+step('preview shows the tags, the head from the sidecar under them', async () => {
   await js(`shown(page()).find(i => i.dataset.file.endsWith('booru1.webp')).click()`); await until('dlg.open', 'preview open')
   await until(`dlg.querySelector('textarea').value === '1girl, solo'`, 'tags')
   assert.equal(await js(`return dlg.querySelector('.head').textContent`), 'general, hatsune miku, vocaloid, @someone')
-  assert.equal(await js(`return dlg.querySelector('.tagged').textContent`), 'Tags from danbooru · Look up · Tag')
+  assert.equal(await js(`return dlg.querySelector('.tagged').textContent`), 'Tags from danbooruLook up / Tag')
   await js('dlg.close()')
 })
 step('tags written by hand stay in the .txt, the sidecar untouched', async () => {

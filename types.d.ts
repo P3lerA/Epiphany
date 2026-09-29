@@ -9,6 +9,7 @@ interface Item {
   site: string; ai: boolean
   rating: 'g' | 's' | 'q' | 'e' | '' // '' = no booru match yet
   artist?: string; character?: string; copyright?: string; tags?: string // comma-joined, underscores kept (artist: 'a, @b')
+  quality?: string // written by hand, or the profile's word for the booru score
   tagged: 'booru' | 'unsure' | 'tagger' | 'none' // tagger: no booru has it, the tagger guessed
   candidates?: { score: number; url: string; head: string; tags: string; post?: string; plus: string[] }[] // close matches waiting for a pick
   from?: { site: string; url?: string } // the booru post the tags came from
@@ -18,7 +19,7 @@ interface Item {
 interface Profile { caption: string; qualities: string; scores: string; spaces: boolean }
 
 interface Settings {
-  project: string; quote: string; lookup: boolean; sites: string[]; accept: number; autotag: boolean; safe?: boolean; debug?: boolean
+  project: string; quote: string; lookup: boolean; sites: string[]; engine: string; accept: number; autotag: boolean; safe?: boolean; debug?: boolean
   profile: string; overrides: Partial<Record<keyof Profile, string | boolean>>
 }
 
@@ -31,7 +32,7 @@ interface Api {
   profiles(): Promise<Record<string, Profile>>
   getCaption(item: Item): Promise<{ head: string; tags: string }> // head: the profile's part, from the sidecar; tags: the .txt
   setCaption(item: Item, text: string): Promise<void> // the .txt only; a rebuild from the sidecar replaces it
-  setField(items: Item[], field: 'copyright' | 'character' | 'artist', text: string): Promise<void> // comma-separated names, over the booru's or the tagger's
+  setField(items: Item[], field: 'quality' | 'copyright' | 'character' | 'artist', text: string): Promise<void> // comma-separated names, over the booru's or the tagger's
   open(url: string): Promise<void>
   editTemplate(): Promise<string>
   templateInfo(): Promise<{ text: string; custom: boolean }>
@@ -70,7 +71,7 @@ interface Api {
   onNote(cb: (note: { text: string; error: boolean }) => void): void
   onSearch(cb: (tag: string) => void): void
   onOpenProject(cb: (name: string) => void): void
-  onEdit(cb: (e: { items: Item[]; field: 'copyright' | 'character' | 'artist'; label: string }) => void): void // right-click > Edit
+  onEdit(cb: (e: { items: Item[]; field: 'quality' | 'copyright' | 'character' | 'artist'; label: string; options?: string[] }) => void): void // right-click > Edit
 }
 declare const api: Api
 

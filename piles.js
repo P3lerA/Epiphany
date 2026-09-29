@@ -13,8 +13,10 @@ const buildPiles = root => {
   el.className = 'piles'
   el.picks = new Map()
   const seen = new Set() // pictures a bigger pile already shows: otherwise the newest few top every pile
+  el.shows = new Set() // every picture in a pile on show, for the Lobby's foot (tally)
   // ponytail: the 120 biggest piles of 2+; virtualize if the long tail is wanted
   for (const [t, l] of [...by].filter(([, l]) => l.length > 1).sort((a, b) => b[1].length - a[1].length).slice(0, 120)) {
+    l.forEach(i => el.shows.add(i))
     const b = el.appendChild(document.createElement('button'))
     b.className = 'pile'
     b.dataset.tag = t
@@ -48,7 +50,7 @@ const drawPiles = root => {
   root.querySelector(':scope > .piles')?.remove()
   root.append(el)
   for (const [t, f] of el.picks) covers.set(t, [...new Set([...f, ...covers.get(t) ?? []])])
-  face()
+  face(); tally()
 }
 const setPiling = (on, root = page()) => {
   const sec = root.closest('section')
@@ -56,7 +58,7 @@ const setPiling = (on, root = page()) => {
   piling = on
   pilesUI.classList.toggle('on', on)
   for (const r of [$('#lobby'), pgrid]) { r.classList.remove('piling'); r.querySelector(':scope > .piles')?.remove() }
-  if (on) { root.classList.add('piling'); drawPiles(root) } else buildAhead()
+  if (on) { root.classList.add('piling'); drawPiles(root) } else { buildAhead(); tally() }
   sec.scrollTop = on ? 0 : gridTop
 }
 const swap = (change, key) => {

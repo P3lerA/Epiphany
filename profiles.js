@@ -28,12 +28,15 @@ const exported = (name, text) => EXPORT[name] ? list(text).map(t => EXPORT[name]
 const people = t => /^\d+(girl|boy|other)s?$/.test(t)
 const tagLine = tags => list(String(tags ?? '')).sort((a, b) => people(b) - people(a)).map(t => t.replace(/_/g, ' ')).join(', ')
 
+// One written by hand (Edit > Quality) if any, else the tier of the booru score.
+const quality = (profile, meta) => meta.quality ?? (meta.score === '' || meta.score == null ? '' : list(profile.qualities)[list(profile.scores).filter(t => Number(meta.score) >= Number(t)).length] ?? '')
+
 // The template filled from the sidecar (meta), with the .txt's tags as {{tags}}; without them, the head the app shows above them.
 // meta values are plain strings; rating is one of g/s/q/e or ''; score is the site's raw score.
 const caption = (profile, meta, tags = '') => {
   const values = { ...meta, tags }
   values.rating = RATINGS['gsqe'.indexOf(meta.rating)] ?? ''
-  values.quality = meta.score === '' || meta.score == null ? '' : list(profile.qualities)[list(profile.scores).filter(t => Number(meta.score) >= Number(t)).length] ?? ''
+  values.quality = quality(profile, meta)
   const v = k => {
     const s = String(values[k] ?? '')
     if (k === 'tags') return profile.spaces ? s : list(s).map(t => t.replace(/ /g, '_')).join(', ')
@@ -43,7 +46,7 @@ const caption = (profile, meta, tags = '') => {
     .split(',').map(x => x.trim()).filter(x => x && x !== '@').join(', ')
 }
 
-module.exports = { PROFILES, caption, exported, tagLine }
+module.exports = { PROFILES, caption, exported, tagLine, quality }
 
 if (require.main === module) {
   const assert = require('assert')
@@ -55,6 +58,7 @@ if (require.main === module) {
   assert.equal(caption(PROFILES.anima, { score: 0 }, '1girl'), 'worst quality, 1girl')
   assert.equal(caption(PROFILES.anima, { score: 130 }, 'score_7'), 'masterpiece, score_7')
   assert.equal(caption(PROFILES.anima, { rating: 'g' }), 'general')
+  assert.equal(caption(PROFILES.anima, { score: 0, quality: 'best_quality' }), 'best quality')
   assert.equal(exported('anima', 'good quality, questionable, 1girl'), 'good quality, nsfw, 1girl')
   assert.equal(exported('plain', 'general, 1girl'), 'general, 1girl')
   assert.equal(caption(PROFILES.plain, { rating: 'e', score: 9 }, 'x'), 'x')

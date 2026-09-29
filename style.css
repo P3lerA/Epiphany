@@ -104,10 +104,10 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 #filters { position-anchor: --filters; inset: auto; bottom: anchor(top); right: anchor(right); margin: 0 0 .5rem; overflow: visible; padding: 14px; color: inherit; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: 10px 14px }
 /* More: the filters used less, folded (renderer.js opens it while one of them is on). Same columns as the rows above. */
 #filters details { grid-column: 1 / -1 }
-#filters summary { display: flex; align-items: center; gap: .4rem; width: max-content; font-size: 12px; color: var(--muted); cursor: pointer; list-style: none; transition: color .15s }
-#filters summary:hover { color: var(--fg) }
-#filters summary::after { content: ''; width: .38em; height: .38em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; rotate: 45deg; translate: 0 -.15em; transition: rotate .15s, translate .15s }
-#filters details[open] summary::after { rotate: 225deg; translate: 0 .1em }
+:is(#filters, .meta) summary { display: flex; align-items: center; gap: .4rem; width: max-content; font-size: 12px; color: var(--muted); cursor: pointer; list-style: none; transition: color .15s }
+:is(#filters, .meta) summary:hover { color: var(--fg) }
+:is(#filters, .meta) summary::after { content: ''; width: .38em; height: .38em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; rotate: 45deg; translate: 0 -.15em; transition: rotate .15s, translate .15s }
+:is(#filters, .meta) details[open] summary::after { rotate: 225deg; translate: 0 .1em }
 #filters details > div { display: grid; grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: 10px 14px; margin-top: 10px }
 #filters:popover-open { display: grid }
 #filters > span, #filters details span { font-size: 12px; color: var(--muted) }
@@ -118,7 +118,12 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 #edit { position: fixed; inset: auto; margin: 0; height: 2.5rem; padding: 0 1rem; background: var(--surface); color: inherit; border: 1px solid var(--rule); border-radius: 999px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
 #edit:focus-within { border-color: var(--muted) }
 #edit input { width: 18rem; height: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; outline: none }
-#edit input::-webkit-calendar-picker-indicator { display: none !important } /* its inline style shows it; the list still opens as you type */
+#edit { overflow: visible }
+#edit ul { position: absolute; top: calc(100% + .25rem); left: 0; right: 0; margin: 0; padding: .25rem; list-style: none; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
+#edit.up ul { top: auto; bottom: calc(100% + .25rem) } /* opened low: the list goes above */
+#edit ul:empty { display: none }
+#edit li { padding: .35rem .75rem; border-radius: 8px; cursor: pointer }
+#edit li:hover, #edit li.on { background: var(--active) }
 .seg { display: flex; gap: 2px; padding: 2px; background: var(--field); border: 1px solid var(--rule); border-radius: 6px }
 .seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem }
 .seg button:hover { color: var(--fg) }
@@ -178,11 +183,15 @@ figure:hover .nav, .nav:focus-visible { opacity: 1 }
 .nav:hover { background: var(--bg) }
 dialog aside { display: flex; flex-direction: column; gap: .75rem; min-height: 0 }
 dialog textarea { flex: 1; resize: none; line-height: 1.6 }
-.head { margin: 0 0 -.5rem; padding: 0 calc(.75rem + 1px); font-weight: 600; line-height: 1.6; overflow-wrap: anywhere } /* the caption's head, above its tags */
+.meta .head { margin: 0; font-weight: 600; color: var(--fg) } /* the caption's head */
 .head:empty { display: none }
+.head span { cursor: pointer; transition: color .15s } /* a name: click searches it */
+.head span:hover { color: var(--accent) }
+.tagged .acts { margin-left: .75rem }
 .meta { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); overflow-wrap: anywhere }
 .meta a, .src b { color: var(--accent) }
 .meta .src { color: var(--muted) }
+.meta details > div { display: flex; flex-direction: column; gap: .25rem; margin-top: .25rem } /* source, time, project */
 .src b { font-weight: 500 }
 .picks { display: flex; gap: .5rem; flex-wrap: wrap }
 .picks:empty { display: none }

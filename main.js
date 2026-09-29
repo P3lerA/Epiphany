@@ -5,7 +5,7 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 const { execFile, spawn } = require('child_process')
 const crypto = require('crypto')
-const { PROFILES, caption, exported, tagLine } = require('./profiles')
+const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
 const { autoUpdater } = require('electron-updater')
 
@@ -13,7 +13,7 @@ const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIR
 const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
 const SETTINGS = path.join(HOME, 'settings.json')
 const WIN = path.join(HOME, 'window.json') // last window bounds; separate file so renderer settings saves never clobber it
-const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true }
+const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru' }
 let win
 Menu.setApplicationMenu(null)
 if (!app.requestSingleInstanceLock()) app.exit() // quit() is async and whenReady would still open a window; a second launch (tray-parked app, double-clicked exe) just raises the first
@@ -69,7 +69,7 @@ const source = j => j.booru ?? (j.tagger && !BOORU.has(j.category) ? tagger.post
 const facts = j => ({ ...meta(source(j)), ...Object.fromEntries(Object.entries(j.edit ?? {}).map(([k, v]) => [k, words(v).join(k === 'artist' ? ', @' : ', ')])) })
 // Rebuilds the .txt, the general tags, from the sidecar; what was written there by hand goes.
 const recaption = (item, j) => fs.writeFileSync(txt(item.file), tagLine(facts(j).tags))
-const info = item => {
+const info = (item, prof = profile()) => {
   const j = sidecar(item, null)
   if (!j) return { site: new URL(item.page).host, ai: false, rating: '', tagged: 'none' }
   const b = source(j)
@@ -79,11 +79,11 @@ const info = item => {
   const tagged = j.booru || BOORU.has(j.category) ? 'booru' : j.candidates ? 'unsure' : j.tagger ? 'tagger' : 'none'
   // Each candidate with the tags only it has, so look-alike variants can be told apart.
   const sets = j.candidates?.map(c => new Set(words(c.post.tag_string_general)))
-  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb && fs.existsSync(c.thumb) ? pathToFileURL(c.thumb).href : c.post.preview_file_url ?? c.post.preview_url, head: caption(profile(), meta(c.post)), tags: tagLine(meta(c.post).tags), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
+  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb && fs.existsSync(c.thumb) ? pathToFileURL(c.thumb).href : c.post.preview_file_url ?? c.post.preview_url, head: caption(prof, meta(c.post)), tags: tagLine(meta(c.post).tags), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
   const p = j.booru ?? (BOORU.has(j.category) ? j : null), from = p && { site: p.category, url: postUrl(p) }
   const m = facts(j)
-  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, tagged, candidates, from }
+  return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, quality: quality(prof, m), tagged, candidates, from }
 }
 
 // Grid thumbnails live beside the dataset, never inside it. OS thumbnailer, cached as JPEG.
@@ -102,7 +102,7 @@ const thumb = async item => {
 // A picture's sidecar; a right-click save has none until a lookup writes one, and one cut off mid-write reads as none (the
 // library still loads; the next lookup writes it afresh).
 const sidecar = (item, none = { category: new URL(item.page).host, page: item.page }) => { try { return readJson(item.file + '.json', none) } catch { return none } }
-const enrich = async item => { const e = withUrl({ ...item, ...info(item) }); e.thumb = await thumb(e); return e }
+const enrich = async (item, prof) => { const e = withUrl({ ...item, ...info(item, prof) }); e.thumb = await thumb(e); return e }
 
 const record = item => {
   fs.appendFileSync(path.join(dir(), 'meta.jsonl'), JSON.stringify(item) + '\n')
@@ -297,8 +297,8 @@ async function pullOne({ page }) {
 }
 
 const list = () => Promise.all(projects().flatMap(p => {
-  const f = path.join(dir(p), 'meta.jsonl')
-  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map(l => enrich({ ...JSON.parse(l), project: p })) : []
+  const f = path.join(dir(p), 'meta.jsonl'), prof = profile()
+  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map(l => enrich({ ...JSON.parse(l), project: p }, prof)) : []
 }))
 
 const newProject = name => { if (/^[\w-]+$/.test(name)) dir(name) }
@@ -487,7 +487,7 @@ const lookupAll = async items => {
   }
   t.end(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} tagged, ` : ''}${items.length - matched - unsure - tagged} none`)
 }
-// Series, characters or artists written by hand (right-click > Edit), for the tagger's misses and mistakes: one field of several
+// Quality, series, characters or artists written by hand (right-click > Edit), for the tagger's misses and mistakes: one field of several
 // pictures, overwritten whatever each had. Kept through lookups and tagger runs; '' leaves the field empty.
 const setField = (items, field, text) => {
   const v = text.split(',').map(t => t.trim().replace(/^@/, '').replace(/\s+/g, '_')).filter(Boolean).join(' ')
@@ -522,12 +522,15 @@ const SEARCH = {
 
 const search = (site, q) => pull({ page: SEARCH[site](q) }).catch(e => { note(e.message, true); throw e })
 
+// A caption tag: this library, the search engine (Settings > General), More for the other sites in use.
 const tagMenu = tag => {
-  // A caption tag shows spaces; boorus spell it with underscores.
-  const sites = settings().sites.filter(s => SEARCH[s]).map(s => ({ label: s, click: () => shell.openExternal(SEARCH[s](BOORU.has(s) || s === 'animepictures' ? tag.replace(/ /g, '_') : tag)) }))
+  const s = settings()
+  const web = site => () => shell.openExternal(SEARCH[site](BOORU.has(site) || site === 'animepictures' ? tag.replace(/ /g, '_') : tag)) // boorus spell it with underscores
+  const more = s.sites.filter(x => SEARCH[x] && x !== s.engine).map(x => ({ label: x, click: web(x) }))
   Menu.buildFromTemplate([
-    { label: `Search "${tag}"`, click: () => send('search', tag) },
-    ...(sites.length ? [{ label: 'Search in', submenu: sites }] : [])
+    { label: 'Search local', click: () => send('search', tag) },
+    { label: `Search ${s.engine}`, click: web(s.engine) },
+    ...(more.length ? [{ label: 'More', submenu: more }] : [])
   ]).popup({ window: win })
 }
 
@@ -541,7 +544,8 @@ const menu = items => void Menu.buildFromTemplate([
   ] },
   { label: 'Look up tags', click: () => items.length > 1 ? lookupAll(items) : relookup(items[0]) },
   { label: 'Run the tagger', click: () => tag(items) },
-  { label: 'Edit', submenu: [['copyright', 'Series'], ['character', 'Characters'], ['artist', 'Artists']].map(([field, label]) => ({ label: label + '…', click: () => send('edit', { items, field, label }) })) },
+  { label: 'Edit', submenu: [['quality', 'Quality'], ['copyright', 'Series'], ['character', 'Characters'], ['artist', 'Artists']].map(([field, label]) => ({ label: label + '…',
+    click: () => send('edit', { items, field, label, ...field === 'quality' && { options: profile().qualities.split(',').map(t => t.trim()).filter(Boolean) } }) })) }, // quality: the profile's words to pick from
   { label: 'Export', click: () => exportItems(items) },
   { type: 'separator' },
   { label: 'Delete', click: async () => { for (const i of items) await remove(i) } }

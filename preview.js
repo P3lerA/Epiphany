@@ -22,12 +22,21 @@ const preview = async (item, root) => {
   dlg.querySelector('.next').hidden = !next
   dlg.querySelector('img').src = item.url
   dlg.querySelector('.time').textContent = new Date(item.time).toLocaleString()
+  const head = dlg.querySelector('.head'), ta = dlg.querySelector('textarea')
   const link = (text, f) => Object.assign(document.createElement('a'), { href: '#', textContent: text, onclick: e => { e.preventDefault(); f() } })
   const from = item.from && (item.from.url ? link(item.from.site, () => api.open(item.from.url)) : item.from.site)
-  dlg.querySelector('.tagged').replaceChildren(...(from ? ['Tags from ', from] : [{ none: 'Tags: none', unsure: 'Tags: pick a match', tagger: 'Tags from tagger' }[item.tagged]]),
-    ' · ', link('Look up', () => api.lookup(item)), ' · ', link('Tag', () => api.tag([item]))) // a booru match may be a variant; one pulled from a booru is kept (main.js)
+  const acts = document.createElement('span')
+  acts.className = 'acts'
+  acts.append(link('Look up', () => api.lookup(item)), ' / ', link('Tag', () => api.tag([item]))) // a booru match may be a variant; one pulled from a booru is kept (main.js)
+  dlg.querySelector('.tagged').replaceChildren(...(from ? ['Tags from ', from] : [{ none: 'Tags: none', unsure: 'Tags: pick a match', tagger: 'Tags from tagger' }[item.tagged]]), acts)
+  // The head's names: click searches this library, right-click has the rest, as a tag in the box does.
+  const known = new Set(['character', 'copyright', 'artist'].flatMap(k => names(item[k])))
+  const drawHead = text => head.replaceChildren(...text.split(', ').filter(Boolean).flatMap((t, i) => {
+    const n = t.replace(/^@/, '')
+    const el = known.has(n) ? Object.assign(document.createElement('span'), { textContent: t, onclick: () => searchLocal(n), oncontextmenu: () => api.tagMenu(n) }) : t
+    return i ? [', ', el] : [el]
+  }))
   // Close IQDB matches: click one to see its caption, Use to keep it, View post to see it on its booru.
-  const head = dlg.querySelector('.head'), ta = dlg.querySelector('textarea')
   const picks = dlg.querySelector('.picks'), use = dlg.querySelector('.use'), post = dlg.querySelector('.post')
   use.hidden = post.hidden = true
   picks.replaceChildren(...(item.candidates ?? []).map((c, i) => {
@@ -36,7 +45,7 @@ const preview = async (item, root) => {
     b.title = c.plus.join(', ') || 'no tags of its own'
     b.onclick = () => {
       picks.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b))
-      head.textContent = c.head
+      drawHead(c.head)
       ta.value = c.tags
       use.hidden = false
       use.onclick = () => api.pick(item, i)
@@ -53,7 +62,7 @@ const preview = async (item, root) => {
   src.replaceChildren(u.protocol + '//', Object.assign(document.createElement('b'), { textContent: u.host }), u.pathname + u.search)
   src.onclick = e => { e.preventDefault(); api.open(item.page) }
   const c = await api.getCaption(item)
-  head.textContent = c.head // the profile's part, from the sidecar: shown, not edited
+  drawHead(c.head) // the profile's part, from the sidecar: shown, not edited
   ta.value = c.tags
   ta.onchange = () => api.setCaption(item, ta.value)
   if (!dlg.open) { bar(true); dlg.showModal() }
@@ -70,4 +79,5 @@ const tagAt = ta => {
   return ta.value.slice(a, b < 0 ? undefined : b).trim()
 }
 dlg.querySelector('textarea').oncontextmenu = e => { const t = tagAt(e.target); if (t) api.tagMenu(t) }
-api.onSearch(tag => { dlg.close(); swap(() => { scope.value = ''; search.value = tag; localQ() }); search.focus() })
+const searchLocal = tag => { dlg.close(); swap(() => { scope.value = ''; search.value = tag; localQ() }); search.focus() }
+api.onSearch(searchLocal)

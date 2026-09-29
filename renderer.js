@@ -96,21 +96,40 @@ selUI.querySelector('.lookup').onclick = () => api.lookupAll(items.filter(i => s
 selUI.querySelector('.tag').onclick = () => api.tag(items.filter(i => sel.has(i.file)))
 // Right-click > Edit > a field: one line where the menu was, what they all share filled in, the library's names to pick from.
 // Enter writes it to every one of them; Esc or a click away leaves them be.
-const editUI = $('#edit'), editIn = editUI.querySelector('input')
-let menuAt = [0, 0], editing
+const editUI = $('#edit'), editIn = editUI.querySelector('input'), hints = editUI.querySelector('ul')
+let menuAt = [0, 0], editing, choices = [], hi = -1
 addEventListener('contextmenu', e => menuAt = [e.clientX, e.clientY])
 const names = v => (v || '').split(', ').map(t => t.replace(/^@/, '').replace(/_/g, ' ')).filter(Boolean)
 api.onEdit(e => {
   editing = e
   const now = new Set(e.items.map(i => names(i[e.field]).join(', ')))
   editIn.value = now.size === 1 ? [...now][0] : ''
-  editIn.placeholder = `${e.label}, comma-separated`
-  editUI.querySelector('datalist').innerHTML = [...new Set(items.flatMap(i => names(i[e.field])))].sort().map(n => `<option value="${esc(n)}">`).join('')
+  editIn.placeholder = e.options ? e.label : `${e.label}, comma-separated`
+  choices = e.options ?? [...new Set(items.flatMap(i => names(i[e.field])))].sort()
   editUI.style.left = Math.min(menuAt[0], innerWidth - 340) + 'px'
   editUI.style.top = Math.min(menuAt[1], innerHeight - 56) + 'px'
+  editUI.classList.toggle('up', menuAt[1] > innerHeight / 2)
   editUI.showPopover()
   editIn.select()
+  suggest(!editIn.value) // an empty box offers them all
 })
+// The names the piece being typed (after the last comma) could be, not yet in the box. Our list: a datalist's can't be styled.
+const suggest = (all = true) => {
+  const typed = editIn.value.split(',').map(t => t.trim()), piece = typed.pop().toLowerCase()
+  const list = all ? choices.filter(c => c.toLowerCase().includes(piece) && c.toLowerCase() !== piece && !typed.includes(c)).slice(0, 8) : []
+  hi = -1
+  hints.replaceChildren(...list.map(c => Object.assign(document.createElement('li'), { textContent: c, onmousedown: e => { e.preventDefault(); take(c) } })))
+}
+const take = c => { editIn.value = [...editIn.value.split(',').slice(0, -1).map(t => t.trim()), c].join(', '); suggest() }
+editIn.oninput = () => suggest()
+editIn.onkeydown = e => {
+  const li = hints.children
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && li.length) {
+    e.preventDefault()
+    hi = e.key === 'ArrowDown' ? Math.min(hi + 1, li.length - 1) : Math.max(hi - 1, -1)
+    ;[...li].forEach((x, i) => x.classList.toggle('on', i === hi))
+  } else if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); take(li[hi].textContent) } // Enter on a name picks it; otherwise it writes
+}
 editUI.onsubmit = e => { e.preventDefault(); api.setField(editing.items, editing.field, editIn.value); editUI.hidePopover() }
 // Pending: no tags yet (none), or close matches waiting for a pick (unsure). A pill that toggles the pending filter.
 const pending = t => t === 'none' || t === 'unsure'
@@ -166,6 +185,11 @@ const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase(
 let typing
 search.oninput = scope.onchange = () => { clearTimeout(typing); typing = setTimeout(() => swap(() => { localQ(); backToPiles() }), 120) } // filter changes move the pictures, see swap; one move once typing pauses, not one per key
 $('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')); search.focus() }
+// local, the search engine (Settings > General), More: the other sites in use.
+const drawScope = () => api.searchSites().then(names => {
+  const more = names.filter(n => s.sites.includes(n) && n !== s.engine).map(n => `<option>${n}</option>`).join('')
+  scope.innerHTML = `<option value="">local</option><option>${s.engine}</option>` + (more && `<optgroup label="More">${more}</optgroup>`)
+})
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 // A segment's choice clicked again goes off: none chosen means any (piles: by tags). Choosing a kind of pile shows the piles.
@@ -180,12 +204,14 @@ const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root
 // Everything drawn from the library or from what is on show, redrawn after any change to either: the pending pill, the source list,
 // the empty face, the foot. New ones go here. (The piles follow through applyFilters in a swap, or refreshPiles after a pull.)
 const changed = () => { if (!items) return; drawPending(); drawSites(); face(); tally(); buildAhead() }
-// The Lobby's foot (style.css): the pictures on show and the distinct tags they carry.
+// The Lobby's foot (style.css): what is on show, every filter applied. The grid: its pictures and the distinct tags they carry;
+// piles: the pictures in them (one with no tag is in none) and the piles.
 const plural = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`
 const tally = () => {
-  const lobby = $('#lobby'), imgs = shown(lobby), tags = new Set(imgs.flatMap(i => i.item.tags?.split(', ') ?? []))
-  tags.delete('')
-  if (imgs.length) lobby.dataset.tally = `${plural(imgs.length, 'image')}, ${plural(tags.size, 'tag')}`
+  const lobby = $('#lobby'), piles = lobby.classList.contains('piling') && lobby.querySelector(':scope > .piles')
+  const imgs = piles ? [...piles.shows] : shown(lobby)
+  const tags = piles ? piles.children.length : new Set(imgs.flatMap(i => i.item.tags?.split(', ') ?? []).filter(Boolean)).size
+  if (imgs.length) lobby.dataset.tally = `${plural(imgs.length, 'image')}, ${plural(tags, 'tag')}`
   else delete lobby.dataset.tally
 }
 // Nothing on show (no pictures yet, a search that finds none, no piles): a face in the middle, no words (style.css). Picked anew
@@ -226,7 +252,7 @@ addEventListener('DOMContentLoaded', () => Promise.all([api.list(), api.projects
   s = settings
   render($('#lobby'), items)
   drawProjects()
-  api.searchSites().then(names => scope.innerHTML = '<option value="">local</option>' + names.filter(n => s.sites.includes(n)).map(n => `<option>${n}</option>`).join(''))
+  drawScope()
   applyFilters()
   settingsUI(profiles)
 }))
