@@ -18,11 +18,12 @@ const AT = { general: .4, character: .5, copyright: .6, style: .25, meta: .4 }
 const SIDE = 1008
 
 // The guess as a post, so info/meta/caption read it like any booru's. Guesses keep probabilities >= .1, so thresholds can change later.
-const above = (t, c) => Object.entries(t[c] ?? {}).filter(([, p]) => p >= AT[c]).sort((a, b) => b[1] - a[1]).map(([k]) => k).join(' ')
+// One artist, the likeliest: a picture has one; the others are look-alike styles.
+const above = (t, c, n) => Object.entries(t[c] ?? {}).filter(([, p]) => p >= AT[c]).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k).join(' ')
 const post = t => {
   const r = Object.entries(t.rating ?? {}).sort((a, b) => b[1] - a[1])[0]?.[0].slice(-1) // rating:g/s/q/e
   return { tag_string_general: above(t, 'general'), tag_string_character: above(t, 'character'), tag_string_copyright: above(t, 'copyright'),
-    tag_string_artist: above(t, 'style'), tag_string_meta: above(t, 'meta'), rating: { g: 'general', s: 'sensitive', q: 'questionable', e: 'explicit' }[r] ?? '' }
+    tag_string_artist: above(t, 'style', 1), tag_string_meta: above(t, 'meta'), rating: { g: 'general', s: 'sensitive', q: 'questionable', e: 'explicit' }[r] ?? '' }
 }
 
 // The picture as the model takes it: RGB over white, letterboxed with black to 1008 square, scaled to -1..1, planar. nativeImage
