@@ -1,5 +1,5 @@
 // Preview: big image + editable caption. Reusable for any item.
-const dlg = $('#preview')
+const dlg = $('#preview'), ta = dlg.querySelector('textarea')
 let cur // which grid the preview walks, and where it is
 const siblings = () => {
   const imgs = shown(cur.root)
@@ -22,7 +22,7 @@ const preview = async (item, root) => {
   dlg.querySelector('.next').hidden = !next
   dlg.querySelector('img').src = item.url
   dlg.querySelector('.time').textContent = new Date(item.time).toLocaleString()
-  const head = dlg.querySelector('.head'), ta = dlg.querySelector('textarea')
+  const head = dlg.querySelector('.head')
   const link = (text, f) => Object.assign(document.createElement('a'), { href: '#', textContent: text, onclick: e => { e.preventDefault(); f() } })
   const from = item.from && (item.from.url ? link(item.from.site, () => api.open(item.from.url)) : item.from.site)
   const acts = document.createElement('span')
@@ -70,14 +70,17 @@ const preview = async (item, root) => {
 }
 dlg.onclick = e => { if (e.target === dlg) dlg.close() }
 dlg.onclose = () => setTimeout(() => dlg.open || bar(), 150) // the strip turns opaque again once the backdrop has faded
-// Right-click a tag in the caption: the selection, or the comma-delimited piece under the caret.
-const tagAt = ta => {
-  const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim()
-  if (sel) return sel
-  const a = ta.value.lastIndexOf(',', ta.selectionStart - 1) + 1
-  const b = ta.value.indexOf(',', ta.selectionStart)
-  return ta.value.slice(a, b < 0 ? undefined : b).trim()
+// The comma-delimited piece around a place in the caption, spaces trimmed: [start, end].
+const piece = (v, i) => {
+  let a = v.lastIndexOf(',', i - 1) + 1, b = v.indexOf(',', i)
+  if (b < 0) b = v.length
+  while (a < b && /\s/.test(v[a])) a++
+  while (b > a && /\s/.test(v[b - 1])) b--
+  return [a, b]
 }
-dlg.querySelector('textarea').oncontextmenu = e => { const t = tagAt(e.target); if (t) api.tagMenu(t) }
+// Right-click a tag in the caption: the selection, or the piece under the caret.
+const tagAt = () => ta.value.slice(ta.selectionStart, ta.selectionEnd).trim() || ta.value.slice(...piece(ta.value, ta.selectionStart))
+ta.oncontextmenu = () => { const t = tagAt(); if (t) api.tagMenu(t) }
+ta.ondblclick = () => ta.setSelectionRange(...piece(ta.value, ta.selectionStart)) // the whole tag ("long hair"), not one word
 const searchLocal = tag => { dlg.close(); swap(() => { scope.value = ''; search.value = tag; localQ() }); search.focus() }
 api.onSearch(searchLocal)
