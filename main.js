@@ -78,7 +78,7 @@ const info = item => {
   const tagged = j.tagged ?? (j.booru || BOORU.has(j.category) ? 'booru' : j.candidates ? 'unsure' : j.tagger ? 'tagger' : 'none') // j.tagged: the caption was emptied by hand
   // Each candidate with the tags only it has, so look-alike variants can be told apart.
   const sets = j.candidates?.map(c => new Set(words(c.post.tag_string_general)))
-  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb ? pathToFileURL(c.thumb).href : c.post.preview_file_url, caption: caption(profile(), meta(c.post)), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
+  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb && fs.existsSync(c.thumb) ? pathToFileURL(c.thumb).href : c.post.preview_file_url ?? c.post.preview_url, caption: caption(profile(), meta(c.post)), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
   const from = j.booru ? postUrl(j.booru) : BOORU.has(j.category) ? postUrl(j) : undefined
   const m = facts(j)
@@ -246,11 +246,12 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
     if (near.length && near[0].score >= settings().accept && (near.length === 1 || near[0].score - near[1].score >= 15)) hit = near[0].post
     else if (near.length) {
       j.candidates = near
-      // Their preview thumbnails, fetched here (Chromium's stack, proven against the CDN) and kept beside our own thumbs.
+      // Their preview thumbnails, fetched here (Chromium's stack, proven against the CDN) and kept beside our own thumbs; one that
+      // doesn't save shows from its site instead (info).
       const p = path.basename(path.dirname(path.dirname(file)))
       for (const c of near) {
         const t = path.join(thumbs(p), `cand-${c.post.category}-${c.post.id}.jpg`) // ids collide across sites
-        if (!fs.existsSync(t)) await net.fetch(c.post.preview_file_url ?? c.post.preview_url).then(async r => r.ok && fs.writeFileSync(t, Buffer.from(await r.arrayBuffer()))).catch(() => {})
+        if (!fs.existsSync(t)) await net.fetch(c.post.preview_file_url ?? c.post.preview_url, { signal: AbortSignal.timeout(15000) }).then(async r => r.ok && fs.writeFileSync(t, Buffer.from(await r.arrayBuffer()))).catch(() => {})
         if (fs.existsSync(t)) c.thumb = t
       }
     }
@@ -686,6 +687,9 @@ app.whenReady().then(() => {
         err => { console.error(err.message); note(err.message, true); res.writeHead(500).end(err.message) }
       )
     })
+  }).on('error', () => { // taken, or reserved by Windows (its ranges move): the app runs, only the extension can't reach it
+    const say = () => note(`Extension can't connect: port ${PORT}`, true)
+    win.webContents.isLoading() ? win.webContents.once('did-finish-load', say) : say()
   }).listen(PORT, '127.0.0.1')
   createWindow()
   pullWikis()

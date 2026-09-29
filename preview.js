@@ -33,7 +33,7 @@ const preview = async (item, root) => {
   use.hidden = post.hidden = true
   picks.replaceChildren(...(item.candidates ?? []).map((c, i) => {
     const b = document.createElement('button')
-    b.innerHTML = `<img src="${esc(c.url ?? '')}"><span>${c.score}% · +${c.plus.length}</span>`
+    b.innerHTML = `<img${c.url ? ` src="${esc(c.url)}"` : ''}><span>${c.score}% · +${c.plus.length}</span>`
     b.title = c.plus.join(', ') || 'no tags of its own'
     b.onclick = () => {
       picks.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b))
