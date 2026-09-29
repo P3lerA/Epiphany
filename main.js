@@ -151,7 +151,7 @@ function createWindow() {
 }
 
 // Only web URLs reach fetch/gallery-dl; anything else (file:, "--exec=...") is refused.
-const web = u => { if (!/^https?:$/.test(new URL(u).protocol)) throw new Error(`Not a web URL: ${u}`) }
+const web = u => { if (!URL.canParse(u) || !/^https?:$/.test(new URL(u).protocol)) throw new Error(`Not a web URL: ${u}`) }
 
 // Right-click: one image URL, fetched directly.
 async function save({ src, page }) {

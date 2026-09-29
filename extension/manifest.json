@@ -9,6 +9,7 @@
     "128": "icons/icon128.png"
   },
   "permissions": [
+    "activeTab",
     "contextMenus",
     "storage"
   ],
@@ -20,7 +21,7 @@
   },
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Alt+P" },
+      "suggested_key": { "default": "Alt+S" },
       "description": "Pull this page into Epiphany"
     }
   },

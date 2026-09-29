@@ -33,13 +33,14 @@ const send = async (tabId, body) => {
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: 'save', title: 'Save to Epiphany', contexts: ['image'] })
+  chrome.contextMenus.create({ id: 'shortcut', title: 'Change shortcut', contexts: ['action'] }) // right-click the toolbar icon; Chrome lets only its own page set one
 })
 
 // Floating button on listed sites (content.js) -> gallery-dl.
 chrome.runtime.onMessage.addListener((msg, sender, reply) => { send(sender.tab.id, msg).then(reply, () => reply(false)); return true }) // the page's button shows ! rather than hang
 
-// Toolbar icon on any site -> gallery-dl.
+// Toolbar icon (or its shortcut) on any site -> gallery-dl. activeTab lends it the tab's URL off the listed sites.
 chrome.action.onClicked.addListener(tab => send(tab.id, { page: tab.url }))
 
 // Right-click on an image -> fetch that image directly.
-chrome.contextMenus.onClicked.addListener((info, tab) => send(tab.id, { src: info.srcUrl, page: info.pageUrl }))
+chrome.contextMenus.onClicked.addListener((info, tab) => info.menuItemId === 'shortcut' ? chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }) : send(tab.id, { src: info.srcUrl, page: info.pageUrl }))
