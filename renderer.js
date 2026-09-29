@@ -144,10 +144,23 @@ const drawPending = () => {
   if (!n && F.tagged === 'pending') setTimeout(() => {
     if (F.tagged !== 'pending' || items.some(i => pending(i.tagged))) return
     Object.assign(page().dataset, { face: 'No pending!', say: '' }) // face() picks a face again once pictures show
-    setTimeout(() => { if (F.tagged === 'pending') swap(() => { F.tagged = ''; saveF(); applyFilters() }) }, 800)
+    setTimeout(() => { if (F.tagged === 'pending') swap(() => { pendingOff(); saveF(); applyFilters(); explain() }) }, 800)
   })
 }
-pendingUI.onclick = () => swap(() => { F.tagged = F.tagged === 'pending' ? '' : 'pending'; saveF(); applyFilters() })
+// The pill shows every pending picture: the search and the other filters step aside, and come back when it goes off (a click,
+// or none left). Safe mode keeps Rating.
+let aside = null
+const pendingOn = () => {
+  aside = { F: { ...F }, q: search.value, scope: scope.value }
+  Object.assign(F, { ai: true, site: '', q: '', tagged: 'pending' }, safe === null && { rating: '' })
+  search.value = ''
+  drawInputs()
+}
+const pendingOff = () => {
+  if (aside) { Object.assign(F, aside.F); search.value = aside.q; scope.value = aside.scope; aside = null } else F.tagged = ''
+  drawInputs()
+}
+pendingUI.onclick = () => swap(() => { F.tagged === 'pending' ? pendingOff() : pendingOn(); saveF(); applyFilters(); explain() })
 
 // View filters: never touch files, only what is shown. Kept per machine.
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
@@ -193,7 +206,8 @@ const drawScope = () => api.searchSites().then(names => {
   scope.innerHTML = `<option value="">local</option><option>${s.engine}</option>` + (more && `<optgroup label="More">${more}</optgroup>`)
 })
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
-filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
+const drawInputs = () => filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
+drawInputs()
 // A segment's choice clicked again goes off: none chosen means any (piles: by tags). Choosing a kind of pile shows the piles.
 // Right-click on Rating or Tags: everything but it (General: s, q, e; Sensitive, which reaches down to General: q, e).
 filters.querySelectorAll('.seg').forEach(seg => {
@@ -211,7 +225,7 @@ $('.filter-toggle').oncontextmenu = () => swap(() => {
   Object.assign(F, { ai: true, tagged: '', site: '', q: '' })
   if (safe === null) F.rating = ''; else safe = ''
   search.value = ''
-  filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
+  drawInputs()
   saveF(); applyFilters(); explain()
 })
 filters.onchange = e => swap(() => { F[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveF(); applyFilters() })

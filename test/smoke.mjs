@@ -61,6 +61,13 @@ step('pending pill filters and lets go', async () => {
   await js('pendingUI.click()'); await until('shown(page()).length === 2', 'pending shown')
   await js('pendingUI.click()'); await until('shown(page()).length === 4', 'all shown')
 })
+step('the pill sets the search aside, and puts it back', async () => {
+  const booru = `shown(page()).length === 2 && shown(page()).every(i => i.dataset.file.includes('booru'))`
+  await js(`search.value = 'solo'; localQ()`); await until(booru, 'searched')
+  await js('pendingUI.click()'); await until(`shown(page()).length === 2 && !search.value && F.tagged === 'pending'`, 'pending, search aside')
+  await js('pendingUI.click()'); await until(`${booru} && search.value === 'solo' && !F.tagged`, 'search back')
+  await js(`search.value = ''; localQ()`); await until('shown(page()).length === 4', 'all shown')
+})
 step('right-click: everything but a choice; on the filter button, all off', async () => {
   const rc = sel => js(`${sel}.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }))`)
   await rc(`filters.querySelector('[data-name=tagged] [value=pending]')`); await until(`shown(page()).length === 2 && F.tagged === '!pending'`, 'all but pending')
