@@ -74,19 +74,24 @@ step('piles by tags and by characters', async () => {
   await js(`filters.querySelector('[data-name=piles] [value=character]').click(); pilesUI.click()`)
   await until(`!page().querySelector('.piles') && !flight`, 'back to the grid')
 })
-step('preview shows the caption', async () => {
+step('preview shows the head from the sidecar over the tags', async () => {
   await js(`shown(page()).find(i => i.dataset.file.endsWith('booru1.webp')).click()`); await until('dlg.open', 'preview open')
-  await until(`dlg.querySelector('textarea').value === '1girl, solo'`, 'caption')
+  await until(`dlg.querySelector('textarea').value === '1girl, solo'`, 'tags')
+  assert.equal(await js(`return dlg.querySelector('.head').textContent`), 'general, hatsune miku, vocaloid, @someone')
+  assert.equal(await js(`return dlg.querySelector('.tagged').textContent`), 'Tags from danbooru · Look up · Tag')
   await js('dlg.close()')
 })
-step('an emptied caption is pending, a written one lifts it', async () => {
-  await js(`await api.setCaption(items.find(i => i.file.endsWith('booru1.webp')), '')`); await until(`pendingUI.textContent === '3 pending'`, 'pending up')
-  await js(`await api.setCaption(items.find(i => i.file.endsWith('booru1.webp')), '1girl, solo')`); await until(`pendingUI.textContent === '2 pending'`, 'pending down')
+step('tags written by hand stay in the .txt, the sidecar untouched', async () => {
+  await js(`await api.setCaption(items.find(i => i.file.endsWith('booru1.webp')), 'solo, smile')`)
+  assert.equal(fs.readFileSync(path.join(data, 'booru1.txt'), 'utf8'), 'solo, smile')
+  assert.equal(await js('return pendingUI.textContent'), '2 pending')
 })
-step('a field written by hand for several: the page and the captions follow', async () => {
+step('a field written by hand for several: the page and the heads follow, the tags stay', async () => {
   await js(`await api.setField(items.filter(i => i.file.includes('booru')), 'character', 'kagamine rin, hatsune miku')`)
   await until(`items.filter(i => i.character === 'kagamine_rin, hatsune_miku').length === 2`, 'characters on the page')
-  assert.match(await js(`return api.getCaption(items.find(i => i.file.endsWith('booru2.webp')).file)`), /kagamine rin, hatsune miku/)
+  const c = await js(`return api.getCaption(items.find(i => i.file.endsWith('booru1.webp')))`)
+  assert.match(c.head, /kagamine rin, hatsune miku/)
+  assert.equal(c.tags, 'solo, smile')
 })
 step('settings pages draw, Instruments lists the tools', async () => {
   for (const h of ['general', 'profile', 'sites']) { await js(`location.hash = '#${h}'`); await until(`$('#${h} ul').children.length > 1`, h) }

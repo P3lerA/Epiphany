@@ -5,7 +5,7 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 const { execFile, spawn } = require('child_process')
 const crypto = require('crypto')
-const { PROFILES, caption } = require('./profiles')
+const { PROFILES, caption, exported, tagLine } = require('./profiles')
 const Tagger = require('./tagger')
 const { autoUpdater } = require('electron-updater')
 
@@ -32,7 +32,7 @@ const editTemplate = () => {
   const f = templateFile()
   if (!fs.existsSync(f)) {
     fs.mkdirSync(path.dirname(f), { recursive: true })
-    const note = `<!-- Caption template for the "${settings().profile}" profile. One piece per line. {{tags}} {{artist}} {{character}} {{copyright}} {{rating}} {{score}} are filled in per picture. Delete this file (or Reset in Settings) to go back to the default. -->`
+    const note = `<!-- Caption template for the "${settings().profile}" profile. One piece per line. {{tags}} {{artist}} {{character}} {{copyright}} {{rating}} {{quality}} are filled in per picture. Delete this file (or Reset in Settings) to go back to the default. -->`
     fs.writeFileSync(f, [note, ...profile().caption.split(',').map(x => x.trim())].join('\n') + '\n')
   }
   return shell.openPath(f)
@@ -60,14 +60,15 @@ const withUrl = item => ({ ...item, url: pathToFileURL(item.file).href })
 const rating = j => {
   const r = String(j.rating ?? '').toLowerCase()
   const four = j.category === 'danbooru' || j.category === 'gelbooru' // elsewhere s = safe
-  return r.startsWith('safe') || (!four && r === 's') ? 'g' : (r[0] ?? '')
+  return r.startsWith('safe') || (!four && r === 's') ? 'g' : r.startsWith('r-18') ? 'e' : (r[0] ?? '') // pixiv: General, R-18, R-18G
 }
 
 // Where a picture's tags come from: a booru match looked up for a non-booru source, the booru it was pulled from, or the tagger's guess.
 const source = j => j.booru ?? (j.tagger && !BOORU.has(j.category) ? tagger.post(j.tagger) : j)
 // Its caption fields: the source's, with series, characters and artists written by hand over them (j.edit, booru-style strings).
 const facts = j => ({ ...meta(source(j)), ...Object.fromEntries(Object.entries(j.edit ?? {}).map(([k, v]) => [k, words(v).join(k === 'artist' ? ', @' : ', ')])) })
-const recaption = (item, j) => fs.writeFileSync(txt(item.file), caption(profile(), facts(j)))
+// Rebuilds the .txt, the general tags, from the sidecar; what was written there by hand goes.
+const recaption = (item, j) => fs.writeFileSync(txt(item.file), tagLine(facts(j).tags))
 const info = item => {
   const j = sidecar(item, null)
   if (!j) return { site: new URL(item.page).host, ai: false, rating: '', tagged: 'none' }
@@ -75,12 +76,12 @@ const info = item => {
   const tags = [b.tag_string, b.tags, b.tag_string_meta, b.tags_metadata].flatMap(words)
   // booru: booru-vocabulary tags (pulled from one, or matched); unsure: close matches await a pick; tagger: no booru has it, the
   // tagger guessed; none: no tags.
-  const tagged = j.tagged ?? (j.booru || BOORU.has(j.category) ? 'booru' : j.candidates ? 'unsure' : j.tagger ? 'tagger' : 'none') // j.tagged: the caption was emptied by hand
+  const tagged = j.booru || BOORU.has(j.category) ? 'booru' : j.candidates ? 'unsure' : j.tagger ? 'tagger' : 'none'
   // Each candidate with the tags only it has, so look-alike variants can be told apart.
   const sets = j.candidates?.map(c => new Set(words(c.post.tag_string_general)))
-  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb && fs.existsSync(c.thumb) ? pathToFileURL(c.thumb).href : c.post.preview_file_url ?? c.post.preview_url, caption: caption(profile(), meta(c.post)), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
+  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb && fs.existsSync(c.thumb) ? pathToFileURL(c.thumb).href : c.post.preview_file_url ?? c.post.preview_url, head: caption(profile(), meta(c.post)), tags: tagLine(meta(c.post).tags), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
-  const from = j.booru ? postUrl(j.booru) : BOORU.has(j.category) ? postUrl(j) : undefined
+  const p = j.booru ?? (BOORU.has(j.category) ? j : null), from = p && { site: p.category, url: postUrl(p) }
   const m = facts(j)
   return { site: j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, tagged, candidates, from }
 }
@@ -275,7 +276,7 @@ async function pullOne({ page }) {
   const before = new Set(fs.readdirSync(d))
   // ponytail: --range caps a search page at 50 posts; make it a profile field if you want whole searches
   await gdl(['--write-metadata', '-o', 'tags=true', '--range', '1-50', '-D', d, '--', page])
-  const s = settings(), prof = profile(), m = path.join(d, 'meta.jsonl')
+  const s = settings(), m = path.join(d, 'meta.jsonl')
   const known = new Set(fs.existsSync(m) ? fs.readFileSync(m, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l).file) : [])
   const items = [], later = []
   for (const f of fs.readdirSync(d)) {
@@ -286,7 +287,7 @@ async function pullOne({ page }) {
     const item = record({ file: path.join(d, img), src: page, page, time: new Date().toISOString() })
     items.push(item)
     // The site's own tags caption it right away; a booru match (below) replaces that.
-    if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), caption(prof, meta(j)))
+    if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), tagLine(meta(j).tags))
     if (s.lookup && !BOORU.has(j.category)) later.push(item)
   }
   if (!items.length) throw new Error('Nothing new from ' + new URL(page).host)
@@ -302,17 +303,11 @@ const list = () => Promise.all(projects().flatMap(p => {
 
 const newProject = name => { if (/^[\w-]+$/.test(name)) dir(name) }
 const txt = f => f.replace(/\.[^.]+$/, '.txt')
-const getCaption = file => fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : ''
-// A caption emptied by hand makes the picture untagged, whatever its sidecar says, so Look up / Tag show again; anything else
-// written there lifts that.
-const setCaption = (item, text) => {
-  fs.writeFileSync(txt(item.file), text)
-  const j = sidecar(item, null), empty = !text.split(',').some(t => t.trim())
-  if (!j || !!j.tagged === empty) return
-  if (empty) j.tagged = 'none'; else delete j.tagged
-  writeJson(item.file + '.json', j)
-  enrich(item).then(e => send('saved', { ...e, replace: true }))
-}
+const tagsOf = file => fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : ''
+// The head from the sidecar under the current profile, then the .txt.
+const getCaption = item => ({ head: caption(profile(), facts(sidecar(item))), tags: tagsOf(item.file) })
+// The sidecar is the record; a caption written by hand lives in the .txt only, until the next rebuild from the sidecar.
+const setCaption = (item, text) => fs.writeFileSync(txt(item.file), text)
 const open = url => shell.openExternal(url)
 
 // Right-click on a picture. Delete goes to the Recycle Bin, so no confirm.
@@ -395,7 +390,6 @@ const categorize = async p => {
 const adopt = async (item, j, hit) => {
   j.booru = await categorize(hit)
   delete j.candidates
-  delete j.tagged
   writeJson(item.file + '.json', j)
   recaption(item, j)
   enrich(item).then(e => send('saved', { ...e, replace: true }))
@@ -404,17 +398,17 @@ const adopt = async (item, j, hit) => {
 const resolve = async (item, j, say) => {
   delete j.candidates
   // Pulled from a booru: its own tags are the caption, nothing to look up (this re-renders it under the current profile).
-  if (BOORU.has(j.category)) { if (j.tagged) { delete j.tagged; writeJson(item.file + '.json', j) }; recaption(item, j); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
+  if (BOORU.has(j.category)) { recaption(item, j); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
   const hit = await lookup(j, item.file, say)
   if (hit) await adopt(item, j, hit)
   else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
-  else if (!j.booru && (!j.tagger || j.tagged) && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it (j.tagged: its caption was emptied)
+  else if (!j.booru && !j.tagger && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
   return hit
 }
 const relookup = async item => {
   const t = task('Looking up'), j = sidecar(item)
   const hit = await resolve(item, j, s => t.set(`Looking up: ${s}`)).catch(e => { t.end(); note(e.message, true); throw e })
-  t.end(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches` : j.tagger && !j.tagged ? 'No match, tagged' : canSimilar() ? 'No match' : 'No exact match')
+  t.end(hit ? `Tags from ${hit.category}` : j.candidates ? `${j.candidates.length} close matches` : j.tagger ? 'No match, tagged' : canSimilar() ? 'No match' : 'No exact match')
   return hit
 }
 
@@ -424,7 +418,6 @@ const tagIt = async (item, j = sidecar(item)) => {
   j.tagger = await tagger.guess(item.file)
   delete j.booru // a match the tagger replaces: likely a look-alike variant; Look up finds it again
   delete j.candidates
-  delete j.tagged
   writeJson(item.file + '.json', j)
   recaption(item, j)
   enrich(item).then(e => send('saved', { ...e, replace: true }))
@@ -464,15 +457,18 @@ const projectMenu = name => void Menu.buildFromTemplate([
   { label: 'Delete project', click: () => removeProject(name) }
 ]).popup({ window: win })
 // Export: pictures and their captions into a folder of the user's choosing, which is all a trainer reads. Same names; a clash gets the project as prefix.
+// A caption: the profile's head from the sidecar, then the .txt's tags.
 const exportItems = async items => {
   const { filePaths: [d] } = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
   if (!d) return
   let captions = 0
+  const name = settings().profile, prof = profile()
   for (const it of items) {
-    let name = path.basename(it.file)
-    if (fs.existsSync(path.join(d, name))) name = it.project + '_' + name
-    fs.copyFileSync(it.file, path.join(d, name))
-    if (fs.existsSync(txt(it.file))) { fs.copyFileSync(txt(it.file), txt(path.join(d, name))); captions++ }
+    let to = path.join(d, path.basename(it.file))
+    if (fs.existsSync(to)) to = path.join(d, it.project + '_' + path.basename(it.file))
+    fs.copyFileSync(it.file, to)
+    const text = exported(name, caption(prof, facts(sidecar(it)), tagsOf(it.file)))
+    if (text) { fs.writeFileSync(txt(to), text); captions++ }
   }
   note(`${items.length} pictures, ${captions} captions → ${path.basename(d)}`)
   shell.showItemInFolder(d)
@@ -486,7 +482,7 @@ const lookupAll = async items => {
       const j = sidecar(item)
       if (await resolve(item, j, s => t.set(`Looking up ${k + 1}/${items.length}: ${s}`))) matched++
       else if (j.candidates) unsure++
-      else if (j.tagger && !j.tagged) tagged++
+      else if (j.tagger) tagged++
     } catch (e) { note(e.message, true) }
   }
   t.end(`${matched} matched, ${unsure} to pick, ${tagged ? `${tagged} tagged, ` : ''}${items.length - matched - unsure - tagged} none`)
@@ -499,7 +495,6 @@ const setField = (items, field, text) => {
     const j = sidecar(item)
     ;(j.edit ??= {})[field] = v
     writeJson(item.file + '.json', j)
-    recaption(item, j)
     enrich(item).then(e => send('saved', { ...e, replace: true }))
   }
 }

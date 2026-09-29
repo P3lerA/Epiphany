@@ -22,13 +22,12 @@ const preview = async (item, root) => {
   dlg.querySelector('.next').hidden = !next
   dlg.querySelector('img').src = item.url
   dlg.querySelector('.time').textContent = new Date(item.time).toLocaleString()
-  dlg.querySelector('.rating').textContent = { g: 'general', s: 'sensitive', q: 'questionable', e: 'explicit' }[item.rating] ?? ''
-  const tagged = dlg.querySelector('.tagged')
-  tagged.textContent = { booru: 'Tags: booru', none: 'Tags: none', unsure: 'Tags: pick a match', tagger: 'Tags: tagger' }[item.tagged]
-  const act = (text, f) => tagged.append(tagged.lastElementChild ? ' / ' : ' ', Object.assign(document.createElement('a'), { href: '#', textContent: text, onclick: e => { e.preventDefault(); f() } }))
-  if (item.tagged !== 'booru') act('Look up', () => api.lookup(item)) // an emptied caption counts as none
-  act('Tag', () => api.tag([item])) // a booru match may be a variant; one pulled from a booru is kept (main.js)
-  // Close IQDB matches: click one to see its caption in the box, Use to keep it, View post to see it on its booru.
+  const link = (text, f) => Object.assign(document.createElement('a'), { href: '#', textContent: text, onclick: e => { e.preventDefault(); f() } })
+  const from = item.from && (item.from.url ? link(item.from.site, () => api.open(item.from.url)) : item.from.site)
+  dlg.querySelector('.tagged').replaceChildren(...(from ? ['Tags from ', from] : [{ none: 'Tags: none', unsure: 'Tags: pick a match', tagger: 'Tags from tagger' }[item.tagged]]),
+    ' · ', link('Look up', () => api.lookup(item)), ' · ', link('Tag', () => api.tag([item]))) // a booru match may be a variant; one pulled from a booru is kept (main.js)
+  // Close IQDB matches: click one to see its caption, Use to keep it, View post to see it on its booru.
+  const head = dlg.querySelector('.head'), ta = dlg.querySelector('textarea')
   const picks = dlg.querySelector('.picks'), use = dlg.querySelector('.use'), post = dlg.querySelector('.post')
   use.hidden = post.hidden = true
   picks.replaceChildren(...(item.candidates ?? []).map((c, i) => {
@@ -37,7 +36,8 @@ const preview = async (item, root) => {
     b.title = c.plus.join(', ') || 'no tags of its own'
     b.onclick = () => {
       picks.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b))
-      dlg.querySelector('textarea').value = c.caption
+      head.textContent = c.head
+      ta.value = c.tags
       use.hidden = false
       use.onclick = () => api.pick(item, i)
       post.hidden = !c.post // iqdb.org's zerochan and anime-pictures have no post link here
@@ -48,15 +48,13 @@ const preview = async (item, root) => {
   const proj = dlg.querySelector('.proj')
   proj.textContent = item.project
   proj.onclick = e => { e.preventDefault(); dlg.close(); openProject(item.project) }
-  const from = dlg.querySelector('.from')
-  from.hidden = !item.from
-  if (item.from) { from.replaceChildren('caption from ', Object.assign(document.createElement('b'), { textContent: new URL(item.from).host })); from.onclick = e => { e.preventDefault(); api.open(item.from) } }
   const src = dlg.querySelector('.src')
   const u = new URL(item.page)
   src.replaceChildren(u.protocol + '//', Object.assign(document.createElement('b'), { textContent: u.host }), u.pathname + u.search)
   src.onclick = e => { e.preventDefault(); api.open(item.page) }
-  const ta = dlg.querySelector('textarea')
-  ta.value = await api.getCaption(item.file)
+  const c = await api.getCaption(item)
+  head.textContent = c.head // the profile's part, from the sidecar: shown, not edited
+  ta.value = c.tags
   ta.onchange = () => api.setCaption(item, ta.value)
   if (!dlg.open) { bar(true); dlg.showModal() }
   dlg.focus()

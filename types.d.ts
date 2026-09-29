@@ -10,12 +10,12 @@ interface Item {
   rating: 'g' | 's' | 'q' | 'e' | '' // '' = no booru match yet
   artist?: string; character?: string; copyright?: string; tags?: string // comma-joined, underscores kept (artist: 'a, @b')
   tagged: 'booru' | 'unsure' | 'tagger' | 'none' // tagger: no booru has it, the tagger guessed
-  candidates?: { score: number; url: string; caption: string; post?: string; plus: string[] }[] // close matches waiting for a pick
-  from?: string // the post the caption's tags came from
+  candidates?: { score: number; url: string; head: string; tags: string; post?: string; plus: string[] }[] // close matches waiting for a pick
+  from?: { site: string; url?: string } // the booru post the tags came from
   replace?: true // onSaved: same picture, fresher facts
 }
 
-interface Profile { caption: string; ratings: string; scores: string; spaces: boolean }
+interface Profile { caption: string; qualities: string; scores: string; spaces: boolean }
 
 interface Settings {
   project: string; quote: string; lookup: boolean; sites: string[]; accept: number; autotag: boolean; safe?: boolean; debug?: boolean
@@ -29,8 +29,8 @@ interface Api {
   getSettings(): Promise<Settings>
   setSettings(s: Settings): Promise<void>
   profiles(): Promise<Record<string, Profile>>
-  getCaption(file: string): Promise<string>
-  setCaption(item: Item, text: string): Promise<void> // emptied: the picture counts as untagged
+  getCaption(item: Item): Promise<{ head: string; tags: string }> // head: the profile's part, from the sidecar; tags: the .txt
+  setCaption(item: Item, text: string): Promise<void> // the .txt only; a rebuild from the sidecar replaces it
   setField(items: Item[], field: 'copyright' | 'character' | 'artist', text: string): Promise<void> // comma-separated names, over the booru's or the tagger's
   open(url: string): Promise<void>
   editTemplate(): Promise<string>
