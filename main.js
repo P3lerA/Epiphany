@@ -236,11 +236,16 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
   if (!hit) {
     // Same picture, different bytes (watermark, rescale, scan): ask every enabled site that can search by similarity.
     const bytes = fs.readFileSync(file)
-    const form = field => { const d = new FormData(); d.append(field, new Blob([bytes]), path.basename(file)); return d }
+    const form = (field, b = bytes) => { const d = new FormData(); d.append(field, new Blob([b]), path.basename(file)); return d }
     const found = []
     const sites = settings().sites
     for (const site of sites) if (SIMILAR[site]) { say(`similar on ${site}`); for (const c of await SIMILAR[site](form)) found.push({ score: Math.round(c.score), post: { ...c.post, category: site } }) }
-    if (sites.some(s => IQDB_ONLY.includes(s))) { say('similar on iqdb.org'); for (const c of await iqdbOrg(form)) if (!found.some(f => f.post.category === c.post.category && f.post.id === c.post.id)) found.push(c) }
+    if (sites.some(s => IQDB_ONLY.includes(s))) {
+      say('similar on iqdb.org')
+      // It refuses over 8 MB: a bigger picture goes as a 1000px JPEG (its scores barely move; danbooru's drop a few, so only here).
+      const b = bytes.length > 8e6 ? (await nativeImage.createThumbnailFromPath(file, { width: 1000, height: 1000 })).toJPEG(90) : bytes
+      for (const c of await iqdbOrg(field => form(field, b))) if (!found.some(f => f.post.category === c.post.category && f.post.id === c.post.id)) found.push(c)
+    }
     const near = found.filter(x => x.score >= 70).sort((a, b) => b.score - a.score).slice(0, 4)
     // Settings decide how sure a similarity match must be to skip the human; exact id/md5 hits above never ask.
     if (near.length && near[0].score >= settings().accept && (near.length === 1 || near[0].score - near[1].score >= 15)) hit = near[0].post
