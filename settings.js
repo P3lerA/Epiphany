@@ -5,7 +5,7 @@ const SITES = ['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sank
 // What gallery-dl needs per site. 'oauth' = a browser login flow, the rest are config fields.
 // Field names are gallery-dl's keys, a dot for one inside another; danbooru and e621 take the API key as 'password'. ehentai: the
 // browser's login cookies (Cloudflare stops gallery-dl's own login).
-const CREDS = { danbooru: ['username', 'password'], gelbooru: ['api-key', 'user-id'], e621: ['username', 'password'],
+const CREDS = { danbooru: ['username', 'password'], gelbooru: ['api-key', 'user-id'], rule34: ['api-key', 'user-id'], e621: ['username', 'password'],
   sankaku: ['username', 'password'], twitter: ['username', 'password'], ehentai: ['cookies.ipb_member_id', 'cookies.ipb_pass_hash'], pixiv: 'oauth' }
 const SECRET = /key|password|token|hash/
 const HINT = { danbooru: { password: 'api-key' }, e621: { password: 'api-key' } } // what to paste, where the key's name says otherwise
