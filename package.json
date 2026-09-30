@@ -1,5 +1,5 @@
 {
-  "name": "electron-app",
+  "name": "epiphany",
   "version": "0.0.6",
   "main": "main.js",
   "scripts": {
