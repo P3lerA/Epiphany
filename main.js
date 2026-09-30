@@ -177,7 +177,9 @@ async function save({ src, page }) {
   const file = path.join(dir(), name)
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()))
   const item = record({ file, src, page, time: new Date().toISOString() })
-  item.looked = settings().lookup && relookup(item).catch(() => {}) // same matching as a pull, after the reply; it reports its own errors
+  // Same matching as a pull, after the reply; it reports its own errors. Not a field: the item is spread into every 'saved' after
+  // this, and IPC can't clone a Promise (importShared awaits it).
+  Object.defineProperty(item, 'looked', { value: settings().lookup && relookup(item).catch(() => {}) })
   return item
 }
 
