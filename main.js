@@ -8,7 +8,7 @@ const crypto = require('crypto')
 const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
 const share = require('./share')
-const { BOORU, EH, gdlName, postUrl, SEARCH, searchUrl, own, range } = require('./sites')
+const { BOORU, DIALECT, EH, gdlName, postUrl, SEARCH, searchUrl, own, range } = require('./sites')
 const quotes = require('./quotes')
 const { autoUpdater } = require('electron-updater')
 
@@ -197,18 +197,15 @@ const meta = j => ({
 
 
 // Similarity search per site, each answering with whole posts. Danbooru's IQDB needs an account (anonymous uploads are denied;
-// API-key auth also skips Rails CSRF; net.fetch because Cloudflare accepts Chromium's TLS, not Node's). Moebooru's post/similar is open.
-const moe = (base, form) => fetch(base + '/post/similar.json', { method: 'POST', body: form('file'), signal: AbortSignal.timeout(30000), ...UA })
-  .then(r => r.ok ? r.json() : {}).catch(() => ({})).then(j => (j.posts ?? []).map(p => ({ score: p.similarity, post: p }))) // catch after the body: a timeout can land mid-read
+// API-key auth also skips Rails CSRF; net.fetch because Cloudflare accepts Chromium's TLS, not Node's).
 const SIMILAR = {
   danbooru: form => !danAuth() ? [] : net.fetch('https://danbooru.donmai.us/iqdb_queries.json', { method: 'POST', body: form('search[file]'), signal: AbortSignal.timeout(30000), headers: { Authorization: danAuth() } })
-    .then(r => r.ok ? r.json() : (note(`IQDB: ${r.status}`, true), [])).catch(e => (note(`IQDB: ${e.message}`, true), [])).then(c => c.filter(x => x.post)),
-  yandere: form => moe('https://yande.re', form),
-  konachan: form => moe('https://konachan.com', form)
+    .then(r => r.ok ? r.json() : (note(`IQDB: ${r.status}`, true), [])).catch(e => (note(`IQDB: ${e.message}`, true), [])).then(c => c.filter(x => x.post))
 }
 // iqdb.org: one upload covers every booru it indexes, and the tags ride along in each thumbnail's alt text. It is HTML, but the
 // template has not changed since 2008; if it ever does, the regex finds nothing and we get no candidates, never wrong ones.
-const IQDB_HOST = { 'danbooru.donmai.us': 'danbooru', 'gelbooru.com': 'gelbooru', 'yande.re': 'yandere', 'konachan.com': 'konachan',
+// Hits on yande.re and konachan are left out (DIALECT).
+const IQDB_HOST = { 'danbooru.donmai.us': 'danbooru', 'gelbooru.com': 'gelbooru',
   'chan.sankakucomplex.com': 'sankaku', 'anime-pictures.net': 'animepictures', 'www.zerochan.net': 'zerochan' }
 const IQDB_ONLY = ['gelbooru', 'sankaku', 'zerochan', 'animepictures'] // enabling one of these is what turns iqdb.org on
 const iqdbOrg = form => fetch('https://iqdb.org/', { method: 'POST', body: form('file'), signal: AbortSignal.timeout(30000), ...UA })
@@ -326,7 +323,7 @@ async function pullOne({ page, range: r }, stop = {}) { // r: which of the page'
     items.push(item)
     // The site's own tags caption it right away; a booru match (below) replaces that.
     if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), tagLine(meta(j).tags))
-    if (s.lookup && !BOORU.has(j.category)) later.push(item)
+    if (s.lookup && (!BOORU.has(j.category) || DIALECT.has(j.category))) later.push(item)
   }
   // After the grid has them, and after the extension gets its answer: IQDB uploads take seconds each.
   items.looked = later.length && lookupAll(later) // a shared picture's own fields go on once these are done
@@ -360,17 +357,6 @@ const remove = async item => {
 }
 
 // Manual lookup for any picture, including right-click saves that have no sidecar.
-// A flat tag string becomes tags by kind, so @artist can be written: danbooru answers by post id; gelbooru types a batch of names;
-// the moebooru sites publish their whole artist list, fetched once a month into HOME/cache.
-const MOE = { yandere: 'https://yande.re', konachan: 'https://konachan.com' }
-const artists = async site => {
-  const f = path.join(HOME, 'cache', site + '-artists.json')
-  if (!fs.existsSync(f) || Date.now() - fs.statSync(f).mtimeMs > 30 * 864e5) {
-    const names = await fetch(MOE[site] + '/tag.json?type=1&limit=0', UA).then(r => r.json()).then(l => l.map(t => t.name), () => null)
-    if (names) { fs.mkdirSync(path.dirname(f), { recursive: true }); writeJson(f, names) }
-  }
-  return new Set(readJson(f, []))
-}
 // The post as the site has it now: iqdb.org's index lags, and a similarity hit may carry an old tag list.
 const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
 
@@ -413,9 +399,9 @@ const gelCreds = () => { const g = readJson(GDL, {}).extractor?.gelbooru ?? {}; 
 const live = p => {
   if (p.category === 'danbooru') return fetch(`https://danbooru.donmai.us/posts/${p.id}.json`, UA).then(r => r.ok ? r.json() : null, () => null)
   if (p.category === 'gelbooru') return fetch(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&id=${p.id}${gelCreds()}`, UA).then(r => r.json()).then(r => r?.post?.[0] ?? null, () => null)
-  if (MOE[p.category]) return fetch(`${MOE[p.category]}/post.json?tags=id:${p.id}`, UA).then(r => r.json()).then(r => r?.[0] ?? null, () => null)
   return null
 }
+// A flat tag string becomes tags by kind, so @artist can be written: danbooru answers by post id; gelbooru types a batch of names.
 const categorize = async p => {
   p = { ...(await live(p) ?? p), category: p.category }
   if (p.tag_string_general != null) return p
@@ -423,7 +409,7 @@ const categorize = async p => {
   if (p.category === 'gelbooru') {
     const r = await fetch(`https://gelbooru.com/index.php?page=dapi&s=tag&q=index&json=1&limit=1000&names=${encodeURIComponent(tags.join(' '))}${gelCreds()}`, UA).then(r => r.json(), () => null)
     for (const t of r?.tag ?? []) kind[t.name] = { 1: 'artist', 3: 'copyright', 4: 'character' }[t.type]
-  } else if (MOE[p.category]) { const a = await artists(p.category); for (const t of tags) if (a.has(t)) kind[t] = 'artist' }
+  }
   const of = k => tags.filter(t => kind[t] === k).join(' ')
   return { ...p, tag_string_artist: of('artist'), tag_string_copyright: of('copyright'), tag_string_character: of('character'), tag_string_general: tags.filter(t => !kind[t]).join(' ') }
 }
@@ -438,11 +424,11 @@ const adopt = async (item, j, hit) => {
 const resolve = async (item, j, say) => {
   delete j.candidates
   // Pulled from a booru: its own tags are the caption, nothing to look up (this re-renders it under the current profile).
-  if (BOORU.has(j.category)) { recaption(item, j); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
+  if (BOORU.has(j.category) && !DIALECT.has(j.category)) { recaption(item, j); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
   const hit = await lookup(j, item.file, say)
   if (hit) await adopt(item, j, hit)
   else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
-  else if (!j.booru && !j.tagger && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
+  else if (!j.booru && !j.tagger && !BOORU.has(j.category) && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
   return hit
 }
 const relookup = async item => {

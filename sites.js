@@ -3,6 +3,10 @@
 
 // Non-booru sources (pixiv, twitter...) carry no booru tags; their pictures get looked up on the boorus.
 const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34'])
+// Boorus with words of their own, and few of them (yande.re: ~8 tags a post, `seifuku` for school_uniform): their tags are the
+// last resort. A picture pulled from one is looked up like a pixiv one and keeps them only when no other booru has it; a lookup
+// never takes a match from one.
+const DIALECT = new Set(['yandere', 'konachan'])
 // E-Hentai, ExHentai: 'ehentai' in the app, gallery-dl's 'exhentai' (one extractor, one config for both). Its namespaced tags
 // (female:..., other:...) aren't booru words, so its pictures get looked up and tagged like pixiv's.
 const EH = /(^|\.)(e-|ex)hentai\.org$/
@@ -58,7 +62,7 @@ const range = u => {
     : '1-50'
 }
 
-module.exports = { BOORU, EH, gdlName, postUrl, SEARCH, searchUrl, own, range }
+module.exports = { BOORU, DIALECT, EH, gdlName, postUrl, SEARCH, searchUrl, own, range }
 
 if (require.main === module) {
   const assert = require('assert')
