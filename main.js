@@ -264,10 +264,12 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
 // its sidecar mid-pull).
 let pulling = Promise.resolve()
 // Ctrl+V on the page: every web address on the clipboard is pulled, as the extension's button would. A copied image carries its own.
-const paste = () => {
-  const shared = share.read(clipboard.readText())
+// Electron's clipboard is the W3C one: async, and HTML only through read().
+const paste = async () => {
+  const text = await clipboard.readText(), shared = share.read(text)
   if (shared.length) return shared.forEach(s => importShared(s).catch(e => note(e.message, !e.quiet)))
-  const urls = clipboard.readText().match(/https?:\/\/[^\s"'<>，。、；！？）]+/g)?.map(u => u.replace(/[.,;:!?)]+$/, '')) ?? clipboard.readHTML().match(/(?<=<img[^>]+src=")[^"]+/g)?.map(u => u.replace(/&amp;/g, '&'))
+  const html = async () => (await (await clipboard.read()).find(i => i.types.includes('text/html'))?.getType('text/html'))?.text() ?? ''
+  const urls = text.match(/https?:\/\/[^\s"'<>，。、；！？）]+/g)?.map(u => u.replace(/[.,;:!?)]+$/, '')) ?? (await html()).match(/(?<=<img[^>]+src=")[^"]+/g)?.map(u => u.replace(/&amp;/g, '&'))
   if (!urls) return note('No link to pull')
   for (const page of new Set(urls)) pull({ page }).catch(e => note(e.message, !e.quiet))
 }
@@ -282,10 +284,10 @@ const importShared = async s => {
 }
 // Preview > More > Share: the line on the clipboard; the tags only if they were written by hand. Its source: the picture's own page
 // (sites.js), else where it came from: a right-click save's image, or the page it was pulled from (maybe several: the name finds it).
-const shareItem = item => {
+const shareItem = async item => {
   const j = sidecar(item), t = tagsOf(item.file)
   const at = own(j, item.page) ?? { page: item.page, ...item.src !== item.page && { src: item.src }, name: path.basename(item.file) }
-  clipboard.writeText(share.make(at, j.edit, fs.existsSync(txt(item.file)) && t !== tagLine(facts(j).tags) ? t : undefined))
+  await clipboard.writeText(share.make(at, j.edit, fs.existsSync(txt(item.file)) && t !== tagLine(facts(j).tags) ? t : undefined))
   note('Share line copied')
 }
 const pull = q => {
