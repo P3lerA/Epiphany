@@ -14,3 +14,7 @@ btn.onclick = () => {
   })
 }
 document.body.append(btn)
+
+// yande.re hides rating:e from anyone signed out, and its sign-ups are closed: switch that blacklist off on each page, as
+// clicking it under Hidden Posts does (list pages; a post's own page shows it anyway).
+if (location.host === 'yande.re') [...document.querySelectorAll('#blacklisted-list li')].find(l => l.textContent.includes('rating:e'))?.querySelectorAll('a')[1]?.click()
