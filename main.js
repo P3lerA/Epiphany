@@ -586,11 +586,13 @@ const oauth = site => {
 // The Chrome extension ships inside the app (extraResources when packaged) and is exported for "Load unpacked".
 const EXT = app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension')
 // Self-update. Installed builds use electron-updater (latest.yml on the GitHub release).
-// The portable exe is a self-extracting shell that runs from %TEMP%, so the file itself can simply be replaced and relaunched.
+// The portable exe is a self-extracting shell that runs from %TEMP%; it stays locked (no rename, no overwrite) until its launcher has
+// cleaned up, seconds after we quit. So the new one waits beside it, and takes over as Epiphany.exe once this one is let go and
+// deleted: one name from then on, so shortcuts keep working.
 const PORTABLE = process.env.PORTABLE_EXECUTABLE_FILE
 const RELEASES = 'https://api.github.com/repos/P3lerA/Epiphany/releases/latest'
 autoUpdater.autoDownload = false
-autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall())
+autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall(true, true)) // silent: else the whole setup wizard, waiting for clicks; then relaunched
 let updating
 autoUpdater.on('download-progress', p => (updating ??= task('Downloading the update')).set(`Downloading the update ${Math.round(p.percent)}%`))
 autoUpdater.on('error', e => { updating?.end(); updating = null; note(`Update: ${e.message}`, true) })
@@ -610,11 +612,15 @@ const update = async () => {
   const t = task('Downloading ' + asset.name) // until the app quits for it
   const buf = await fetch(asset.browser_download_url).then(r => r.arrayBuffer()).then(Buffer.from).catch(e => { t.end(); throw e })
   if (buf.length !== asset.size) { t.end(); throw new Error('download incomplete') }
-  const nw = PORTABLE + '.new'
+  const to = path.join(path.dirname(PORTABLE), 'Epiphany.exe'), nw = to + '.new'
   fs.writeFileSync(nw, buf)
-  // The portable exe stays locked while its launcher cleans up the unpacked copy, seconds after we quit: retry the move for a minute.
+  // After we quit: delete this exe once its launcher lets go (retried for a minute), then the new one becomes Epiphany.exe and
+  // starts. Not app.relaunch: its helper runs from the unpacked copy and keeps the launcher from deleting it. The swap outlives us:
+  // Node's children die with it (a job object) unless detached, and a detached PowerShell has no console and does nothing. So one
+  // PowerShell starts it as its own child, outside the job, and we quit once that is done.
   const q = s => `'${s.replace(/'/g, "''")}'`
-  spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', `for ($i = 0; $i -lt 60; $i++) { try { Move-Item -LiteralPath ${q(nw)} -Destination ${q(PORTABLE)} -Force -ErrorAction Stop; break } catch { Start-Sleep 1 } }; Start-Process -FilePath ${q(PORTABLE)}`], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+  const swap = Buffer.from(`for ($i = 0; $i -lt 60; $i++) { try { Remove-Item -LiteralPath ${q(PORTABLE)} -Force -ErrorAction Stop; break } catch { Start-Sleep 1 } }; Move-Item -LiteralPath ${q(nw)} -Destination ${q(to)} -Force; Start-Process -FilePath ${q(to)}`, 'utf16le').toString('base64')
+  await new Promise(r => spawn('powershell.exe', ['-NoProfile', '-Command', `Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','${swap}'`], { stdio: 'ignore', windowsHide: true }).on('exit', r))
   app.quit()
 }
 
