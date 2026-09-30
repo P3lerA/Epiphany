@@ -48,11 +48,14 @@ const own = (j, from) => postUrl(j.booru ?? j) ? { page: postUrl(j.booru ?? j) }
   : j.category === 'exhentai' ? { page: `https://${EH.test(new URL(from).host) ? new URL(from).host : 'e-hentai.org'}/s/${j.image_token}/${j.gid}-${j.num}` } : null
 
 // How much of a page a pull takes (gallery-dl --range). A page showing one picture of a gallery: that one (E-Hentai's /s/, which
-// gallery-dl runs on from; hitomi's reader, #page). ponytail: anything else (a search, a gallery) caps at 50; make it a profile
-// field if you want whole ones.
+// gallery-dl runs on from; hitomi's reader, #page). A gallery (E-Hentai's /g/, hitomi's .../<id>.html): all of it.
+// ponytail: anything else (a search, a tag) caps at 50; make it a profile field if you want more.
 const range = u => {
-  const { host, pathname, hash } = new URL(u)
-  return EH.test(host) && pathname.startsWith('/s/') ? '1' : host.endsWith('hitomi.la') && pathname.startsWith('/reader/') ? String(parseInt(hash.slice(1)) || 1) : '1-50'
+  const { host, pathname, hash } = new URL(u), eh = EH.test(host), hitomi = host.endsWith('hitomi.la')
+  return eh && pathname.startsWith('/s/') ? '1'
+    : hitomi && pathname.startsWith('/reader/') ? String(parseInt(hash.slice(1)) || 1)
+    : (eh && pathname.startsWith('/g/')) || (hitomi && /\d+\.html$/.test(pathname)) ? '1-'
+    : '1-50'
 }
 
 module.exports = { BOORU, EH, gdlName, postUrl, SEARCH, searchUrl, own, range }
@@ -67,6 +70,9 @@ if (require.main === module) {
   assert.equal(own({ category: 'twitter' }, 'https://x.com/a'), null)
   assert.equal(range('https://e-hentai.org/s/ab/9-3'), '1')
   assert.equal(range('https://hitomi.la/reader/123.html#7'), '7')
+  assert.equal(range('https://exhentai.org/g/9/ab12/'), '1-')
+  assert.equal(range('https://hitomi.la/doujinshi/some-title-japanese-123456.html'), '1-')
+  assert.equal(range('https://hitomi.la/artist/someone-all.html'), '1-50')
   assert.equal(range('https://gelbooru.com/index.php?page=post&s=list&tags=x'), '1-50')
   console.log('ok')
 }
