@@ -2,7 +2,6 @@ node_modules/
 project/
 settings.json
 electron.log
-design/epiphany.html
 window.json
 dist/
 bin/
@@ -10,3 +9,4 @@ cache/
 captions/
 models/
 debug/
+design/
