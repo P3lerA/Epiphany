@@ -2,7 +2,7 @@
 // motion.js, piles.js, preview.js, settings.js follow and share its globals.
 
 const $ = s => document.querySelector(s)
-const esc = s => String(s).replace(/"/g, '&quot;')
+const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`) // into HTML, text or attribute (a tag can be "<3")
 let s, projects, items
 const save = () => api.setSettings(s)
 
@@ -233,7 +233,7 @@ filters.onchange = e => swap(() => { F[e.target.name] = e.target.type === 'check
 const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root); changed() }
 // Everything drawn from the library or from what is on show, redrawn after any change to either: the pending pill, the source list,
 // the empty face, the foot. New ones go here. (The piles follow through applyFilters in a swap, or refreshPiles after a pull.)
-const changed = () => { if (!items) return; drawPending(); drawSites(); face(); tally(); buildAhead() }
+const changed = () => { if (!items) return; drawPending(); drawSites(); face(); tally(); buildAhead(); drawStats() }
 // The Lobby's foot (style.css): what is on show, every filter applied. The grid: its pictures and the distinct tags they carry;
 // piles: the pictures in them (one with no tag is in none) and the piles.
 const plural = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`

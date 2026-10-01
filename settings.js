@@ -11,7 +11,10 @@ const SECRET = /key|password|token|hash/
 const HINT = { danbooru: { password: 'api-key' }, e621: { password: 'api-key' } } // what to paste, where the key's name says otherwise
 const KEY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.9 12.1 21 2m-3 3 3 3m-6 0 2 2"/></svg>'
 
+let profs // the caption profiles, for Statistics' quality order
 const settingsUI = profiles => {
+  profs = profiles
+  drawStats()
   const general = $('#general ul')
   api.quoteSources().then(names => {
     general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
@@ -126,3 +129,59 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
   }
 })
 drawInstruments()
+
+// Statistics: the pictures the filters let through (the filter button and the search work here as on the grid), counted a few
+// ways; behind each bar, faint, the whole library: what the filters cut away. A bar with a filter of its own on the grid sets it
+// (rating, tags, source; a name searches), and takes it off when clicked again; right-click: everything but it, as there.
+const RATED = { g: 'General', s: 'Sensitive', q: 'Questionable', e: 'Explicit' }
+const FROM = { booru: 'Booru', tagger: 'Tagger', unsure: 'Close matches', none: 'None' }
+const LENGTHS = ['None', '1–9', '10–19', '20–29', '30–39', '40–49', '50+']
+const tiers = () => { const p = { ...profs[s.profile], ...s.overrides }; return [...(p.qualities || '').split(',').map(t => t.trim()).filter(Boolean)].reverse().concat('None') }
+const flip = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]))
+// [title, the value(s) a picture counts under, their order (else by count), only the most common: names, the filter its bars set
+// (q: the search) and a bar's value for it]
+const STATS = [
+  ['Rating', i => RATED[i.rating] ?? 'Unrated', () => [...Object.values(RATED), 'Unrated'], false, 'rating', k => flip(RATED)[k]],
+  ['Tags from', i => FROM[i.tagged] ?? 'None', () => Object.values(FROM), false, 'tagged', k => flip(FROM)[k]],
+  ['Quality', i => i.quality || 'None', tiers],
+  ['Tags per picture', i => { const n = names(i.tags).length; return LENGTHS[Math.min(6, n && 1 + Math.floor(n / 10))] }, () => LENGTHS],
+  ['Source', i => source(i.site), null, false, 'site', k => k],
+  ['Project', i => i.project],
+  ['Series', i => names(i.copyright), null, true, 'q', k => k],
+  ['Characters', i => names(i.character), null, true, 'q', k => k],
+  ['Artists', i => names(i.artist), null, true, 'q', k => k],
+  ['Tags', i => names(i.tags), null, true, 'q', k => k]
+]
+const count = (list, key) => { const n = new Map(); for (const i of list) for (const k of [key(i)].flat()) n.set(k, (n.get(k) ?? 0) + 1); return n }
+const asQ = v => v.toLowerCase().replace(/ /g, '_') // as the search box keeps it
+const drawStats = () => {
+  const box = $('#statistics .charts')
+  if (!profs || !box.checkVisibility()) return // profs: the startup's first draw comes before settingsUI
+  const on = shown($('#lobby')).map(i => i.item), ai = on.filter(i => i.ai).length
+  $('#statistics p').textContent = `${plural(on.length, 'picture')} of ${items.length.toLocaleString()}${ai ? `, ${ai.toLocaleString()} AI-generated` : ''}`
+  box.innerHTML = STATS.map(([title, key, order, top, f, value]) => {
+    const n = count(on, key), all = count(items, key), by = (a, b) => (n.get(b) ?? 0) - (n.get(a) ?? 0) || all.get(b) - all.get(a)
+    const keys = order ? order().filter(k => all.has(k)) : top ? [...n.keys()].sort(by).slice(0, 12) : [...all.keys()].sort(by) // a name the filters cut away entirely isn't worth a line
+    if (!keys.length) return ''
+    const max = Math.max(...keys.map(k => all.get(k)))
+    return `<div class="chart"><h3>${title}</h3>` + keys.map(k => {
+      const v = f && value(k), now = f === 'q' ? F.q && F.q === asQ(k) : v && F[f] === v
+      return `<div${v ? ` data-f="${f}" data-v="${esc(v)}"` : ''}${now ? ' class="on"' : v && F[f] === '!' + v ? ' class="not"' : ''} title="${(n.get(k) ?? 0).toLocaleString()} of ${plural(on.length, 'picture')} on show; ${all.get(k).toLocaleString()} in the library">`
+        + `<i class="all" data-w="${all.get(k) / max}"></i><i data-w="${(n.get(k) ?? 0) / max}"></i><span>${esc(k)}</span><b>${(n.get(k) ?? 0).toLocaleString()}</b></div>`
+    }).join('') + '</div>'
+  }).join('')
+  box.querySelectorAll('i').forEach(i => i.style.setProperty('--w', i.dataset.w)) // the page's CSP refuses style attributes
+}
+const cut = (e, not) => {
+  const bar = e.target.closest('[data-f]')
+  if (!bar) return
+  e.preventDefault()
+  const { f, v } = bar.dataset
+  if (f === 'q') { scope.value = ''; search.value = F.q === asQ(v) ? '' : v; return search.dispatchEvent(new Event('input')) }
+  if (f === 'rating' && safe !== null) return // safe mode: Rating locked
+  const to = (not && f !== 'site' ? '!' : '') + v // a source has no "everything but" on the grid either
+  swap(() => { F[f] = F[f] === to ? '' : to; saveF(); applyFilters(); explain() })
+}
+$('#statistics .charts').onclick = e => cut(e)
+$('#statistics .charts').oncontextmenu = e => cut(e, true)
+addEventListener('hashchange', () => { if (location.hash === '#statistics') drawStats() })

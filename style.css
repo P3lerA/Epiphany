@@ -228,6 +228,24 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem }
 #sites .creds { flex-basis: 100%; display: flex; gap: .5rem; padding-bottom: .25rem; transition: opacity .15s; @starting-style { opacity: 0 } }
 #sites .creds input { flex: 1; min-width: 0 }
 #instruments .status { margin-left: auto; color: var(--muted); font-size: .85rem }
+/* Statistics (settings.js): a sheet of bar lists, as wide as the window lets it. One series each, so one ink: the accent. Each row
+   is its bar's track, the name over a wash as long as its count (the longest full), so a long name keeps the whole width. */
+#settings:has(#statistics:target) { grid-template-columns: 13rem minmax(0, 1fr) }
+#statistics > p { margin: -.5rem 0 1rem; color: var(--muted) }
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem; align-items: start }
+.chart { padding: .75rem 1rem 1rem; border: 1px solid var(--rule); border-radius: 8px }
+.chart h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin-bottom: .4rem }
+.chart > div { position: relative; display: flex; justify-content: space-between; gap: 1rem; padding: .15rem .5rem; border-radius: 4px; transition: background .15s }
+.chart > div + div { margin-top: 2px }
+.chart > div:hover { background: var(--hover) }
+.chart [data-f] { cursor: pointer }
+.chart :is(.on, .not) span { color: var(--accent) } /* the filter this bar set */
+.chart .not span { text-decoration: line-through } /* right-click: everything but it */
+.chart i { position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 100%); border-radius: 4px; background: color-mix(in srgb, var(--accent) 24%, transparent); transition: width .3s cubic-bezier(.2, 0, 0, 1); @starting-style { width: 0 } } /* grows from the left when drawn */
+.chart i.all { background: color-mix(in srgb, var(--accent) 8%, transparent) } /* the whole library, behind what is on show */
+.chart span, .chart b { position: relative }
+.chart span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
+.chart b { flex: none; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums }
 
 /* One button, one field, one switch, everywhere. */
 :is(#sites .creds, #instruments) button, .meta .use { padding: .4rem .9rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--field); transition: background .15s }
