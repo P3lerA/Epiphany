@@ -8,7 +8,7 @@ const crypto = require('crypto')
 const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
 const share = require('./share')
-const { BOORU, DIALECT, EH, gdlName, postUrl, SEARCH, searchUrl, own, range } = require('./sites')
+const { BOORU, EH, gdlName, postUrl, SEARCH, searchUrl, own, range } = require('./sites')
 const quotes = require('./quotes')
 const { autoUpdater } = require('electron-updater')
 
@@ -16,7 +16,7 @@ const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIR
 const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
 const SETTINGS = path.join(HOME, 'settings.json')
 const WIN = path.join(HOME, 'window.json') // last window bounds; separate file so renderer settings saves never clobber it
-const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru', statistics: false }
+const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru', statistics: false, aliases: false }
 let win
 Menu.setApplicationMenu(null)
 if (!app.requestSingleInstanceLock()) app.exit() // quit() is async and whenReady would still open a window; a second launch (tray-parked app, double-clicked exe) just raises the first
@@ -79,7 +79,7 @@ const info = (item, prof = profile()) => {
   const tags = [b.tag_string, b.tags, b.tag_string_meta, b.tags_metadata].flatMap(words)
   // booru: booru-vocabulary tags (pulled from one, or matched); unsure: close matches await a pick; tagger: no booru has it, the
   // tagger guessed; none: no tags.
-  const tagged = j.booru || BOORU.has(j.category) ? 'booru' : j.candidates ? 'unsure' : j.tagger ? 'tagger' : 'none'
+  const tagged = j.booru ? 'booru' : j.candidates ? 'unsure' : BOORU.has(j.category) ? 'booru' : j.tagger ? 'tagger' : 'none'
   // Each candidate with the tags only it has, so look-alike variants can be told apart.
   const sets = j.candidates?.map(c => new Set(words(c.post.tag_string_general)))
   const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb && fs.existsSync(c.thumb) ? pathToFileURL(c.thumb).href : c.post.preview_file_url ?? c.post.preview_url, head: caption(prof, meta(c.post)), tags: tagLine(meta(c.post).tags), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
@@ -183,14 +183,14 @@ async function save({ src, page }) {
   return item
 }
 
-// gallery-dl metadata -> caption fields.
-const first = (j, ...ks) => words(ks.map(k => j[k]).find(v => v && v.length))
+// gallery-dl metadata -> caption fields, old names renamed (aliases, below).
+const first = (j, kind, ...ks) => [...new Set(words(ks.map(k => j[k]).find(v => v && v.length)).map(t => alias?.[kind]?.[t] ?? t))]
 
 const meta = j => ({
-  tags: first(j, 'tag_string_general', 'tags_general', 'tags').join(', '),
-  artist: first(j, 'tag_string_artist', 'tags_artist').join(', @'), // ponytail: "a, @b" so "@{{artist}}" reads right
-  character: first(j, 'tag_string_character', 'tags_character').join(', '),
-  copyright: first(j, 'tag_string_copyright', 'tags_copyright').join(', '),
+  tags: first(j, 'tags', 'tag_string_general', 'tags_general', 'tags').join(', '),
+  artist: first(j, 'artist', 'tag_string_artist', 'tags_artist').join(', @'), // ponytail: "a, @b" so "@{{artist}}" reads right
+  character: first(j, 'character', 'tag_string_character', 'tags_character').join(', '),
+  copyright: first(j, 'copyright', 'tag_string_copyright', 'tags_copyright').join(', '),
   rating: rating(j),
   score: j.score ?? ''
 })
@@ -204,7 +204,7 @@ const SIMILAR = {
 }
 // iqdb.org: one upload covers every booru it indexes, and the tags ride along in each thumbnail's alt text. It is HTML, but the
 // template has not changed since 2008; if it ever does, the regex finds nothing and we get no candidates, never wrong ones.
-// Hits on yande.re and konachan are left out (DIALECT).
+// Hits on yande.re (not booru words) and konachan (fewer tags, no artist told apart) are left out.
 const IQDB_HOST = { 'danbooru.donmai.us': 'danbooru', 'gelbooru.com': 'gelbooru',
   'chan.sankakucomplex.com': 'sankaku', 'anime-pictures.net': 'animepictures', 'www.zerochan.net': 'zerochan' }
 const IQDB_ONLY = ['gelbooru', 'sankaku', 'zerochan', 'animepictures'] // enabling one of these is what turns iqdb.org on
@@ -323,7 +323,7 @@ async function pullOne({ page, range: r }, stop = {}) { // r: which of the page'
     items.push(item)
     // The site's own tags caption it right away; a booru match (below) replaces that.
     if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), tagLine(meta(j).tags))
-    if (s.lookup && (!BOORU.has(j.category) || DIALECT.has(j.category))) later.push(item)
+    if (s.lookup && !BOORU.has(j.category)) later.push(item)
   }
   // After the grid has them, and after the extension gets its answer: IQDB uploads take seconds each.
   items.looked = later.length && lookupAll(later) // a shared picture's own fields go on once these are done
@@ -395,6 +395,23 @@ const tagWiki = async tag => {
   saveWiki()
   return wiki[tag]
 }
+// Old names to danbooru's current ones (clouds -> cloud, catgirl -> cat_girl; konachan still writes many), when Settings > General
+// says so: danbooru's whole alias table (~41k, 42 requests, ~3MB), pulled then and again once it is a month old. Each name is
+// renamed only to one of its kind (an artist "x" stays, though the general tag x is now x_(symbol)).
+const ALIASES = path.join(HOME, 'cache', 'tag-aliases.json')
+let alias = null // { tags|artist|character|copyright: { old: new } }
+const useAliases = async on => {
+  if (on && !(fs.existsSync(ALIASES) && Date.now() - fs.statSync(ALIASES).mtimeMs < 30 * 864e5)) {
+    const all = { tags: {}, artist: {}, character: {}, copyright: {} }
+    for (let page = 1; ; page++) {
+      const l = await fetch(`https://danbooru.donmai.us/tag_aliases.json?search[status]=active&limit=1000&only=antecedent_name,consequent_name,consequent_tag[category]&page=${page}`, { signal: AbortSignal.timeout(30000), ...UA }).then(r => r.ok ? r.json() : null).catch(() => null)
+      if (!l) break // offline or refused: the table there is, if any; the next start tries again
+      for (const a of l) all[{ 1: 'artist', 3: 'copyright', 4: 'character' }[a.consequent_tag?.category] ?? 'tags'][a.antecedent_name] = a.consequent_name
+      if (l.length < 1000) { fs.mkdirSync(path.dirname(ALIASES), { recursive: true }); fs.writeFileSync(ALIASES, JSON.stringify(all)); break }
+    }
+  }
+  alias = settings().aliases ? readJson(ALIASES, null) : null // turned off meanwhile: off
+}
 const gelCreds = () => { const g = readJson(GDL, {}).extractor?.gelbooru ?? {}; return `&api_key=${g['api-key'] ?? ''}&user_id=${g['user-id'] ?? ''}` }
 const live = p => {
   if (p.category === 'danbooru') return fetch(`https://danbooru.donmai.us/posts/${p.id}.json`, UA).then(r => r.ok ? r.json() : null, () => null)
@@ -424,7 +441,7 @@ const adopt = async (item, j, hit) => {
 const resolve = async (item, j, say) => {
   delete j.candidates
   // Pulled from a booru: its own tags are the caption, nothing to look up (this re-renders it under the current profile).
-  if (BOORU.has(j.category) && !DIALECT.has(j.category)) { recaption(item, j); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
+  if (BOORU.has(j.category)) { recaption(item, j); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
   const hit = await lookup(j, item.file, say)
   if (hit) await adopt(item, j, hit)
   else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
@@ -661,7 +678,7 @@ const installGdl = async () => {
   } catch (e) { t.end(); note(e.message, true) }
 }
 
-const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => writeJson(SETTINGS, v), profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
+const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => { writeJson(SETTINGS, v); if (!v.aliases !== !alias) useAliases(v.aliases) }, profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
@@ -709,6 +726,7 @@ app.whenReady().then(() => {
   }).listen(PORT, '127.0.0.1')
   createWindow()
   pullWikis()
+  useAliases(settings().aliases)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

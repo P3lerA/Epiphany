@@ -1,12 +1,9 @@
 // What the app knows of each site, as data: which are boorus, a post's page, a tag's search page, the page of just one picture,
 // how much of a page a pull takes. No Electron, no files: main.js asks.
 
-// Non-booru sources (pixiv, twitter...) carry no booru tags; their pictures get looked up on the boorus.
-const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34'])
-// Boorus with words of their own, and few of them (yande.re: ~8 tags a post, `seifuku` for school_uniform): their tags are the
-// last resort. A picture pulled from one is looked up like a pixiv one and keeps them only when no other booru has it; a lookup
-// never takes a match from one.
-const DIALECT = new Set(['yandere', 'konachan'])
+// Non-booru sources (pixiv, twitter...) carry no booru tags; their pictures get looked up on the boorus. yande.re is one of them:
+// its words are its own (seifuku, pantsu, megane), ~9 a post. konachan's are danbooru's, many of them old names (main.js renames).
+const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'konachan', 'sankaku', 'e621', 'rule34'])
 // E-Hentai, ExHentai: 'ehentai' in the app, gallery-dl's 'exhentai' (one extractor, one config for both). Its namespaced tags
 // (female:..., other:...) aren't booru words, so its pictures get looked up and tagged like pixiv's.
 const EH = /(^|\.)(e-|ex)hentai\.org$/
@@ -43,7 +40,7 @@ const SEARCH = {
   artstation: t => `https://www.artstation.com/search?query=${q(t)}`,
   ehentai: t => `https://e-hentai.org/?f_search=${q(t)}`
 }
-const searchUrl = (site, tag) => SEARCH[site](BOORU.has(site) || site === 'animepictures' ? tag.replace(/ /g, '_') : tag)
+const searchUrl = (site, tag) => SEARCH[site](BOORU.has(site) || site === 'yandere' || site === 'animepictures' ? tag.replace(/ /g, '_') : tag)
 
 // The page of just this picture, where its sidecar (j) tells: its booru post (the booru it was matched on too), a pixiv work
 // (range: which of its pictures), an E-Hentai image page (on the domain it came from, from: some are ExHentai's only).
@@ -62,12 +59,13 @@ const range = u => {
     : '1-50'
 }
 
-module.exports = { BOORU, DIALECT, EH, gdlName, postUrl, SEARCH, searchUrl, own, range }
+module.exports = { BOORU, EH, gdlName, postUrl, SEARCH, searchUrl, own, range }
 
 if (require.main === module) {
   const assert = require('assert')
   assert.equal(searchUrl('danbooru', 'long hair'), 'https://danbooru.donmai.us/posts?tags=long_hair')
   assert.equal(searchUrl('pixiv', 'long hair'), 'https://www.pixiv.net/tags/long%20hair')
+  assert.equal(searchUrl('yandere', 'long hair'), 'https://yande.re/post?tags=long_hair')
   assert.deepEqual(own({ category: 'pixiv', id: 5, booru: { category: 'danbooru', id: 7 } }, 'https://www.pixiv.net/artworks/5'), { page: 'https://danbooru.donmai.us/posts/7' })
   assert.deepEqual(own({ category: 'pixiv', id: 5, num: 2 }, 'https://www.pixiv.net/users/1'), { page: 'https://www.pixiv.net/artworks/5', range: '3' })
   assert.deepEqual(own({ category: 'exhentai', gid: 9, num: 3, image_token: 'ab' }, 'https://exhentai.org/g/9/x/'), { page: 'https://exhentai.org/s/ab/9-3' })

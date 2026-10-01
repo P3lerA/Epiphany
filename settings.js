@@ -25,6 +25,7 @@ const settingsUI = profiles => {
   general.querySelector('[name=theme]').value = localStorage.theme || 'system'
   general.querySelector('[name=lookup]').checked = s.lookup
   general.querySelector('[name=autotag]').checked = s.autotag
+  general.querySelector('[name=aliases]').checked = s.aliases
   Object.assign(general.querySelector('[name=safe]'), { checked: !!s.safe || safeCli, disabled: safeCli })
   general.querySelector('[name=accept]').value = s.accept
   general.querySelector('[name=debug]').checked = !!s.debug

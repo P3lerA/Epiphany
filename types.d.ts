@@ -19,7 +19,7 @@ interface Item {
 interface Profile { caption: string; qualities: string; scores: string; spaces: boolean }
 
 interface Settings {
-  project: string; quote: string; lookup: boolean; sites: string[]; engine: string; accept: number; autotag: boolean; statistics: boolean; safe?: boolean; debug?: boolean
+  project: string; quote: string; lookup: boolean; sites: string[]; engine: string; accept: number; autotag: boolean; statistics: boolean; aliases: boolean; safe?: boolean; debug?: boolean
   profile: string; overrides: Partial<Record<keyof Profile, string | boolean>>
 }
 
