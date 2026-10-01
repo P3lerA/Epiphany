@@ -7,6 +7,11 @@ const siblings = () => {
   return { prev: imgs[i - 1], next: imgs[i + 1] }
 }
 const step = d => { const n = d < 0 ? siblings().prev : siblings().next; if (n) preview(n.item) }
+// After a pick: the next picture still pending (after this one, else from the top), so they can be picked through in a row.
+const nextPending = () => {
+  const imgs = shown(cur.root), i = imgs.findIndex(x => x.dataset.file === cur.file)
+  return [...imgs.slice(i + 1), ...imgs.slice(0, i)].find(x => pending(x.dataset.tagged))
+}
 dlg.querySelector('.prev').onclick = () => step(-1)
 dlg.querySelector('.next').onclick = () => step(1)
 dlg.tabIndex = -1
@@ -48,7 +53,7 @@ const preview = async (item, root) => {
       drawHead(c.head)
       ta.value = c.tags
       use.hidden = false
-      use.onclick = () => api.pick(item, i)
+      use.onclick = () => { const n = nextPending(); api.pick(item, i); if (n) preview(n.item) }
       post.hidden = !c.post // iqdb.org's zerochan and anime-pictures have no post link here
       post.onclick = e => { e.preventDefault(); api.open(c.post) }
     }

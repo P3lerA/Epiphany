@@ -93,6 +93,13 @@ step('preview shows the tags, the head from the sidecar under them', async () =>
   assert.equal(await js(`return dlg.querySelector('.tagged').textContent`), 'Tags from danbooruLook up / Tag')
   await js('dlg.close()')
 })
+step('after a pick, the next pending one: the other, from either', async () => {
+  for (const [a, b] of [['saved', 'broken'], ['broken', 'saved']]) {
+    await js(`preview(items.find(i => i.file.endsWith('${a}.webp')), page())`)
+    assert.match(await js('return nextPending().dataset.file'), new RegExp(`${b}\\.webp$`))
+  }
+  await js('dlg.close()')
+})
 step('tags written by hand stay in the .txt, the sidecar untouched', async () => {
   await js(`await api.setCaption(items.find(i => i.file.endsWith('booru1.webp')), 'solo, smile')`)
   assert.equal(fs.readFileSync(path.join(data, 'booru1.txt'), 'utf8'), 'solo, smile')
