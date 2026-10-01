@@ -585,7 +585,13 @@ const EXT = app.isPackaged ? path.join(process.resourcesPath, 'extension') : pat
 const PORTABLE = process.env.PORTABLE_EXECUTABLE_FILE
 const RELEASES = 'https://api.github.com/repos/P3lerA/Epiphany/releases/latest'
 autoUpdater.autoDownload = false
-autoUpdater.on('update-downloaded', () => autoUpdater.quitAndInstall(true, true)) // silent: else the whole setup wizard, waiting for clicks; then relaunched
+// An update quits without asking, so it first waits for the rest of the task line (a pull, a lookup) to finish.
+const idle = async own => {
+  if (running.size > (own ? 1 : 0)) own?.set('Update waits for the work in progress')
+  while (running.size > (own ? 1 : 0)) await new Promise(r => setTimeout(r, 1000))
+  app.quitting = true
+}
+autoUpdater.on('update-downloaded', () => idle(updating).then(() => autoUpdater.quitAndInstall(true, true))) // silent: else the whole setup wizard, waiting for clicks; then relaunched
 let updating
 autoUpdater.on('download-progress', p => (updating ??= task('Downloading the update')).set(`Downloading the update ${Math.round(p.percent)}%`))
 autoUpdater.on('error', e => { updating?.end(); updating = null; note(`Update: ${e.message}`, true) })
@@ -612,6 +618,7 @@ const update = async () => {
   // Node's children die with it (a job object) unless detached, and a detached PowerShell has no console and does nothing. So one
   // PowerShell starts it as its own child, outside the job, and we quit once that is done.
   const q = s => `'${s.replace(/'/g, "''")}'`
+  await idle(t) // the swap below can't be called off
   const swap = Buffer.from(`for ($i = 0; $i -lt 60; $i++) { try { Remove-Item -LiteralPath ${q(PORTABLE)} -Force -ErrorAction Stop; break } catch { Start-Sleep 1 } }; Move-Item -LiteralPath ${q(nw)} -Destination ${q(to)} -Force; Start-Process -FilePath ${q(to)}`, 'utf16le').toString('base64')
   await new Promise(r => spawn('powershell.exe', ['-NoProfile', '-Command', `Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','${swap}'`], { stdio: 'ignore', windowsHide: true }).on('exit', r))
   app.quit()
@@ -658,11 +665,22 @@ const HANDLERS = { list, projects, newProject, getSettings: settings, setSetting
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
   checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
-  tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
+  tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
 ipcMain.on('theme', (_, t, bar) => { nativeTheme.themeSource = t; win?.setTitleBarOverlay(bar) }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 
-app.on('before-quit', () => { app.quitting = true })
+// Quitting from the tray with work in the task line asks first (updates and restarts have set app.quitting and go).
+let asking
+app.on('before-quit', e => {
+  if (app.quitting || !running.size) return void (app.quitting = true)
+  e.preventDefault()
+  if (asking) return
+  asking = true
+  win.show()
+  const detail = [...running.values()].map(t => t.text).join('\n')
+  dialog.showMessageBox(win, { type: 'question', message: 'Still working', detail, buttons: ['Quit anyway', 'Keep running'], defaultId: 1, cancelId: 1 })
+    .then(({ response }) => { asking = false; if (response === 0) { app.quitting = true; app.quit() } })
+})
 let tray
 
 app.whenReady().then(() => {
