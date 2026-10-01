@@ -14,7 +14,7 @@ const KEY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke=
 let profs // the caption profiles, for Statistics' quality order
 const settingsUI = profiles => {
   profs = profiles
-  drawStats()
+  showStats()
   const general = $('#general ul')
   api.quoteSources().then(names => {
     general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
@@ -116,7 +116,8 @@ $('.fab .theme-toggle').onclick = () => {
 const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]).then(([v, u]) => {
   const ul = $('#instruments ul')
   const newer = u.latest && u.latest !== u.current
-  const rows = { Epiphany: { status: u.current, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v }
+  const rows = { Epiphany: { status: u.current, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v,
+    statistics: s?.statistics ? { status: 'installed', action: 'Remove' } : { status: 'not installed', action: 'Install' } } // s: not loaded yet at the first draw
   ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
     `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
   ).join('')
@@ -125,6 +126,7 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
     if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
     if (n === 'extension') api.exportExtension()
     if (n === 'tagger') (e.target.textContent === 'Remove' ? api.removeTagger() : api.installTagger()).then(drawInstruments)
+    if (n === 'statistics') { s.statistics = !s.statistics; save(); showStats() }
     if (n === 'Epiphany') (newer && u.how !== 'dev' ? api.update() : Promise.resolve()).then(drawInstruments)
   }
 })
@@ -134,6 +136,12 @@ drawInstruments()
 // ways; behind each bar, faint, the whole library: what the filters cut away. A bar with a filter of its own on the grid sets it
 // (rating, tags, source; a name searches for it whole), and takes it off when clicked again; right-click: everything but it, as
 // there. Ctrl adds it to what is chosen: one rating, source... or another (a picture has one of each); one name and another.
+// Installed or not in Instruments, as a tagger is: removed, no page in Settings and nothing counted.
+const showStats = () => {
+  $('#settings aside a[href="#statistics"]').hidden = !s.statistics
+  if (!s.statistics && location.hash === '#statistics') location.hash = '#instruments'
+  drawStats(); drawInstruments()
+}
 const RATED = { g: 'General', s: 'Sensitive', q: 'Questionable', e: 'Explicit' }
 const FROM = { booru: 'Booru', tagger: 'Tagger', unsure: 'Close matches', none: 'None' }
 const LENGTHS = ['None', '1–9', '10–19', '20–29', '30–39', '40–49', '50+']
@@ -164,7 +172,7 @@ const SEP = { rating: '' } // rating's choices are letters (gs), the others' com
 const chosen = (f, neg) => { const c = F[f] || ''; return c.startsWith('!') === neg ? c.replace(/^!/, '').split(SEP[f] ?? ',').filter(Boolean) : [] }
 const drawStats = () => {
   const box = $('#statistics .charts')
-  if (!profs || !box.checkVisibility()) return // profs: the startup's first draw comes before settingsUI
+  if (!profs || !s.statistics || !box.checkVisibility()) return // profs: the startup's first draw comes before settingsUI
   const on = shown($('#lobby')).map(i => i.item), ai = on.filter(i => i.ai).length
   $('#statistics p').textContent = `${plural(on.length, 'picture')} of ${items.length.toLocaleString()}${ai ? `, ${ai.toLocaleString()} AI-generated` : ''}`
   const chart = ([title, key, order, top, f, value, note]) => {
@@ -200,4 +208,4 @@ const cut = (e, not) => {
 }
 $('#statistics .charts').onclick = e => cut(e)
 $('#statistics .charts').oncontextmenu = e => cut(e, true)
-addEventListener('hashchange', () => { if (location.hash === '#statistics') drawStats() })
+addEventListener('hashchange', () => { if (location.hash === '#statistics') s.statistics ? drawStats() : location.replace('#instruments') }) // removed: no page

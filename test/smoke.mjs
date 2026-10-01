@@ -107,7 +107,7 @@ step('a field written by hand for several: the page and the heads follow, the ta
 })
 step('settings pages draw, Instruments lists the tools', async () => {
   for (const h of ['general', 'profile', 'sites']) { await js(`location.hash = '#${h}'`); await until(`$('#${h} ul').children.length > 1`, h) }
-  await js(`location.hash = '#instruments'`); await until(`$('#instruments ul').children.length === 4`, 'instruments', 20000)
+  await js(`location.hash = '#instruments'`); await until(`$('#instruments ul').children.length === 5`, 'instruments', 20000)
   await js(`location.hash = '#lobby'`)
 })
 step('local server: only the extension, only web URLs', async () => {
