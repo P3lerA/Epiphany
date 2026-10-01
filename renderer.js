@@ -39,6 +39,7 @@ const decorate = (img, item) => {
   img.oncontextmenu = () => api.menu(sel.has(item.file) ? items.filter(i => sel.has(i.file)) : [item]) // the selection it is in, or itself
   img.dataset.file = item.file
   img.dataset.q = `${item.artist || ''} ${item.character || ''} ${item.copyright || ''} ${item.tags || ''}`.toLowerCase()
+  img.names = new Set([item.artist, item.character, item.copyright, item.tags].flatMap(v => (v || '').split(', ')).map(t => t.replace(/^@/, '').toLowerCase())) // for a search's "whole names"
   img.dataset.site = item.site
   if (item.ai) img.dataset.ai = 1
   img.dataset.rating = item.rating || 'e' // unrated (no booru match yet) is treated as explicit by the filter
@@ -179,7 +180,8 @@ const setSafe = on => {
 const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '', ...safe !== null && { rating: safe } }) // the search box is not remembered
 // A segment's filter: its choice, or '!' and the choice for everything but (right-click). A picture of no known rating is in none.
 const passes = (f, is) => !f || (f[0] === '!' ? !is(f.slice(1)) : is(f))
-const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || !passes(F.rating, v => !!img.dataset.rating && v.includes(img.dataset.rating)) || !passes(F.tagged, v => v === 'pending' ? pending(img.dataset.tagged) : img.dataset.tagged === v) || (F.site && source(img.dataset.site) !== source(F.site)) || (F.q && !img.dataset.q.includes(F.q)))
+// Several choices (Ctrl in Statistics): any of them. Rating's are letters (gs), the others' comma-separated.
+const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || !passes(F.rating, v => !!img.dataset.rating && v.includes(img.dataset.rating)) || !passes(F.tagged, v => v.split(',').some(x => x === 'pending' ? pending(img.dataset.tagged) : img.dataset.tagged === x)) || (F.site && !F.site.split(',').includes(source(img.dataset.site))) || (F.q && !(Q().names.every(n => img.names.has(n)) && img.dataset.q.includes(Q().text))))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
   filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => { const f = F[seg.dataset.name] || ''; b.classList.toggle('on', b.value === f); b.classList.toggle('not', f === '!' + b.value) }))
@@ -193,11 +195,15 @@ const source = site => SITES.includes(site) ? site : 'other'
 const drawSites = () => {
   const sel = filters.querySelector('[name=site]')
   sel.innerHTML = '<option value="">All sources</option>' + [...new Set(items.map(i => i.site).filter(Boolean).map(source))].sort((a, b) => (a === 'other') - (b === 'other') || a.localeCompare(b))
-    .map(x => `<option ${F.site && x === source(F.site) ? 'selected' : ''}>${x}</option>`).join('')
+    .map(x => `<option ${x === F.site ? 'selected' : ''}>${x}</option>`).join('') + (F.site?.includes(',') ? `<option value="${F.site}" selected>${F.site.replace(/,/g, ', ')}</option>` : '') // several, from Statistics
 }
 // Search box: local scope filters the grid as you type; a site scope opens that site's search in the browser on Enter.
 const search = $('.search input'), scope = $('.search select')
 const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters(); explain() }
+// What the search asks: each "name in quotes" whole (all of them), and the rest of what is typed anywhere in a name.
+let asks = {}
+const Q = () => asks.q === F.q ? asks : asks = { q: F.q, names: [...F.q.matchAll(/"([^"]+)"/g)].map(m => m[1].replace(/^_+|_+$/g, '')), text: F.q.replace(/"[^"]*"?/g, '').replace(/^_+|_+$/g, '') }
+const quoted = n => `"${n.replace(/_/g, ' ')}"` // a name as the search box takes it whole
 let typing
 search.oninput = scope.onchange = () => { clearTimeout(typing); typing = setTimeout(() => swap(() => { localQ(); backToPiles() }), 120) } // filter changes move the pictures, see swap; one move once typing pauses, not one per key
 $('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')); search.focus() }
@@ -323,7 +329,7 @@ const title = text => {
   }
 }
 const explain = () => {
-  const t = F.q
+  const t = Q().names.length ? (Q().names.length === 1 && !Q().text ? Q().names[0] : '') : F.q // one whole name, or what is typed
   asked = t // before any return: a late answer for the last tag must not land
   if (t === explained) return
   if (!t || !items?.some(i => `, ${i.tags}, ${i.character}, ${i.copyright}, ${i.artist?.replace(/@/g, '')}, `.includes(`, ${t}, `))) { explained = ''; return title(line) } // a word being typed is not a tag

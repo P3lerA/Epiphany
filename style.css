@@ -241,6 +241,7 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem }
 @media (width < 60rem) { .charts { grid-template-columns: 1fr } .charts > .from { position: static } }
 .chart { padding: .75rem 1rem 1rem; border: 1px solid var(--rule); border-radius: 8px }
 .chart h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin-bottom: .4rem }
+.chart h3 small { font-size: inherit; font-weight: 400 } /* a note after the title: Tags per picture's average */
 .chart > div { position: relative; display: flex; justify-content: space-between; gap: 1rem; padding: .15rem .5rem; border-radius: 4px; transition: background .15s }
 .chart > div + div { margin-top: 2px }
 .chart > div:hover { background: var(--hover) }
