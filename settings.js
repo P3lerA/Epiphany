@@ -138,20 +138,24 @@ const FROM = { booru: 'Booru', tagger: 'Tagger', unsure: 'Close matches', none: 
 const LENGTHS = ['None', '1–9', '10–19', '20–29', '30–39', '40–49', '50+']
 const tiers = () => { const p = { ...profs[s.profile], ...s.overrides }; return [...(p.qualities || '').split(',').map(t => t.trim()).filter(Boolean)].reverse().concat('None') }
 const flip = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]))
+// In two groups (style.css): where the pictures come from, to cut by; and what is in them.
 // [title, the value(s) a picture counts under, their order (else by count), only the most common: names, the filter its bars set
 // (q: the search) and a bar's value for it]
-const STATS = [
-  ['Rating', i => RATED[i.rating] ?? 'Unrated', () => [...Object.values(RATED), 'Unrated'], false, 'rating', k => flip(RATED)[k]],
-  ['Tags from', i => FROM[i.tagged] ?? 'None', () => Object.values(FROM), false, 'tagged', k => flip(FROM)[k]],
-  ['Quality', i => i.quality || 'None', tiers],
-  ['Tags per picture', i => { const n = names(i.tags).length; return LENGTHS[Math.min(6, n && 1 + Math.floor(n / 10))] }, () => LENGTHS],
-  ['Source', i => source(i.site), null, false, 'site', k => k],
-  ['Project', i => i.project],
-  ['Series', i => names(i.copyright), null, true, 'q', k => k],
-  ['Characters', i => names(i.character), null, true, 'q', k => k],
-  ['Artists', i => names(i.artist), null, true, 'q', k => k],
-  ['Tags', i => names(i.tags), null, true, 'q', k => k]
-]
+const STATS = {
+  from: [
+    ['Rating', i => RATED[i.rating] ?? 'Unrated', () => [...Object.values(RATED), 'Unrated'], false, 'rating', k => flip(RATED)[k]],
+    ['Tags from', i => FROM[i.tagged] ?? 'None', () => Object.values(FROM), false, 'tagged', k => flip(FROM)[k]],
+    ['Source', i => source(i.site), null, false, 'site', k => k]
+  ],
+  in: [
+    ['Quality', i => i.quality || 'None', tiers],
+    ['Tags per picture', i => { const n = names(i.tags).length; return LENGTHS[Math.min(6, n && 1 + Math.floor(n / 10))] }, () => LENGTHS],
+    ['Series', i => names(i.copyright), null, true, 'q', k => k],
+    ['Characters', i => names(i.character), null, true, 'q', k => k],
+    ['Artists', i => names(i.artist), null, true, 'q', k => k],
+    ['Tags', i => names(i.tags), null, true, 'q', k => k]
+  ]
+}
 const count = (list, key) => { const n = new Map(); for (const i of list) for (const k of [key(i)].flat()) n.set(k, (n.get(k) ?? 0) + 1); return n }
 const asQ = v => v.toLowerCase().replace(/ /g, '_') // as the search box keeps it
 const drawStats = () => {
@@ -159,7 +163,7 @@ const drawStats = () => {
   if (!profs || !box.checkVisibility()) return // profs: the startup's first draw comes before settingsUI
   const on = shown($('#lobby')).map(i => i.item), ai = on.filter(i => i.ai).length
   $('#statistics p').textContent = `${plural(on.length, 'picture')} of ${items.length.toLocaleString()}${ai ? `, ${ai.toLocaleString()} AI-generated` : ''}`
-  box.innerHTML = STATS.map(([title, key, order, top, f, value]) => {
+  const chart = ([title, key, order, top, f, value]) => {
     const n = count(on, key), all = count(items, key), by = (a, b) => (n.get(b) ?? 0) - (n.get(a) ?? 0) || all.get(b) - all.get(a)
     const keys = order ? order().filter(k => all.has(k)) : top ? [...n.keys()].sort(by).slice(0, 12) : [...all.keys()].sort(by) // a name the filters cut away entirely isn't worth a line
     if (!keys.length) return ''
@@ -169,7 +173,8 @@ const drawStats = () => {
       return `<div${v ? ` data-f="${f}" data-v="${esc(v)}"` : ''}${now ? ' class="on"' : v && F[f] === '!' + v ? ' class="not"' : ''} title="${(n.get(k) ?? 0).toLocaleString()} of ${plural(on.length, 'picture')} on show; ${all.get(k).toLocaleString()} in the library">`
         + `<i class="all" data-w="${all.get(k) / max}"></i><i data-w="${(n.get(k) ?? 0) / max}"></i><span>${esc(k)}</span><b>${(n.get(k) ?? 0).toLocaleString()}</b></div>`
     }).join('') + '</div>'
-  }).join('')
+  }
+  box.innerHTML = Object.entries(STATS).map(([group, list]) => `<div class="${group}">${list.map(chart).join('')}</div>`).join('')
   box.querySelectorAll('i').forEach(i => i.style.setProperty('--w', i.dataset.w)) // the page's CSP refuses style attributes
 }
 const cut = (e, not) => {
