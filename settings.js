@@ -117,7 +117,7 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
   const ul = $('#instruments ul')
   const newer = u.latest && u.latest !== u.current
   const rows = { Epiphany: { status: u.current, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v,
-    statistics: s?.statistics ? { status: 'installed', action: 'Remove' } : { status: 'not installed', action: 'Install' } } // s: not loaded yet at the first draw
+    statistics: s.statistics ? { status: 'installed', action: 'Remove' } : { status: 'not installed', action: 'Install' } }
   ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
     `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
   ).join('')
@@ -129,8 +129,7 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
     if (n === 'statistics') { s.statistics = !s.statistics; save(); showStats() }
     if (n === 'Epiphany') (newer && u.how !== 'dev' ? api.update() : Promise.resolve()).then(drawInstruments)
   }
-})
-drawInstruments()
+}) // first drawn by showStats, once settings are loaded
 
 // Statistics: the pictures the filters let through (the filter button and the search work here as on the grid), counted a few
 // ways; behind each bar, faint, the whole library: what the filters cut away. A bar with a filter of its own on the grid sets it
@@ -152,7 +151,7 @@ const flip = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]))
 // (q: the search) and a bar's value for it, a note on the title]
 const STATS = {
   from: [
-    ['Rating', i => RATED[i.rating] ?? 'Unrated', () => [...Object.values(RATED), 'Unrated'], false, 'rating', k => flip(RATED)[k]],
+    ['Rating', i => RATED[i.rating || 'e'], () => Object.values(RATED), false, 'rating', k => flip(RATED)[k]], // unrated is explicit, as on the grid
     ['Tags from', i => FROM[i.tagged] ?? 'None', () => Object.values(FROM), false, 'tagged', k => flip(FROM)[k]],
     ['Source', i => source(i.site), null, false, 'site', k => k]
   ],

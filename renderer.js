@@ -166,7 +166,6 @@ pendingUI.onclick = () => swap(() => { F.tagged === 'pending' ? pendingOff() : p
 
 // View filters: never touch files, only what is shown. Kept per machine.
 const F = JSON.parse(localStorage.filters || '{"ai":true,"rating":"","tagged":"","site":"","q":""}')
-if (pending(F.tagged)) F.tagged = 'pending' // saved before none and unsure were one
 const filters = $('#filters')
 // Safe mode (Settings > General, or -safe at launch): Rating locked on General; the rating saved before stays saved for when it's off.
 let safe = null, safeCli = false // that saved rating, while locked; launched with -safe (Settings can't turn it off)
