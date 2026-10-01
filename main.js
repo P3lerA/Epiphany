@@ -8,7 +8,7 @@ const crypto = require('crypto')
 const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
 const share = require('./share')
-const { BOORU, EH, gdlName, postUrl, SEARCH, searchUrl, own, range } = require('./sites')
+const { BOORU, EH, gdlName, postUrl, SEARCH, own, range } = require('./sites')
 const quotes = require('./quotes')
 const { autoUpdater } = require('electron-updater')
 
@@ -227,10 +227,11 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
   const tw = j.category === 'twitter' ? j.tweet_id : j.page?.match(/(?:twitter|x)\.com\/\w+\/status\/(\d+)/)?.[1]
   const key = pix ? `pixiv_id:${pix}` : tw ? `source:*status/${tw}*` : null
   const gel = () => get(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&limit=1&tags=md5:${md5}${gelCreds()}`, r => r?.post?.[0] ? { ...r.post[0], category: 'gelbooru' } : null)
-  // Exact bytes first, then the source id, then similarity.
-  say('same file on danbooru')
-  let hit = await dan(`md5:${md5}`)
-  if (!hit) { say('same file on gelbooru'); hit = await gel() }
+  // Exact bytes first, then the source id, then similarity. The search engine's booru (Settings > General) first, as close ones go.
+  const engine = settings().engine, before = (a, b) => (b === engine) - (a === engine)
+  const same = { danbooru: () => dan(`md5:${md5}`), gelbooru: gel }
+  let hit
+  for (const site of Object.keys(same).sort(before)) if (!hit) { say(`same file on ${site}`); hit = await same[site]() }
   if (!hit && key) { say('source on danbooru'); hit = await dan(key, true) }
   if (!hit) {
     // Same picture, different bytes (watermark, rescale, scan): ask every enabled site that can search by similarity.
@@ -245,7 +246,7 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
       const b = bytes.length > 8e6 ? (await nativeImage.createThumbnailFromPath(file, { width: 1000, height: 1000 })).toJPEG(90) : bytes
       for (const c of await iqdbOrg(field => form(field, b))) if (!found.some(f => f.post.category === c.post.category && f.post.id === c.post.id)) found.push(c)
     }
-    const near = found.filter(x => x.score >= 70).sort((a, b) => b.score - a.score).slice(0, 4)
+    const near = found.filter(x => x.score >= 70).sort((a, b) => b.score - a.score || before(a.post.category, b.post.category)).slice(0, 4)
     // Settings decide how sure a similarity match must be to skip the human; exact id/md5 hits above never ask.
     if (near.length && near[0].score >= settings().accept && (near.length === 1 || near[0].score - near[1].score >= 15)) hit = near[0].post
     else if (near.length) {
@@ -548,7 +549,7 @@ const setField = (items, field, text) => {
 // The user picked one of the close matches.
 const pick = (item, i) => { const j = sidecar(item); adopt(item, j, j.candidates[i].post) }
 // A site's search for a tag, in the browser: the search box's site scope and the tag menu.
-const search = (site, tag) => shell.openExternal(searchUrl(site, tag))
+const search = (site, tag) => shell.openExternal(SEARCH[site](tag))
 
 // A caption tag: this library, the search engine (Settings > General), More for the other sites in use.
 const tagMenu = tag => {

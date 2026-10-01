@@ -1,9 +1,20 @@
 // What the app knows of each site, as data: which are boorus, a post's page, a tag's search page, the page of just one picture,
 // how much of a page a pull takes. No Electron, no files: main.js asks.
 
-// Non-booru sources (pixiv, twitter...) carry no booru tags; their pictures get looked up on the boorus. yande.re is one of them:
-// its words are its own (seifuku, pantsu, megane), ~9 a post. konachan's are danbooru's, many of them old names (main.js renames).
-const BOORU = new Set(['danbooru', 'gelbooru', 'safebooru', 'konachan', 'sankaku', 'e621', 'rule34'])
+// The boorus, each with its tag search page (a tag spelled with underscores): their pictures keep their own tags. Other sources
+// (pixiv, twitter...) carry no booru tags; their pictures get looked up on the boorus. yande.re is one of them: its words are its
+// own (seifuku, pantsu, megane), ~9 a post. konachan's are danbooru's, many of them old names (main.js renames).
+const q = t => encodeURIComponent(t.replace(/ /g, '_'))
+const SEARCH = {
+  danbooru: t => `https://danbooru.donmai.us/posts?tags=${q(t)}`,
+  gelbooru: t => `https://gelbooru.com/index.php?page=post&s=list&tags=${q(t)}`,
+  safebooru: t => `https://safebooru.org/index.php?page=post&s=list&tags=${q(t)}`,
+  konachan: t => `https://konachan.com/post?tags=${q(t)}`,
+  sankaku: t => `https://chan.sankakucomplex.com/?tags=${q(t)}`,
+  e621: t => `https://e621.net/posts?tags=${q(t)}`,
+  rule34: t => `https://rule34.xxx/index.php?page=post&s=list&tags=${q(t)}`
+}
+const BOORU = new Set(Object.keys(SEARCH))
 // E-Hentai, ExHentai: 'ehentai' in the app, gallery-dl's 'exhentai' (one extractor, one config for both). Its namespaced tags
 // (female:..., other:...) aren't booru words, so its pictures get looked up and tagged like pixiv's.
 const EH = /(^|\.)(e-|ex)hentai\.org$/
@@ -20,27 +31,6 @@ const POST = {
   e621: id => `https://e621.net/posts/${id}`
 }
 const postUrl = p => POST[p.category]?.(p.id)
-
-// Tag search pages per site. Boorus spell a tag with underscores.
-const q = t => encodeURIComponent(t)
-const SEARCH = {
-  danbooru: t => `https://danbooru.donmai.us/posts?tags=${q(t)}`,
-  gelbooru: t => `https://gelbooru.com/index.php?page=post&s=list&tags=${q(t)}`,
-  safebooru: t => `https://safebooru.org/index.php?page=post&s=list&tags=${q(t)}`,
-  yandere: t => `https://yande.re/post?tags=${q(t)}`,
-  konachan: t => `https://konachan.com/post?tags=${q(t)}`,
-  sankaku: t => `https://chan.sankakucomplex.com/?tags=${q(t)}`,
-  e621: t => `https://e621.net/posts?tags=${q(t)}`,
-  rule34: t => `https://rule34.xxx/index.php?page=post&s=list&tags=${q(t)}`,
-  animepictures: t => `https://anime-pictures.net/posts?search_tag=${q(t)}`,
-  zerochan: t => `https://www.zerochan.net/${q(t)}`,
-  pixiv: t => `https://www.pixiv.net/tags/${q(t)}`,
-  twitter: t => `https://x.com/search?q=${q(t)}`,
-  deviantart: t => `https://www.deviantart.com/search?q=${q(t)}`,
-  artstation: t => `https://www.artstation.com/search?query=${q(t)}`,
-  ehentai: t => `https://e-hentai.org/?f_search=${q(t)}`
-}
-const searchUrl = (site, tag) => SEARCH[site](BOORU.has(site) || site === 'yandere' || site === 'animepictures' ? tag.replace(/ /g, '_') : tag)
 
 // The page of just this picture, where its sidecar (j) tells: its booru post (the booru it was matched on too), a pixiv work
 // (range: which of its pictures), an E-Hentai image page (on the domain it came from, from: some are ExHentai's only).
@@ -59,13 +49,11 @@ const range = u => {
     : '1-50'
 }
 
-module.exports = { BOORU, EH, gdlName, postUrl, SEARCH, searchUrl, own, range }
+module.exports = { BOORU, EH, gdlName, postUrl, SEARCH, own, range }
 
 if (require.main === module) {
   const assert = require('assert')
-  assert.equal(searchUrl('danbooru', 'long hair'), 'https://danbooru.donmai.us/posts?tags=long_hair')
-  assert.equal(searchUrl('pixiv', 'long hair'), 'https://www.pixiv.net/tags/long%20hair')
-  assert.equal(searchUrl('yandere', 'long hair'), 'https://yande.re/post?tags=long_hair')
+  assert.equal(SEARCH.danbooru('long hair'), 'https://danbooru.donmai.us/posts?tags=long_hair')
   assert.deepEqual(own({ category: 'pixiv', id: 5, booru: { category: 'danbooru', id: 7 } }, 'https://www.pixiv.net/artworks/5'), { page: 'https://danbooru.donmai.us/posts/7' })
   assert.deepEqual(own({ category: 'pixiv', id: 5, num: 2 }, 'https://www.pixiv.net/users/1'), { page: 'https://www.pixiv.net/artworks/5', range: '3' })
   assert.deepEqual(own({ category: 'exhentai', gid: 9, num: 3, image_token: 'ab' }, 'https://exhentai.org/g/9/x/'), { page: 'https://exhentai.org/s/ab/9-3' })
