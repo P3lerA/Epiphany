@@ -64,7 +64,7 @@ const setPiling = (on, root = page()) => {
 const swap = (change, key) => {
   if (calm.matches) return change()
   if (flight?.dir < 0) land(flight, true) // a take-back still rewinding lands first: its undo must not come after this change
-  const root = page(), was = piling
+  const root = page(), was = piling, kind = F.piles
   // The rest of the page moves as blocks: day headings in the grid, whole piles in piles (their prints ride along).
   const blocks = () => new Map([...root.querySelectorAll(piling ? '.pile' : 'h3')].map(el => [el.dataset.tag ?? el.parentElement.dataset.day, pose(el)]))
   const pics = () => piling ? [...root.querySelectorAll('.print')] : shown(root)
@@ -76,7 +76,7 @@ const swap = (change, key) => {
   ghostsTop = ghosts.getBoundingClientRect().top
   try { // a throw must not leave later animations recording into a dead flight
     change()
-    const used = new Set(), same = was === piling
+    const used = new Set(), same = was === piling && kind === F.piles // piles of another kind are another view: none of them was there
     let n = 0
     const delay = () => Math.min(n++ * 12, 240)
     // A pile's prints set off and land together, stacked as they lie: one by one, whichever landed first was the pile's face for a moment.
@@ -91,13 +91,13 @@ const swap = (change, key) => {
       if (a?.box.width && b.box.width) move(a, b)
       else if (onScreen(b)) piling && !same ? appear(b.el.lastElementChild, pileDelay(b.el) + 650 * (1 - FRAME)) : appear(b.el) // a pile arriving with the view: only its label, as its prints land and take their frames; the prints fly in
     }
-    if (was && piling) { // piles to piles: the prints ride in their piles; one new on a pile fades in, one gone fades where it was
+    if (same && piling) { // piles to piles: the prints ride in their piles; one new on a pile fades in, one gone fades where it was
       const now = pics(), lies = new Set(now.map(lay)), stays = new Set(blocks().keys())
       for (const a of before) if (lies.has(lay(a.el)) || !stays.has(a.el.closest('.pile').dataset.tag)) used.add(a) // a pile gone takes its prints with it
       for (const el of now) if (!lain.has(lay(el)) && onScreen(pose(el))) appear(el)
     } else {
       const now = pics().map(pose)
-      if (was) { // piles to grid: every print flies home as a copy, stacked as it lay (the pictures themselves stack in grid order); the picture shows under the first to land
+      if (was && !piling) { // piles to grid: every print flies home as a copy, stacked as it lay (the pictures themselves stack in grid order); the picture shows under the first to land
         const spot = new Map(now.map(b => [b.el.dataset.file, b])), held = new Set()
         for (const a of before) {
           const b = spot.get(a.el.dataset.file), d = pileDelay(a.el)
@@ -110,6 +110,7 @@ const swap = (change, key) => {
         }
         for (const b of now) if (!held.has(b) && onScreen(b)) appear(b.el)
       } else {
+        // Grid to piles, or piles to another kind: each print flies from where its picture showed (a print it lay as, or its spot).
         // From a filtered grid most prints have no picture to fly from. They show as their pile's flight sets off, so one flying in
         // slides under the prints above it; a pile nothing flies into fades in as one layer, not prints seen through each other.
         const flown = new Set(piling ? now.filter(b => from.has(b.el.dataset.file) && onScreen(b)).map(b => b.el.closest('.pile')) : []), shows = new Set()
@@ -121,15 +122,15 @@ const swap = (change, key) => {
           const pile = b.el.closest('.pile'), el = flown.has(pile) ? b.el : pile.firstElementChild
           if (shows.has(el)) continue
           shows.add(el)
-          play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 250, delay: pileDelay(b.el), easing: EASE, fill: 'backwards' })
+          play(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 250, delay: pileDelay(b.el) + (was ? 650 * (1 - FRAME) : 0), easing: EASE, fill: 'backwards' }) // piles to another kind: as its pile lands, with its label (early, it stood among the old piles still leaving)
         }
       }
-      if (piling) for (const [file, [a]] of from) if (!used.has(a) && onScreen(a)) { // no pile on screen wants it: off to one below
+      if (piling && !was) for (const [file, [a]] of from) if (!used.has(a) && onScreen(a)) { // no pile on screen wants it: off to one below (piles to another kind: it fades where it lay, as a flight off screen lingered)
         const b = now.find(p => p.el.dataset.file === file)
         if (b) move(a, b)
       }
     }
-    for (const a of [...marks.values(), ...[...from.values()].flat()]) if (!used.has(a) && onScreen(a)) ghost(a, null, marks.get(a.el.dataset.tag) === a && !piling)
+    for (const a of [...marks.values(), ...[...from.values()].flat()]) if (!used.has(a) && onScreen(a)) ghost(a, null, marks.get(a.el.dataset.tag) === a && (!piling || !same)) // a pile leaving with its view: only its label stays to fade, its prints fly
   } finally { air = null; settle(flight = f) }
 }
 let back = null // where the piles were when a pile opened into the grid: clearing that search goes back
