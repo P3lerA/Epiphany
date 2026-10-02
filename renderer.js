@@ -39,7 +39,7 @@ const decorate = (img, item) => {
   img.oncontextmenu = () => api.menu(sel.has(item.file) ? items.filter(i => sel.has(i.file)) : [item]) // the selection it is in, or itself
   img.dataset.file = item.file
   img.dataset.q = `${item.artist || ''} ${item.character || ''} ${item.copyright || ''} ${item.tags || ''}`.toLowerCase()
-  img.names = new Set([item.artist, item.character, item.copyright, item.tags].flatMap(v => (v || '').split(', ')).map(t => t.replace(/^@/, '').toLowerCase())) // for a search's "whole names"
+  img.names = new Set(namesOf(item)) // for a search's whole names
   img.dataset.site = item.site
   if (item.ai) img.dataset.ai = 1
   img.dataset.rating = item.rating || 'e' // unrated (no booru match yet) is treated as explicit by the filter
@@ -180,7 +180,7 @@ const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '', ...safe
 // A segment's filter: its choice, or '!' and the choice for everything but (right-click). A picture of no known rating is in none.
 const passes = (f, is) => !f || (f[0] === '!' ? !is(f.slice(1)) : is(f))
 // Several choices (Ctrl in Statistics): any of them. Rating's are letters (gs), the others' comma-separated.
-const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || !passes(F.rating, v => !!img.dataset.rating && v.includes(img.dataset.rating)) || !passes(F.tagged, v => v.split(',').some(x => x === 'pending' ? pending(img.dataset.tagged) : img.dataset.tagged === x)) || (F.site && !F.site.split(',').includes(source(img.dataset.site))) || (F.q && !(Q().names.every(n => img.names.has(n)) && img.dataset.q.includes(Q().text))))
+const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || !passes(F.rating, v => !!img.dataset.rating && v.includes(img.dataset.rating)) || !passes(F.tagged, v => v.split(',').some(x => x === 'pending' ? pending(img.dataset.tagged) : img.dataset.tagged === x)) || (F.site && !F.site.split(',').includes(source(img.dataset.site))) || (F.q && !(Q().names.every(n => img.names.has(n)) && Q().text.every(t => img.dataset.q.includes(t)))))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
   filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => { const f = F[seg.dataset.name] || ''; b.classList.toggle('on', b.value === f); b.classList.toggle('not', f === '!' + b.value) }))
@@ -199,10 +199,15 @@ const drawSites = () => {
 // Search box: local scope filters the grid as you type; a site scope opens that site's search in the browser on Enter.
 const search = $('.search input'), scope = $('.search select')
 const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters(); explain() }
-// What the search asks: each "name in quotes" whole (all of them), and the rest of what is typed anywhere in a name.
+// What the search asks: comma-separated pieces, all of them. A piece that is a name in the library is that whole name; any other
+// (one being typed) is looked for anywhere in the names.
+const namesOf = item => [item.artist, item.character, item.copyright, item.tags].flatMap(v => (v || '').split(', ')).map(t => t.replace(/^@/, '').toLowerCase())
 let asks = {}
-const Q = () => asks.q === F.q ? asks : asks = { q: F.q, names: [...F.q.matchAll(/"([^"]+)"/g)].map(m => m[1].replace(/^_+|_+$/g, '')), text: F.q.replace(/"[^"]*"?/g, '').replace(/^_+|_+$/g, '') }
-const quoted = n => `"${n.replace(/_/g, ' ')}"` // a name as the search box takes it whole
+const Q = () => {
+  if (asks.q === F.q) return asks
+  const known = new Set(items.flatMap(namesOf)), pieces = F.q.split(',').map(p => p.replace(/^_+|_+$/g, '')).filter(Boolean)
+  return asks = { q: F.q, names: pieces.filter(p => known.has(p)), text: pieces.filter(p => !known.has(p)) }
+}
 let typing
 search.oninput = scope.onchange = () => { clearTimeout(typing); typing = setTimeout(() => swap(() => { localQ(); backToPiles() }), 120) } // filter changes move the pictures, see swap; one move once typing pauses, not one per key
 $('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')); search.focus() }
@@ -328,10 +333,10 @@ const title = text => {
   }
 }
 const explain = () => {
-  const t = Q().names.length ? (Q().names.length === 1 && !Q().text ? Q().names[0] : '') : F.q // one whole name, or what is typed
+  const t = Q().names.length === 1 && !Q().text.length ? Q().names[0] : '' // one name; a word being typed is not a tag
   asked = t // before any return: a late answer for the last tag must not land
   if (t === explained) return
-  if (!t || !items?.some(i => `, ${i.tags}, ${i.character}, ${i.copyright}, ${i.artist?.replace(/@/g, '')}, `.includes(`, ${t}, `))) { explained = ''; return title(line) } // a word being typed is not a tag
+  if (!t) { explained = ''; return title(line) }
   api.tagWiki(t).then(text => { if (asked !== t) return; explained = text ? t : ''; title(text || line) })
 }
 const quote = () => api.quote().then(q => { if (q === null) return; line = q; if (!explained) title(line) }) // null: unreachable, the last one stays

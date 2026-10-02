@@ -77,6 +77,8 @@ step('search filters, a tag gets its wiki in the title', async () => {
   await js(`search.value = 'solo'; search.dispatchEvent(new Event('input'))`)
   await until('shown(page()).length === 2', 'search result')
   await until(`h1.title === 'Only one character.'`, 'wiki in the title')
+  await js(`search.value = '1girl, vocal'; localQ()`); await until('shown(page()).length === 2', 'a name and a piece of one')
+  await js(`search.value = 'solo, smile'; localQ()`); await until('shown(page()).length === 0', 'every piece')
   await js(`$('.search .clear-q').click()`); await until('shown(page()).length === 4', 'search cleared')
 })
 step('piles by tags and by characters', async () => {

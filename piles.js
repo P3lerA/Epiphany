@@ -20,7 +20,7 @@ const buildPiles = root => {
     const b = el.appendChild(document.createElement('button'))
     b.className = 'pile'
     b.dataset.tag = t
-    b.onclick = () => swap(() => { back = scroller().scrollTop; setPiling(false); scope.value = ''; search.value = quoted(t); localQ(); scroller().scrollTop = 0 })
+    b.onclick = () => swap(() => { back = scroller().scrollTop; setPiling(false); scope.value = ''; search.value = t.replace(/_/g, ' '); localQ(); scroller().scrollTop = 0 })
     const stack = b.appendChild(document.createElement('span'))
     const kept = (covers.get(t) ?? []).map(f => l.find(i => i.dataset.file === f)).filter(Boolean) // filters and trips to the grid don't reshuffle what lies on top
     const pick = [...new Set([...kept, ...l.filter(i => !seen.has(i)), ...l.filter(i => seen.has(i))])].slice(0, 3)

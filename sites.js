@@ -1,10 +1,11 @@
 // What the app knows of each site, as data: which are boorus, a post's page, a tag's search page, the page of just one picture,
 // how much of a page a pull takes. No Electron, no files: main.js asks.
 
-// The boorus, each with its tag search page (a tag spelled with underscores): their pictures keep their own tags. Other sources
+// The boorus, each with its tag search page (tags spelled with underscores; "a, b" as the search box takes several, sent as
+// "a b"): their pictures keep their own tags. Other sources
 // (pixiv, twitter...) carry no booru tags; their pictures get looked up on the boorus. yande.re is one of them: its words are its
 // own (seifuku, pantsu, megane), ~9 a post. konachan's are danbooru's, many of them old names (main.js renames).
-const q = t => encodeURIComponent(t.replace(/ /g, '_'))
+const q = t => encodeURIComponent(t.split(',').map(x => x.trim().replace(/ /g, '_')).filter(Boolean).join(' '))
 const SEARCH = {
   danbooru: t => `https://danbooru.donmai.us/posts?tags=${q(t)}`,
   gelbooru: t => `https://gelbooru.com/index.php?page=post&s=list&tags=${q(t)}`,
@@ -53,7 +54,7 @@ module.exports = { BOORU, EH, gdlName, postUrl, SEARCH, own, range }
 
 if (require.main === module) {
   const assert = require('assert')
-  assert.equal(SEARCH.danbooru('long hair'), 'https://danbooru.donmai.us/posts?tags=long_hair')
+  assert.equal(SEARCH.danbooru('long hair, smile'), 'https://danbooru.donmai.us/posts?tags=long_hair%20smile')
   assert.deepEqual(own({ category: 'pixiv', id: 5, booru: { category: 'danbooru', id: 7 } }, 'https://www.pixiv.net/artworks/5'), { page: 'https://danbooru.donmai.us/posts/7' })
   assert.deepEqual(own({ category: 'pixiv', id: 5, num: 2 }, 'https://www.pixiv.net/users/1'), { page: 'https://www.pixiv.net/artworks/5', range: '3' })
   assert.deepEqual(own({ category: 'exhentai', gid: 9, num: 3, image_token: 'ab' }, 'https://exhentai.org/g/9/x/'), { page: 'https://exhentai.org/s/ab/9-3' })
