@@ -19,6 +19,14 @@ const WIN = path.join(HOME, 'window.json') // last window bounds; separate file 
 const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru', statistics: false, aliases: false }
 let win
 const MAC = process.platform === 'darwin'
+// From source the icon's blue square is red (red and blue swapped): a dev instance stands apart in the Dock or taskbar.
+const icon = file => {
+  const i = nativeImage.createFromPath(path.join(__dirname, 'build', file))
+  if (app.isPackaged) return i
+  const b = i.toBitmap()
+  for (let k = 0; k < b.length; k += 4) [b[k], b[k + 2]] = [b[k + 2], b[k]]
+  return nativeImage.createFromBitmap(b, i.getSize())
+}
 // macOS keeps its reflexes in the menu bar, so it gets the stock menus: Cmd+C/V/X/A, Cmd+W (closing parks the window), Cmd+M, Cmd+Q,
 // and Cmd+, for Settings. Windows has none.
 const openSettings = { label: 'Settings…', accelerator: 'Cmd+,', click: () => { win.show(); win.webContents.executeJavaScript("$('#settings :target') || $('.fab a').click()") } }
@@ -33,7 +41,7 @@ const readJson = (f, fallback) => fs.existsSync(f) ? JSON.parse(fs.readFileSync(
 const writeJson = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 2))
 const settings = () => ({ ...DEFAULTS, ...readJson(SETTINGS, {}) })
 // Debug mode opens a DevTools port at start, so the running app can be driven from outside (Claude's tests) without a relaunch.
-if (settings().debug) app.commandLine.appendSwitch('remote-debugging-port', '9231')
+if (settings().debug && !app.commandLine.hasSwitch('remote-debugging-port')) app.commandLine.appendSwitch('remote-debugging-port', '9231') // one given wins: two instances, one port
 // A profile's caption template can live in captions/<profile>.md, edited in the user's editor: one piece per line, <!-- notes --> ignored.
 const templateFile = () => path.join(HOME, 'captions', settings().profile + '.md')
 const template = () => fs.existsSync(templateFile()) ? fs.readFileSync(templateFile(), 'utf8').replace(/<!--[\s\S]*?-->/g, '').replace(/\r?\n/g, ',') : null
@@ -147,7 +155,7 @@ function createWindow() {
     titleBarStyle: 'hidden', // the renderer's header is the title bar; Windows keeps only its caption buttons
     titleBarOverlay: { height: 56 },
     trafficLightPosition: { x: 20, y: 21 }, // macOS: its buttons centred in the header
-    icon: path.join(__dirname, 'build', 'icon.png'),
+    icon: icon('icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false }
   })
   win.once('ready-to-show', () => { win.show(); if (saved.maximized) win.maximize() })
@@ -704,9 +712,9 @@ let tray, listening // the extension's port: true once it listens, false when ta
 
 app.whenReady().then(() => {
   dir()
-  app.dock?.setIcon(path.join(__dirname, 'build', 'icon-mac.png')) // macOS: from source the Dock would show Electron's
+  app.dock?.setIcon(icon('icon-mac.png')) // macOS: from source the Dock would show Electron's
   if (!MAC) { // macOS: the Dock brings the window back and quits
-    tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 32 }))
+    tray = new Tray(icon('icon.png').resize({ width: 32 }))
     tray.setToolTip('Epiphany')
     tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Quit', click: () => app.quit() }]))
     tray.on('click', () => { win.show(); win.focus() })
