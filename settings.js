@@ -187,7 +187,29 @@ const drawStats = () => {
     }).join('') + '</div>'
   }
   box.innerHTML = Object.entries(STATS).map(([group, list]) => `<div class="${group}">${list.map(chart).join('')}</div>`).join('')
+    + (items.length ? `<div class="saved">${saved(on)}</div>` : '')
   box.querySelectorAll('i').forEach(i => i.style.setProperty('--w', i.dataset.w)) // the page's CSP refuses style attributes
+}
+// Under the lists, across: pictures saved in the last month by the day, or the last week or day by the hour; the library faint
+// behind what is on show, as on the bars. A column's tooltip gives its counts.
+const SPANS = { Month: [30, false], Week: [7, true], Day: [1, true] } // days back, by the hour
+const saved = on => {
+  const span = SPANS[localStorage.savedSpan] ? localStorage.savedSpan : 'Month', [back, hour] = SPANS[span], now = Date.now()
+  const bin = t => { const d = new Date(t); hour ? d.setMinutes(0, 0, 0) : d.setHours(0, 0, 0, 0); return +d }
+  const keys = []
+  for (const d = new Date(bin(now - back * 864e5)); +d <= now; hour ? d.setHours(d.getHours() + 1) : d.setDate(d.getDate() + 1)) keys.push(+d)
+  const n = count(on, i => bin(i.time)), all = count(items, i => bin(i.time)), peak = Math.max(...keys.map(k => all.get(k) ?? 0))
+  const x = j => j / (keys.length - 1) * 1000, w = 1000 / (keys.length - 1), y = v => 100 - (v ?? 0) / (peak || 1) * 96
+  const line = m => { // smoothed: curves through the midpoints, each count a control point, so it never dips below 0 or tops the peak
+    const p = keys.map((k, j) => [x(j), y(m.get(k))]), mid = (a, b) => `${(a[0] + b[0]) / 2},${(a[1] + b[1]) / 2}`
+    return `${p[0]} L${mid(p[0], p[1])} ${p.slice(1, -1).map((q, j) => `Q${q} ${mid(q, p[j + 2])}`).join(' ')} L${p.at(-1)}`
+  }
+  const label = k => hour ? `${day(k)} ${new Date(k).getHours()}:00` : day(k)
+  return `<div class="chart"><h3>Saved per ${hour ? 'hour' : 'day'} <small>peak ${peak.toLocaleString()}</small>`
+    + `<div class="seg">${Object.keys(SPANS).map(k => `<button data-span="${k}"${k === span ? ' class="on"' : ''}>${k}</button>`).join('')}</div></h3>`
+    + `<svg viewBox="0 0 1000 100" preserveAspectRatio="none"><path class="all" d="M0,100 L${line(all)} L1000,100Z"/><path d="M0,100 L${line(n)} L1000,100Z"/><path class="line" d="M${line(n)}"/>`
+    + keys.map((k, j) => `<rect x="${x(j) - w / 2}" width="${w}" height="100"><title>${label(k)}: ${(n.get(k) ?? 0).toLocaleString()} on show, ${(all.get(k) ?? 0).toLocaleString()} in the library</title></rect>`).join('')
+    + `</svg><p><span>${label(keys[0])}</span><span>${label(keys.at(-1))}</span></p></div>`
 }
 const cut = (e, not) => {
   const bar = e.target.closest('[data-f]')
@@ -206,6 +228,11 @@ const cut = (e, not) => {
   const to = add ? (was.includes(v) ? was.filter(x => x !== v) : [...was, v]) : F[f] === sign + v ? [] : [v]
   swap(() => { F[f] = to.length ? sign + to.join(SEP[f] ?? ',') : ''; saveF(); applyFilters(); explain() })
 }
-$('#statistics .charts').onclick = e => cut(e)
+$('#statistics .charts').onclick = e => {
+  const b = e.target.closest('[data-span]')
+  if (!b) return cut(e)
+  localStorage.savedSpan = b.dataset.span
+  $('#statistics .saved').innerHTML = saved(shown($('#lobby')).map(i => i.item))
+}
 $('#statistics .charts').oncontextmenu = e => cut(e, true)
 addEventListener('hashchange', () => { if (location.hash === '#statistics') s.statistics ? drawStats() : location.replace('#instruments') }) // removed: no page
