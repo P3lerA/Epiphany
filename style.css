@@ -100,8 +100,8 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 .piles-toggle svg { position: relative; color: var(--muted); transition: color .15s }
 .piles-toggle:not(.on) svg:first-child, .piles-toggle.on svg:last-child { color: var(--fg) }
 
-/* Native popover: light dismiss and Esc for free; opens above its button. */
-#filters { position-anchor: --filters; inset: auto; bottom: anchor(top); right: anchor(right); margin: 0 0 .5rem; overflow: visible; padding: 14px; color: inherit; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: 10px 14px }
+/* Native popover: light dismiss and Esc for free; opens above its button, out of it as the lists do (::picker below). */
+#filters { position-anchor: --filters; inset: auto; bottom: anchor(top); right: anchor(right); margin: 0 0 .5rem; overflow: visible; padding: 14px; color: inherit; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: 10px 14px; opacity: 0; translate: 0 var(--from); transition: opacity .15s, translate .15s cubic-bezier(.2, 0, 0, 1), display .15s allow-discrete, overlay .15s allow-discrete }
 /* More: the filters used less, folded (renderer.js opens it while one of them is on). Same columns as the rows above. */
 #filters details { grid-column: 1 / -1 }
 :is(#filters, .meta) summary { display: flex; align-items: center; gap: .4rem; width: max-content; font-size: 12px; color: var(--muted); cursor: pointer; list-style: none; transition: color .15s }
@@ -109,7 +109,7 @@ body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var
 :is(#filters, .meta) summary::after { content: ''; width: .38em; height: .38em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; rotate: 45deg; translate: 0 -.15em; transition: rotate .15s, translate .15s }
 :is(#filters, .meta) details[open] summary::after { rotate: 225deg; translate: 0 .1em }
 #filters details > div { display: grid; grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: 10px 14px; margin-top: 10px }
-#filters:popover-open { display: grid }
+#filters:popover-open { display: grid; opacity: 1; translate: none; @starting-style { opacity: 0; translate: 0 var(--from) } }
 #filters > span, #filters details span { font-size: 12px; color: var(--muted) }
 #filters label { display: contents; cursor: pointer } /* its name and switch sit in the two columns like any row */
 #filters label input { justify-self: end } /* right, like the settings rows: the panel sits balanced */
@@ -275,9 +275,12 @@ select, ::picker(select) { appearance: base-select }
 select { display: inline-flex; align-items: center; gap: .35rem; font: inherit; color: var(--muted); background: none; border: none; padding: .4rem .25rem; cursor: pointer; outline: none; transition: color .15s }
 select:hover, select:focus-visible, select:open { color: var(--fg) }
 select::picker-icon { content: ''; width: .38em; height: .38em; margin: 0 .15em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; rotate: 45deg; translate: 0 -.15em; color: var(--muted) }
-::picker(select) { margin-block: 4px; padding: 4px; min-width: max(anchor-size(self-inline), 9rem); color: var(--fg); background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); opacity: 0; transition: opacity .15s, display .15s allow-discrete, overlay .15s allow-discrete }
-select:open::picker(select) { opacity: 1 }
-@starting-style { select:open::picker(select) { opacity: 0 } }
+::picker(select) { margin-block: 4px; padding: 4px; min-width: max(anchor-size(self-inline), 9rem); color: var(--fg); background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); opacity: 0; translate: 0 var(--from); transition: opacity .15s, translate .15s cubic-bezier(.2, 0, 0, 1), display .15s allow-discrete, overlay .15s allow-discrete }
+select:open::picker(select) { opacity: 1; translate: none }
+@starting-style { select:open::picker(select) { opacity: 0; translate: 0 var(--from) } }
+/* A list comes out of its control, 4px: down from it, or up where it opens upward, low in the window (the search box, Filters). */
+:root { --from: -4px }
+:is(.search, #filters) { --from: 4px } /* ponytail: by place, not by the side it actually opened on; a list that flips for room slides the wrong 4px */
 .panel select::picker(select) { position-area: block-end span-inline-start } /* right-aligned in a row: the list hangs from the right edge */
 option { padding: .35rem .75rem .35rem .5rem; border-radius: 4px; gap: .5rem; cursor: pointer }
 option:hover, option:focus-visible { background: var(--hover); outline: none }
