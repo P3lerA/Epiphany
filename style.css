@@ -43,17 +43,18 @@ html, body { overflow: hidden }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--muted) }
 :where(:not(input):focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px } /* :where: anything that sets its own outline (dialog, select, fields, pages) wins */
 
-/* The header is the title bar: Windows keeps only its caption buttons (titleBarOverlay), so there is one bar, not two. */
-header { display: flex; align-items: center; height: var(--bar); flex: none; padding: 0 1.5rem; padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 1rem); -webkit-app-region: drag }
+/* The header is the title bar: the window keeps only its own buttons (titleBarOverlay), so there is one bar, not two. They sit
+   in the padding, 1rem clear: at the right on Windows, at the left on macOS, the title after them as in macOS's own windows. */
+header { display: flex; align-items: center; height: var(--bar); flex: none; padding: 0 max(1.5rem, 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 1rem) 0 max(1.5rem, env(titlebar-area-x, 0px) + 1rem); -webkit-app-region: drag }
 header > :not(h1) { -webkit-app-region: no-drag }
-h1, h2 { font-family: 'Segoe UI Variable Display', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: -.01em }
+h1, h2 { font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, 'Noto Sans SC', sans-serif; letter-spacing: -.01em }
 h1 { font-size: 1.5rem; font-weight: 700 }
 /* Whole-pixel metrics (even css px = whole device px at 150%): a fractional text baseline gets re-snapped when layers change and the title visibly jumps. */
 h1 { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; height: 36px }
 h1 > span { grid-area: 1 / 1; line-height: 24px; display: none }
 body:has(#lobby:target) .t-lobby, body:has(#projects:target) .t-projects, body:has(#settings :target) .t-settings { display: block }
 /* Clickable (another quote, or the tag's wiki), so it lights up like the tabs; capped so the rest of the bar still drags the window. */
-.t-lobby { justify-self: start; max-width: 60%; margin-left: -8px; padding: 4px 8px; border-radius: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer; -webkit-app-region: no-drag; transition: background .15s }
+.t-lobby { justify-self: start; max-width: 60%; margin-left: -8px; padding: 4px 8px; border-radius: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 16px/24px 'Segoe UI Variable Text', 'Segoe UI', system-ui, 'Noto Sans SC', sans-serif; letter-spacing: 0; cursor: pointer; -webkit-app-region: no-drag; transition: background .15s }
 .t-lobby:hover { background: var(--hover) }
 .t-lobby:empty { padding: 0 }
 body.crowded .t-lobby { visibility: hidden } /* the right side took the bar (tasks.js) */

@@ -6,7 +6,11 @@ Collect, sort, export.
 
 ## Install
 
-Windows only by far, download from [Releases](https://github.com/P3lerA/Epiphany/releases/latest).
+Download from [Releases](https://github.com/P3lerA/Epiphany/releases/latest).
+
+**Windows**: the Setup, or the portable exe.
+
+**macOS** (Apple silicon): the dmg, drag Epiphany into Applications. It isn't signed: the first open is blocked, then System Settings → Privacy & Security → Open Anyway. Updates don't ask again.
 
 In the app, Settings → Instruments:
 **gallery-dl**: Install. It does the downloading.

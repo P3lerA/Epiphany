@@ -19,9 +19,9 @@ const drawTasks = () => {
 api.onTasks(l => { running = l; drawTasks() })
 api.onNote(n => { noted = n; clearTimeout(noteTimer); noteTimer = setTimeout(() => { noted = null; drawTasks() }, n.error ? 10000 : 5000); drawTasks() })
 
-// A crowded right side (tasks, selection, tabs, and Windows' caption buttons in the padding) past 60% of the bar: the title's quote
-// or explanation steps aside for it rather than show a stub.
-const head = $('header'), crowd = () => document.body.classList.toggle('crowded',
-  $('.pills').offsetWidth + $('header nav').offsetWidth + parseFloat(getComputedStyle(head).paddingRight) > head.clientWidth * .6)
+// A crowded right side (tasks, selection, tabs, and Windows' caption buttons in the padding; macOS's are in the left one) past
+// 60% of the bar: the title's quote or explanation steps aside for it rather than show a stub.
+const head = $('header'), crowd = () => { const s = getComputedStyle(head); document.body.classList.toggle('crowded',
+  $('.pills').offsetWidth + $('header nav').offsetWidth + parseFloat(s.paddingRight) > head.clientWidth * .6) }
 const fit = new ResizeObserver(crowd)
 fit.observe(head); fit.observe($('.pills'))

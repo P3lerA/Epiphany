@@ -33,7 +33,8 @@ if (process.env.EPIPHANY_SMOKE_AT) { const [x, y] = process.env.EPIPHANY_SMOKE_A
 if (models) fs.symlinkSync(path.resolve(models), path.join(home, 'models'), 'junction') // rmSync below unlinks it, the model stays
 
 const devtools = 9300 + Math.floor(Math.random() * 300), server = devtools + 1
-const exe = packed ? path.join(root, 'dist', 'win-unpacked', 'Epiphany.exe') : createRequire(import.meta.url)('electron')
+const exe = packed ? path.join(root, 'dist', ...process.platform === 'darwin' ? ['mac-arm64', 'Epiphany.app', 'Contents', 'MacOS', 'Epiphany'] : ['win-unpacked', 'Epiphany.exe'])
+  : createRequire(import.meta.url)('electron')
 const app = spawn(exe, [...packed ? [] : [root], `--remote-debugging-port=${devtools}`, `--user-data-dir=${path.join(home, 'ud')}`],
   { env: { ...process.env, EPIPHANY_HOME: home, EPIPHANY_PORT: String(server) }, stdio: ['ignore', 'ignore', 'pipe'] })
 let log = ''
@@ -146,7 +147,7 @@ let failed = false
 try {
   for (let t = Date.now(); !ws; await sleep(200)) {
     if (Date.now() - t > 30000) throw new Error('no page over DevTools')
-    const page = await fetch(`http://127.0.0.1:${devtools}/json/list`).then(r => r.json()).then(l => l.find(p => p.url.endsWith('index.html')), () => null)
+    const page = await fetch(`http://127.0.0.1:${devtools}/json/list`).then(r => r.json()).then(l => l.find(p => p.url.includes('index.html')), () => null)
     if (page) { ws = new WebSocket(page.webSocketDebuggerUrl); await new Promise((ok, no) => { ws.onopen = ok; ws.onerror = no }) }
   }
   ws.onmessage = e => {

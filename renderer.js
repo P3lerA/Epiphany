@@ -35,7 +35,7 @@ const add = (root, item, front) => {
 }
 const decorate = (img, item) => {
   img.item = item
-  img.onclick = e => e.shiftKey ? select(img, e) : e.ctrlKey || e.metaKey ? null : preview(item, img.closest('section')) // Ctrl toggles on press, see paint
+  img.onclick = e => e.shiftKey ? select(img, e) : toggling(e) ? null : preview(item, img.closest('section')) // Ctrl toggles on press, see paint
   img.oncontextmenu = () => api.menu(sel.has(item.file) ? items.filter(i => sel.has(i.file)) : [item]) // the selection it is in, or itself
   img.dataset.file = item.file
   img.dataset.q = `${item.artist || ''} ${item.character || ''} ${item.copyright || ''} ${item.tags || ''}`.toLowerCase()
@@ -48,7 +48,9 @@ const decorate = (img, item) => {
 }
 
 // Selection: Ctrl-click toggles, Ctrl-drag paints, Shift-click extends from the last toggle, Ctrl+A takes every visible picture, Esc clears.
+// Cmd on macOS, where Ctrl-click is a right-click.
 const sel = new Set()
+const toggling = e => e.metaKey || e.ctrlKey && !navigator.platform.startsWith('Mac')
 let anchor
 const selUI = $('#selection')
 let grid // the grid page on show; while Settings is up, the one shown last: piles, filters and pulls still act on it
@@ -75,7 +77,7 @@ let paint = null
 addEventListener('mousedown', e => {
   paint = null
   const img = e.target.closest?.('.grid img')
-  if (!img || e.button || e.shiftKey || !(e.ctrlKey || e.metaKey)) return
+  if (!img || e.button || e.shiftKey || !toggling(e)) return
   e.preventDefault() // no image drag-out while painting
   select(img, e)
   paint = sel.has(img.dataset.file)

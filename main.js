@@ -3,7 +3,7 @@ const http = require('http')
 const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
-const { execFile, spawn } = require('child_process')
+const { spawn, execFile } = require('child_process')
 const crypto = require('crypto')
 const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
@@ -18,7 +18,14 @@ const SETTINGS = path.join(HOME, 'settings.json')
 const WIN = path.join(HOME, 'window.json') // last window bounds; separate file so renderer settings saves never clobber it
 const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru', statistics: false, aliases: false }
 let win
-Menu.setApplicationMenu(null)
+const MAC = process.platform === 'darwin'
+// macOS keeps its reflexes in the menu bar, so it gets the stock menus: Cmd+C/V/X/A, Cmd+W (closing parks the window), Cmd+M, Cmd+Q,
+// and Cmd+, for Settings. Windows has none.
+const openSettings = { label: 'Settings…', accelerator: 'Cmd+,', click: () => { win.show(); win.webContents.executeJavaScript("$('#settings :target') || $('.fab a').click()") } }
+Menu.setApplicationMenu(MAC ? Menu.buildFromTemplate([
+  { label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, openSettings, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+  { role: 'fileMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }
+]) : null)
 if (!app.requestSingleInstanceLock()) app.exit() // quit() is async and whenReady would still open a window; a second launch (tray-parked app, double-clicked exe) just raises the first
 app.on('second-instance', () => { win?.show(); win?.focus() })
 
@@ -42,7 +49,8 @@ const editTemplate = () => {
 }
 const templateInfo = () => ({ text: profile().caption.split(',').map(x => x.trim()).filter(Boolean).join(', '), custom: template() != null })
 const resetTemplate = () => fs.existsSync(templateFile()) && shell.trashItem(templateFile())
-const GDL = path.join(process.env.APPDATA, 'gallery-dl', 'config.json') // site credentials live here, where gallery-dl reads them
+const gallery = require('./gdl')(HOME), { gdl, kill, oauth } = gallery
+const GDL = gallery.CONFIG // site credentials live here, where gallery-dl reads them
 const PROJ = path.join(HOME, 'project')
 
 const dir = (p = settings().project) => {
@@ -128,19 +136,6 @@ const task = (text, stop) => {
 const stopTask = id => running.get(id)?.stop?.()
 const note = (text, error) => send('note', { text, error: !!error })
 
-const run = (cmd, args) => {
-  let child
-  const p = new Promise((res, rej) => child = execFile(cmd, args, { maxBuffer: 1e7 }, (e, out, err) => e ? rej(new Error(err || e.message)) : res(out)))
-  p.child = child
-  return p
-}
-// The whole tree: gallery-dl.exe unpacks itself and runs as a child of its own.
-const kill = child => execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => {})
-
-// gallery-dl: the standalone exe we downloaded if present, else whatever Python has (dev machines).
-const GDL_EXE = path.join(HOME, 'bin', 'gallery-dl.exe')
-const gdlCmd = () => fs.existsSync(GDL_EXE) ? [GDL_EXE, []] : ['python', ['-m', 'gallery_dl']]
-const gdl = args => { const [c, a] = gdlCmd(); return run(c, [...a, ...args]) }
 
 function createWindow() {
   const saved = readJson(WIN, {})
@@ -151,6 +146,7 @@ function createWindow() {
     show: false,
     titleBarStyle: 'hidden', // the renderer's header is the title bar; Windows keeps only its caption buttons
     titleBarOverlay: { height: 56 },
+    trafficLightPosition: { x: 20, y: 21 }, // macOS: its buttons centred in the header
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false }
   })
@@ -507,7 +503,7 @@ const removeProject = async name => {
   send('projectRemoved', name)
 }
 const projectMenu = name => void Menu.buildFromTemplate([
-  { label: 'Open in Explorer', click: () => shell.openPath(path.join(PROJ, name)) },
+  { label: MAC ? 'Open in Finder' : 'Open in Explorer', click: () => shell.openPath(path.join(PROJ, name)) },
   { type: 'separator' },
   { label: 'Delete project', click: () => removeProject(name) }
 ]).popup({ window: win })
@@ -575,7 +571,7 @@ const tagMenu = tag => {
 // for the text. void: popup() answers with the window it opened on, which the IPC reply can't carry.
 const menu = items => void Menu.buildFromTemplate([
   { label: 'Open', submenu: [
-    { label: 'In Explorer', click: () => new Map(items.map(i => [path.dirname(i.file), i.file])).forEach(f => shell.showItemInFolder(f)) },
+    { label: MAC ? 'In Finder' : 'In Explorer', click: () => new Map(items.map(i => [path.dirname(i.file), i.file])).forEach(f => shell.showItemInFolder(f)) },
     { label: 'Original site', click: () => new Set(items.map(i => i.page)).forEach(u => shell.openExternal(u)) },
     ...new Set(items.map(i => i.project)).size === 1 ? [{ label: 'Project', click: () => send('openProject', items[0].project) }] : []
   ] },
@@ -598,14 +594,9 @@ const setCred = (site, key, value) => {
   writeJson(GDL, c)
 }
 
-const oauth = site => {
-  const [c, a] = gdlCmd()
-  spawn('cmd.exe', ['/c', 'start', '""', 'cmd', '/k', c, ...a, `oauth:${site}`], { detached: true, stdio: 'ignore' }).unref()
-}
-
 // The Chrome extension ships inside the app (extraResources when packaged) and is exported for "Load unpacked".
 const EXT = app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension')
-// Self-update. Installed builds use electron-updater (latest.yml on the GitHub release).
+// Self-update. Installed builds use electron-updater (latest.yml on the GitHub release); macOS swaps its .app (update, below).
 // The portable exe is a self-extracting shell that runs from %TEMP%; it stays locked (no rename, no overwrite) until its launcher has
 // cleaned up, seconds after we quit. So the new one waits beside it, and takes over as Epiphany.exe once this one is let go and
 // deleted: one name from then on, so shortcuts keep working.
@@ -622,7 +613,7 @@ autoUpdater.on('update-downloaded', () => idle(updating).then(() => autoUpdater.
 let updating
 autoUpdater.on('download-progress', p => (updating ??= task('Downloading the update')).set(`Downloading the update ${Math.round(p.percent)}%`))
 autoUpdater.on('error', e => { updating?.end(); updating = null; note(`Update: ${e.message}`, true) })
-let latestRelease
+let latestRelease, updateCall // the update under way: another click joins it (two would wait on each other forever)
 
 const checkUpdate = async () => {
   const current = require('./package.json').version // app.getVersion() is Electron's own when launched without a package.json
@@ -632,12 +623,27 @@ const checkUpdate = async () => {
 }
 
 const update = async () => {
-  if (!PORTABLE) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
-  const asset = latestRelease.assets.find(a => /^Epiphany[ .][0-9.]+\.exe$/.test(a.name)) // GitHub swaps spaces for dots in asset names
-  if (!asset) throw new Error('no portable exe in ' + latestRelease.tag_name)
+  if (!PORTABLE && !MAC) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
+  if (process.execPath.includes('/AppTranslocation/')) throw new Error('move Epiphany into Applications first') // run where it was unzipped: Gatekeeper runs a read-only copy
+  const asset = latestRelease.assets.find(a => MAC ? a.name.endsWith('-mac.zip') : /^Epiphany[ .][0-9.]+\.exe$/.test(a.name)) // GitHub swaps spaces for dots in asset names
+  if (!asset) throw new Error(`no ${MAC ? 'macOS zip' : 'portable exe'} in ` + latestRelease.tag_name)
   const t = task('Downloading ' + asset.name) // until the app quits for it
   const buf = await fetch(asset.browser_download_url).then(r => r.arrayBuffer()).then(Buffer.from).catch(e => { t.end(); throw e })
   if (buf.length !== asset.size) { t.end(); throw new Error('download incomplete') }
+  // macOS: Squirrel.Mac takes signed apps only, so the .app is swapped in place. A running app's bundle can be renamed and deleted
+  // (its files stay open): the new one moves in before we quit, and app.relaunch starts it. Fetched by us, it carries no quarantine,
+  // so Gatekeeper doesn't ask again.
+  if (MAC) {
+    const APP = path.resolve(process.execPath, '../../..'), nw = APP + '.new', zip = nw + '.zip'
+    try { for (const d of [nw, APP + '.old']) fs.rmSync(d, { recursive: true, force: true }); fs.writeFileSync(zip, buf); await new Promise((ok, no) => execFile('ditto', ['-x', '-k', zip, nw], e => e ? no(e) : ok())) }
+    catch (e) { t.end(); throw e } finally { fs.rmSync(zip, { force: true }) }
+    await idle(t)
+    fs.renameSync(APP, APP + '.old')
+    fs.renameSync(path.join(nw, 'Epiphany.app'), APP)
+    fs.rmSync(APP + '.old', { recursive: true }); fs.rmSync(nw, { recursive: true })
+    app.relaunch()
+    return app.quit()
+  }
   const to = path.join(path.dirname(PORTABLE), 'Epiphany.exe'), nw = to + '.new'
   fs.writeFileSync(nw, buf)
   // After we quit: delete this exe once its launcher lets go (retried for a minute), then the new one becomes Epiphany.exe and
@@ -655,7 +661,7 @@ const instruments = async () => {
   const v = await gdl(['--version']).then(v => v.trim(), () => null)
   return {
     'gallery-dl': { status: v ?? 'not found', action: v ? 'Update' : 'Install' },
-    extension: { status: readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?', action: 'Export' },
+    extension: { status: `${readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?'}, port ${PORT}${listening === false ? ' taken' : ''}`, action: 'Export' },
     tagger: installing ? { status: 'downloading…', action: 'Install' } : tagger.has() ? { status: 'PixAI v1.0', action: 'Remove' } : { status: 'not installed', action: 'Install' }
   }
 }
@@ -669,32 +675,18 @@ const exportExtension = async () => {
   note('Load it unpacked from chrome://extensions')
 }
 
-// Stable executables are published on Codeberg, with SHA256SUMS alongside.
 const installGdl = async () => {
   const t = task('Downloading gallery-dl')
-  try {
-  const get = url => fetch(url, { signal: AbortSignal.timeout(120000) }).then(r => { if (!r.ok) throw new Error(`${r.status} ${url}`); return r })
-  const rel = await get('https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest').then(r => r.json())
-  const asset = n => rel.assets.find(a => a.name === n)?.browser_download_url
-  if (!asset('gallery-dl.exe')) throw new Error('no gallery-dl.exe in ' + rel.tag_name)
-  const buf = Buffer.from(await get(asset('gallery-dl.exe')).then(r => r.arrayBuffer()))
-  const want = (await get(asset('SHA256SUMS')).then(r => r.text())).split('\n').find(l => l.trim().endsWith('gallery-dl.exe'))?.trim().split(/\s+/)[0]
-  if (want && crypto.createHash('sha256').update(buf).digest('hex') !== want) throw new Error('checksum mismatch')
-  fs.mkdirSync(path.dirname(GDL_EXE), { recursive: true })
-  fs.writeFileSync(GDL_EXE, buf)
-  const v = await gdl(['--version']).then(v => v.trim())
-  t.end(`gallery-dl ${v} installed`)
-  return v
-  } catch (e) { t.end(); note(e.message, true) }
+  try { const v = await gallery.install(); t.end(`gallery-dl ${v} installed`); return v } catch (e) { t.end(); note(e.message, true) }
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => { writeJson(SETTINGS, v); if (!v.aliases !== !alias) useAliases(v.aliases) }, profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
-  checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
+  checkUpdate, update: () => updateCall ??= update().catch(e => note(`Update: ${e.message}`, true)).finally(() => updateCall = null), instruments, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
   tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
-ipcMain.on('theme', (_, t, bar) => { nativeTheme.themeSource = t; win?.setTitleBarOverlay(bar) }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
+ipcMain.on('theme', (_, t, bar) => { nativeTheme.themeSource = t; if (!MAC) win?.setTitleBarOverlay(bar) }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 
 // Quitting from the tray with work in the task line asks first (updates and restarts have set app.quitting and go).
 let asking
@@ -708,14 +700,17 @@ app.on('before-quit', e => {
   dialog.showMessageBox(win, { type: 'question', message: 'Still working', detail, buttons: ['Quit anyway', 'Keep running'], defaultId: 1, cancelId: 1 })
     .then(({ response }) => { asking = false; if (response === 0) { app.quitting = true; app.quit() } })
 })
-let tray
+let tray, listening // the extension's port: true once it listens, false when taken (Instruments says which)
 
 app.whenReady().then(() => {
   dir()
-  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 32 }))
-  tray.setToolTip('Epiphany')
-  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Quit', click: () => app.quit() }]))
-  tray.on('click', () => { win.show(); win.focus() })
+  app.dock?.setIcon(path.join(__dirname, 'build', 'icon-mac.png')) // macOS: from source the Dock would show Electron's
+  if (!MAC) { // macOS: the Dock brings the window back and quits
+    tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 32 }))
+    tray.setToolTip('Epiphany')
+    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Quit', click: () => app.quit() }]))
+    tray.on('click', () => { win.show(); win.focus() })
+  }
   http.createServer((req, res) => {
     // Only the extension: web pages can POST here too (text/plain skips preflight), but can't fake Origin.
     if (!req.headers.origin?.startsWith('chrome-extension://')) return res.writeHead(403).end()
@@ -730,18 +725,14 @@ app.whenReady().then(() => {
         err => { console.error(err.message); note(err.message, !err.quiet); res.writeHead(500).end(err.message) }
       )
     })
-  }).on('error', () => { // taken, or reserved by Windows (its ranges move): the app runs, only the extension can't reach it
+  }).on('listening', () => listening = true).on('error', () => { // taken, or reserved by Windows (its ranges move): the app runs, only the extension can't reach it
+    listening = false
     const say = () => note(`Extension can't connect: port ${PORT}`, true)
     win.webContents.isLoading() ? win.webContents.once('did-finish-load', say) : say()
   }).listen(PORT, '127.0.0.1')
   createWindow()
   pullWikis()
   useAliases(settings().aliases)
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
+  app.on('activate', () => { win.show(); win.focus() }) // macOS: the Dock icon brings back the parked window
 })
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})

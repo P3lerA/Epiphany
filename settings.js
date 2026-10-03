@@ -124,6 +124,7 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
   ).join('')
   ul.onclick = e => {
     const n = e.target.dataset.act
+    if (n && n !== 'extension') e.target.disabled = true // until drawn again: two Updates at once would wait on each other forever
     if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
     if (n === 'extension') api.exportExtension()
     if (n === 'tagger') (e.target.textContent === 'Remove' ? api.removeTagger() : api.installTagger()).then(drawInstruments)

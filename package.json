@@ -4,7 +4,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --publish never",
+    "dist": "electron-builder --publish never",
     "test": "node profiles.js && node share.js && node sites.js && node test/extension-queue.mjs && electron test/tagger.js",
     "smoke": "node test/smoke.mjs"
   },
@@ -29,6 +29,7 @@
       "profiles.js",
       "tagger.js",
       "share.js",
+      "gdl.js",
       "sites.js",
       "quotes.js",
       "theme.js",
@@ -36,8 +37,9 @@
       "style.css",
       "package.json",
       "build/icon.png",
-      "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
-      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**"
+      "build/icon-mac.png",
+      "!node_modules/onnxruntime-node/bin/napi-v6/**",
+      "node_modules/onnxruntime-node/bin/napi-v6/${platform}/${arch}/**"
     ],
     "asarUnpack": [
       "node_modules/onnxruntime-node/bin/**"
@@ -47,6 +49,22 @@
         "nsis",
         "portable"
       ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "arm64"
+        },
+        {
+          "target": "zip",
+          "arch": "arm64"
+        }
+      ],
+      "icon": "build/icon.icns",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "artifactName": "Epiphany-${version}-mac.${ext}"
     },
     "nsis": {
       "artifactName": "Epiphany-Setup-${version}.${ext}",

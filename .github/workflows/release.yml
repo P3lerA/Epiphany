@@ -24,3 +24,20 @@ jobs:
             dist/latest.yml
             dist/*.blockmap
             dist/epiphany-extension.zip
+  macos:
+    runs-on: macos-latest # arm64
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: | # the dmg for people, the zip for the app's own update
+            dist/*-mac.dmg
+            dist/*-mac.zip
