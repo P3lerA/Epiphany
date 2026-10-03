@@ -238,7 +238,7 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem }
    One column when narrow. */
 .charts { display: grid; grid-template-columns: minmax(14rem, 1fr) 3fr; gap: 1rem; align-items: start; padding-bottom: 3.5rem } /* clear of the fab, as the lobby's tally */
 .charts > div { display: grid; gap: 1rem; align-items: start }
-.charts > .from { position: sticky; top: 1rem }
+.charts > .from { position: sticky; top: 3.25rem } /* under the sticky h2 (2rem line, .25rem padding) and its 1rem margin */
 .charts > .in { grid-template-columns: repeat(2, minmax(0, 1fr)) } /* pairs of about the same length: the dataset's shape, then the names */
 @media (width < 60rem) { .charts { grid-template-columns: 1fr } .charts > .from { position: static } }
 .chart { padding: .75rem 1rem 1rem; border: 1px solid var(--rule); border-radius: 8px }
