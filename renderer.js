@@ -344,6 +344,11 @@ addEventListener('DOMContentLoaded', quote) // title() needs motion.js
 
 const mark = () => document.querySelectorAll('#settings aside a').forEach(a => a.classList.toggle('on', a.hash === location.hash))
 addEventListener('hashchange', mark)
+// Settings' button is a toggle, as Filters' is: open, it closes Settings back to the page it was opened over.
+let under = location.hash && !$('#settings :target') ? location.hash : '#lobby' // a reload keeps the page it was on
+addEventListener('hashchange', () => { if (!$('#settings :target')) under = location.hash })
+$('.fab a').onclick = e => { if ($('#settings :target')) { e.preventDefault(); location.hash = under } }
+addEventListener('keydown', e => { if (e.key === 'Escape' && $('#settings :target') && !$(':popover-open, select:open, dialog[open]')) location.hash = under }) // Esc too, unless it is closing something over it
 // A page keeps its scroll while another shows: display:none drops it.
 const tops = new Map()
 for (const sec of document.querySelectorAll('main > section')) sec.addEventListener('scroll', () => tops.set(sec, sec.scrollTop), { passive: true })

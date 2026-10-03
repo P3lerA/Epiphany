@@ -78,7 +78,9 @@ main aside a.on::before { background: currentColor }
 .fab > * { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%; background: var(--surface); border: 1px solid var(--rule); color: var(--muted); transition: background .15s, color .15s, transform .1s }
 .fab > *:hover { color: var(--fg); background: var(--active) }
 .fab > *:active { transform: scale(.94) }
-body:has(#settings :target) .fab a, .fab .on { color: var(--fg); background: var(--active); border-color: transparent }
+/* One rule for the buttons that open something: filled while it is open (Settings, the Filters panel); the accent while filters
+   cut something, open or not. :where keeps the ids out of the specificity, so the accent wins over the fill's ink. */
+body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-open)) .filter-toggle { color: var(--fg); background: var(--active); border-color: transparent }
 .fab .filter-toggle.on { color: var(--accent) }
 .fab .search { width: auto; border-radius: 999px; padding: 0 .25rem; gap: 0 }
 .fab .search:focus-within { border-color: var(--muted) }

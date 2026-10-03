@@ -115,6 +115,13 @@ step('a field written by hand for several: the page and the heads follow, the ta
   assert.match(c.head, /kagamine rin, hatsune miku/)
   assert.equal(c.tags, 'solo, smiling') // an old name read as the current one; the .txt as written (above)
 })
+step("Settings' button opens it, and closes it back to the page under it", async () => {
+  await js(`location.hash = '#projects'`); await until(`location.hash === '#projects'`, 'projects')
+  await js(`$('.fab a').click()`); await until(`location.hash === '#general'`, 'settings open')
+  await js(`$('.fab a').click()`); await until(`location.hash === '#projects'`, 'back to projects')
+  await js(`$('.fab a').click()`); await until(`location.hash === '#general'`, 'settings again')
+  await js(`dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`); await until(`location.hash === '#projects'`, 'Esc closes it')
+})
 step('settings pages draw, Instruments lists the tools', async () => {
   for (const h of ['general', 'profile', 'sites']) { await js(`location.hash = '#${h}'`); await until(`$('#${h} ul').children.length > 1`, h) }
   await js(`location.hash = '#instruments'`); await until(`$('#instruments ul').children.length === 5`, 'instruments', 20000)
