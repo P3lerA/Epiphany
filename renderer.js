@@ -211,10 +211,9 @@ const Q = () => {
 let typing
 search.oninput = scope.onchange = () => { clearTimeout(typing); typing = setTimeout(() => swap(() => { localQ(); backToPiles() }), 120) } // filter changes move the pictures, see swap; one move once typing pauses, not one per key
 $('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')); search.focus() }
-// local, the search engine (Settings > General), More: the other sites in use.
+// local, the search engine (Settings > General), the other sites in use.
 const drawScope = () => api.searchSites().then(names => {
-  const more = names.filter(n => s.sites.includes(n) && n !== s.engine).map(n => `<option>${n}</option>`).join('')
-  scope.innerHTML = `<option value="">local</option><option>${s.engine}</option>` + (more && `<optgroup label="More">${more}</optgroup>`)
+  scope.innerHTML = '<option value="">local</option>' + [s.engine, ...names.filter(n => s.sites.includes(n) && n !== s.engine)].map(n => `<option>${n}</option>`).join('')
 })
 search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
 const drawInputs = () => filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
