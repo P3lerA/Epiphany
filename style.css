@@ -135,14 +135,16 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 .seg button.not { text-decoration: line-through } /* right-click: everything but it */
 .seg[inert] { opacity: .5 } /* safe mode: Rating locked */ /* lifts: clicking it again turns it off */
 
-/* The task line (tasks.js), left of the tabs: muted, a braille spinner while anything runs, an error in full ink. */
+/* The task line (tasks.js), left of the tabs: muted, a dot spinner while anything runs, an error in full ink. */
 #tasks { display: flex; align-items: center; gap: .5rem; max-width: 22rem; font-size: .85rem; color: var(--muted); white-space: nowrap; transition: opacity .15s; @starting-style { opacity: 0 } }
 #tasks > span + span { overflow: hidden; text-overflow: ellipsis }
 #tasks .stop { flex: none; display: flex; padding: .2rem; border: none; border-radius: 4px; background: none; color: var(--muted) }
 #tasks .stop:hover { color: var(--fg); background: var(--active) }
 #tasks .stop[hidden] { display: none }
-#tasks .spin { display: none; flex: none; font: 1.2em/1 'Segoe UI Symbol', sans-serif } /* braille frames, 1-4 wide (spinners.js) */
-#tasks.busy .spin { display: block }
+#tasks .spin { --dot: 2px; display: none; flex: none; grid: repeat(4, var(--dot)) / repeat(4, var(--dot)); gap: var(--dot) } /* 4x4 dots, the lit ones in ink (spinners.js) */
+#tasks .spin i { border-radius: 50%; background: currentColor; opacity: .25 }
+#tasks .spin i.on { opacity: 1 }
+#tasks.busy .spin { display: grid }
 #tasks.error { color: var(--fg) }
 
 /* Pages swap instantly: nothing to watch between two places. A page is a scroller that #hash navigation focuses; it is not a control, so no ring. */
