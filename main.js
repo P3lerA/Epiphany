@@ -184,7 +184,7 @@ async function save({ src, page }) {
 }
 
 // gallery-dl metadata -> caption fields, old names renamed (aliases, below).
-const first = (j, kind, ...ks) => [...new Set(words(ks.map(k => j[k]).find(v => v && v.length)).map(t => alias?.[kind]?.[t] ?? t))]
+const first = (j, kind, ...ks) => [...new Set(words(ks.map(k => j[k]).find(v => v && v.length)).map(t => renamed(kind, t)))]
 
 const meta = j => ({
   tags: first(j, 'tags', 'tag_string_general', 'tags_general', 'tags').join(', '),
@@ -341,7 +341,14 @@ const list = () => Promise.all(projects().flatMap(p => {
 
 const newProject = name => { if (/^[\w-]+$/.test(name)) dir(name) }
 const txt = f => f.replace(/\.[^.]+$/, '.txt')
-const tagsOf = file => fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : ''
+// The .txt, its old names read as the current ones while aliases are on (below), so its tags agree with the names above them.
+const tagsOf = file => {
+  const t = fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : ''
+  return alias ? [...new Set(t.split(',').map(x => x.trim()).filter(Boolean).map(x => {
+    const k = x.replace(/ /g, '_'), to = renamed('tags', k)
+    return to === k ? x : to.replace(/_/g, ' ')
+  }))].join(', ') : t
+}
 // The head from the sidecar under the current profile, then the .txt.
 const getCaption = item => ({ head: caption(profile(), facts(sidecar(item))), tags: tagsOf(item.file) })
 // The sidecar is the record; a caption written by hand lives in the .txt only, until the next rebuild from the sidecar.
@@ -398,9 +405,11 @@ const tagWiki = async tag => {
 }
 // Old names to danbooru's current ones (clouds -> cloud, catgirl -> cat_girl; konachan still writes many), when Settings > General
 // says so: danbooru's whole alias table (~41k, 42 requests, ~3MB), pulled then and again once it is a month old. Each name is
-// renamed only to one of its kind (an artist "x" stays, though the general tag x is now x_(symbol)).
+// renamed only to one of its kind (an artist "x" stays, though the general tag x is now x_(symbol)). Renamed as they are read
+// (meta, tagsOf), the files as written: off, the old names are back.
 const ALIASES = path.join(HOME, 'cache', 'tag-aliases.json')
 let alias = null // { tags|artist|character|copyright: { old: new } }
+const renamed = (kind, t) => alias && Object.hasOwn(alias[kind], t) ? alias[kind][t] : t // own keys: a tag "constructor" is no alias
 const useAliases = async on => {
   if (on && !(fs.existsSync(ALIASES) && Date.now() - fs.statSync(ALIASES).mtimeMs < 30 * 864e5)) {
     const all = { tags: {}, artist: {}, character: {}, copyright: {} }

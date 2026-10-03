@@ -25,8 +25,9 @@ for (const [f, j] of Object.entries(pics)) {
   if (j?.id) fs.writeFileSync(path.join(data, f.replace('.webp', '.txt')), '1girl, solo')
   fs.appendFileSync(path.join(data, 'meta.jsonl'), JSON.stringify({ file: path.join(data, f), src: 'https://example.com/a.webp', page: 'https://example.com/post', time: new Date().toISOString() }) + '\n')
 }
-fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ lookup: false, autotag: false, quote: 'none', sites: [] }))
+fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ lookup: false, autotag: false, quote: 'none', sites: [], aliases: true }))
 fs.mkdirSync(path.join(home, 'cache'))
+fs.writeFileSync(path.join(home, 'cache', 'tag-aliases.json'), JSON.stringify({ tags: { smile: 'smiling' }, artist: {}, character: {}, copyright: {} })) // fresh: no pull
 fs.writeFileSync(path.join(home, 'cache', 'tag-wiki.json'), JSON.stringify({ '': 'smoke', solo: 'Only one character.' })) // '': the first-start pull is done
 if (process.env.EPIPHANY_SMOKE_AT) { const [x, y] = process.env.EPIPHANY_SMOKE_AT.split(',').map(Number); fs.writeFileSync(path.join(home, 'window.json'), JSON.stringify({ bounds: { x, y, width: 1200, height: 800 } })) }
 if (models) fs.symlinkSync(path.resolve(models), path.join(home, 'models'), 'junction') // rmSync below unlinks it, the model stays
@@ -112,7 +113,7 @@ step('a field written by hand for several: the page and the heads follow, the ta
   await until(`items.filter(i => i.character === 'kagamine_rin, hatsune_miku').length === 2`, 'characters on the page')
   const c = await js(`return api.getCaption(items.find(i => i.file.endsWith('booru1.webp')))`)
   assert.match(c.head, /kagamine rin, hatsune miku/)
-  assert.equal(c.tags, 'solo, smile')
+  assert.equal(c.tags, 'solo, smiling') // an old name read as the current one; the .txt as written (above)
 })
 step('settings pages draw, Instruments lists the tools', async () => {
   for (const h of ['general', 'profile', 'sites']) { await js(`location.hash = '#${h}'`); await until(`$('#${h} ul').children.length > 1`, h) }
