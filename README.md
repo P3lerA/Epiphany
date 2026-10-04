@@ -1,6 +1,7 @@
-# <img src="build/icon.svg" width="30" alt=""> Epiphany
-
-Collect, sort, export.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.png">
+  <img src="docs/logo-light.png" alt="Epiphany: collect, sort, export" width="600">
+</picture>
 
 ![Tag view](docs/tag-view.gif)
 
