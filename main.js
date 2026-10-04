@@ -9,6 +9,7 @@ const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
 const share = require('./share')
 const { BOORU, EH, gdlName, postUrl, SEARCH, own, range } = require('./sites')
+const { thumbnail } = require('./thumbnail')
 const quotes = require('./quotes')
 const { autoUpdater } = require('electron-updater')
 
@@ -105,15 +106,21 @@ const info = (item, prof = profile()) => {
   return { site: j.category === 'exhentai' ? 'ehentai' : j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, quality: quality(prof, m), tagged, candidates, from }
 }
 
-// Grid thumbnails live beside the dataset, never inside it. OS thumbnailer, cached as JPEG.
+// Grid thumbnails live beside the dataset, never inside it: the square the grid shows (the middle), 400 px, cached as JPEG. A
+// long picture's short side is 400 too (it came back thin, blurred in the square; on macOS squashed), no other is any bigger.
+// One made before (name.jpg, not name.sq.jpg) is shown until its square is made, one at a time behind the load, then removed.
 const thumbs = p => { const d = path.join(PROJ, p, 'thumbs'); fs.mkdirSync(d, { recursive: true }); return d }
-const thumbPath = item => path.join(thumbs(item.project), path.basename(item.file) + '.jpg')
-
+const thumbPath = item => path.join(thumbs(item.project), path.basename(item.file) + '.sq.jpg')
+const square = async (file, t) => {
+  const img = await thumbnail(file, { short: 400 }), { width: w, height: h } = img.getSize(), side = Math.min(w, h)
+  fs.writeFileSync(t, img.crop({ x: (w - side) >> 1, y: (h - side) >> 1, width: side, height: side }).toJPEG(82))
+}
+let redoing = Promise.resolve()
 const thumb = async item => {
-  const t = thumbPath(item)
+  const t = thumbPath(item), old = t.replace(/\.sq\.jpg$/, '.jpg')
   if (!fs.existsSync(t)) {
-    try { fs.writeFileSync(t, (await nativeImage.createThumbnailFromPath(item.file, { width: 400, height: 400 })).toJPEG(82)) }
-    catch { return item.url }
+    if (fs.existsSync(old)) { redoing = redoing.then(() => square(item.file, t)).then(() => fs.rmSync(old, { force: true }), () => {}); return pathToFileURL(old).href }
+    try { await square(item.file, t) } catch { return item.url }
   }
   return pathToFileURL(t).href
 }
@@ -251,7 +258,7 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
     if (sites.some(s => IQDB_ONLY.includes(s))) {
       say('similar on iqdb.org')
       // It refuses over 8 MB: a bigger picture goes as a 1000px JPEG (its scores barely move; danbooru's drop a few, so only here).
-      const b = bytes.length > 8e6 ? (await nativeImage.createThumbnailFromPath(file, { width: 1000, height: 1000 })).toJPEG(90) : bytes
+      const b = bytes.length > 8e6 ? (await thumbnail(file, { long: 1000 })).toJPEG(90) : bytes
       for (const c of await iqdbOrg(field => form(field, b))) if (!found.some(f => f.post.category === c.post.category && f.post.id === c.post.id)) found.push(c)
     }
     const near = found.filter(x => x.score >= 70).sort((a, b) => b.score - a.score || before(a.post.category, b.post.category)).slice(0, 4)

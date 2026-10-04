@@ -8,6 +8,7 @@ const crypto = require('crypto')
 const { Readable } = require('stream')
 const { pipeline } = require('stream/promises')
 const { nativeImage } = require('electron')
+const { thumbnail } = require('./thumbnail')
 
 const NAME = 'pixai-tagger-v1.0-fp16'
 const BASE = 'https://huggingface.co/A1yCE/pixai-tagger-v1.0-onnx-fp16/resolve/10a70bc4fc002fdc5b9378be1068faa71cf61203/'
@@ -27,12 +28,12 @@ const post = t => {
 }
 
 // The picture as the model takes it: RGB over white, letterboxed with black to 1008 square, scaled to -1..1, planar. nativeImage
-// reads PNG and JPEG; anything else (WebP, GIF, AVIF) goes through Windows' thumbnailer, already fitted to the square.
+// reads PNG and JPEG; anything else (WebP, GIF, AVIF) goes through the OS thumbnailer, already fitted to the square.
 // ponytail: the thumbnailer keeps alpha only on its first extraction; from its cache a clear area comes back black. Fine for
 // opaque pictures; decode in the page (createImageBitmap) if transparent WebP/GIF start getting odd tags.
 const pixels = async file => {
   let img = nativeImage.createFromPath(file)
-  if (img.isEmpty()) img = await nativeImage.createThumbnailFromPath(file, { width: SIDE, height: SIDE }).catch(() => img)
+  if (img.isEmpty()) img = await thumbnail(file, { long: SIDE }).catch(() => img)
   if (img.isEmpty()) throw new Error(`can't read ${path.basename(file)}`)
   const { width: w, height: h } = img.getSize(), k = Math.min(SIDE / w, SIDE / h), nw = Math.max(1, Math.floor(w * k)), nh = Math.max(1, Math.floor(h * k))
   const bmp = img.resize({ width: nw, height: nh, quality: 'best' }).toBitmap() // BGRA, premultiplied

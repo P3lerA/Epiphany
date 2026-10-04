@@ -135,7 +135,7 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 #filters select { justify-self: end; padding-right: 0 } /* controls sit right, like the switch above it */
 /* Right-click > Edit (renderer.js): one line where the menu was, the search pill's shape, floating like the filters, the names it
    offers under it. The two side by side in a bare frame, not one in the other: glass inside glass would bend only the glass. */
-#edit { position: fixed; inset: auto; margin: 0; padding: 0; color: inherit; background: none; border: none; overflow: visible }
+#edit { position: fixed; inset: auto; margin: 0; padding: 0; color: inherit; background: none; border: none; overflow: visible; font-weight: 500 } /* 500: reads over glass */
 #edit > div { height: 2.5rem; padding: 0 1rem; background: var(--surface); border: 1px solid var(--rule); border-radius: 999px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
 #edit:focus-within > div { border-color: var(--muted) }
 #edit input { width: 18rem; height: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; outline: none }

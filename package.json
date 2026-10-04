@@ -29,6 +29,7 @@
       "tasks.js",
       "profiles.js",
       "tagger.js",
+      "thumbnail.js",
       "share.js",
       "gdl.js",
       "sites.js",
