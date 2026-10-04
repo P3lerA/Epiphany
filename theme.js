@@ -11,4 +11,7 @@ const setTheme = t => {
   bar()
 }
 setTheme(localStorage.theme || 'system')
+// Liquid glass on the toolbar (glass.js), per machine too: at first on macOS only, where it is at home.
+const setGlass = on => { root.classList.toggle('glass', on); localStorage.glass = on ? 'on' : 'off' }
+setGlass(localStorage.glass ? localStorage.glass === 'on' : navigator.platform.startsWith('Mac'))
 matchMedia('(prefers-color-scheme: dark)').onchange = () => bar(document.getElementById('preview').open) // system flips, and nativeTheme catching up after a switch; the preview keeps the strip clear

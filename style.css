@@ -19,20 +19,21 @@ body:not(.debug) .debug { display: none } /* debug mode only, see settings.js */
   --print: 0 1px 2px rgb(0 0 0 / .12), 0 4px 14px rgb(0 0 0 / .12); /* a pile's print lifts off the table */
   --paper: var(--bg); /* a print's frame */
   --toggle-fill: transparent; --toggle-preview: currentColor; /* the theme button: an empty circle in light, filled in dark, the other on hover */
+  --glass: rgb(255 255 255 / .3); --platter: var(--bg); --thumb: var(--platter); --thumb-edge: 0 1px 3px rgb(0 0 0 / .2); /* the toolbar glass's tint, what is open on it, the grid/tags thumb on it */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #1C1C20; --fg: #E6E6EA; --muted: #8D8E98; --rule: #2D2D33; --accent: #8FA1FF;
     --paper: #D2D2CE; --print: 0 1px 2px rgb(0 0 0 / .45), 0 4px 14px rgb(0 0 0 / .4); /* prints stay paper on a dark table, a little dimmed */
-    --toggle-fill: currentColor; --toggle-preview: transparent;
+    --toggle-fill: currentColor; --toggle-preview: transparent; --glass: rgb(40 40 44 / .42); --platter: color-mix(in srgb, var(--fg) 36%, var(--bg)); --thumb: rgb(255 255 255 / .14); --thumb-edge: inset 0 1px 0 rgb(255 255 255 / .22), inset 0 0 0 .5px rgb(255 255 255 / .12); /* lit glass: an opaque disc read as a hole */
   }
 }
 [data-theme="dark"] {
   color-scheme: dark;
   --bg: #1C1C20; --fg: #E6E6EA; --muted: #8D8E98; --rule: #2D2D33; --accent: #8FA1FF;
   --paper: #D2D2CE; --print: 0 1px 2px rgb(0 0 0 / .45), 0 4px 14px rgb(0 0 0 / .4); /* prints stay paper on a dark table, a little dimmed */
-  --toggle-fill: currentColor; --toggle-preview: transparent;
+  --toggle-fill: currentColor; --toggle-preview: transparent; --glass: rgb(40 40 44 / .42); --platter: color-mix(in srgb, var(--fg) 36%, var(--bg)); --thumb: rgb(255 255 255 / .14); --thumb-edge: inset 0 1px 0 rgb(255 255 255 / .22), inset 0 0 0 .5px rgb(255 255 255 / .12);
 }
 
 body { background: var(--bg); color: var(--fg); margin: 0; height: 100vh; display: flex; flex-direction: column }
@@ -77,11 +78,11 @@ main aside a.on::before { background: currentColor }
 
 .fab { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 2; display: flex; gap: .5rem; --active: color-mix(in srgb, var(--fg) 10%, var(--bg)) } /* opaque: pictures scroll under it */
 .fab > * { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 50%; background: var(--surface); border: 1px solid var(--rule); color: var(--muted); transition: background .15s, color .15s, transform .1s }
-.fab > *:hover { color: var(--fg); background: var(--active) }
+.fab > *:hover { color: var(--fg); background-color: var(--active) }
 .fab > *:active { transform: scale(.94) }
 /* One rule for the buttons that open something: filled while it is open (Settings, the Filters panel); the accent while filters
    cut something, open or not. :where keeps the ids out of the specificity, so the accent wins over the fill's ink. */
-body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-open)) .filter-toggle { color: var(--fg); background: var(--active); border-color: transparent }
+body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-open)) .filter-toggle { color: var(--fg); background-color: var(--active); border-color: transparent }
 .fab .filter-toggle.on { color: var(--accent) }
 .fab .search { width: auto; border-radius: 999px; padding: 0 .25rem; gap: 0 }
 .fab .search:focus-within { border-color: var(--muted) }
@@ -97,11 +98,22 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 .theme-toggle::before { content: ''; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid currentColor; background: var(--toggle-fill); transition: background .15s }
 .theme-toggle:hover::before { background: var(--toggle-preview) }
 /* Grid or piles: a switch with both sides named, the thumb under the one showing. */
-.fab .piles-toggle, .fab .piles-toggle:hover, .fab .piles-toggle.on { position: relative; width: 4.5rem; justify-content: space-between; padding: 0 calc(1.25rem - 10px); border-radius: 999px; background: var(--surface); border-color: var(--rule) }
+.fab .piles-toggle, .fab .piles-toggle:hover, .fab .piles-toggle.on { position: relative; width: 4.5rem; justify-content: space-between; padding: 0 calc(1.25rem - 10px); border-radius: 999px; background-color: var(--surface) }
 .piles-toggle::before { content: ''; position: absolute; top: 3px; left: 3px; width: calc(2.5rem - 8px); height: calc(2.5rem - 8px); border-radius: 50%; background: var(--active); transition: translate .25s cubic-bezier(.2, 0, 0, 1) }
 .piles-toggle.on::before { translate: 2rem } /* the pill is 2rem longer than it is tall */
 .piles-toggle svg { position: relative; color: var(--muted); transition: color .15s }
 .piles-toggle:not(.on) svg:first-child, .piles-toggle.on svg:last-child { color: var(--fg) }
+/* Liquid glass (glass.js; Settings > General, per machine): the pictures scroll on under the toolbar, bent at its rims, its fills
+   gone see-through. Its ink nearly full, to read over any picture; what is open, and the switch's thumb, full ink on an opaque
+   platter (a see-through fill is lost over some picture or other). :where keeps the ink under the hover, open and accent rules.
+   Not with the system's reduced transparency. */
+@media (prefers-reduced-transparency: no-preference) {
+  .glass .fab { --surface: var(--glass); --active: var(--platter); --ink: color-mix(in srgb, var(--fg) 75%, var(--muted)) }
+  .glass .piles-toggle::before { background: var(--thumb); box-shadow: var(--thumb-edge) }
+  :where(.glass) .fab > *, :where(.glass) .fab select, :where(.glass) .fab select::picker-icon, :where(.glass) .piles-toggle svg { color: var(--ink) }
+  :where(.glass) .fab input::placeholder { color: var(--ink); opacity: .75 }
+  .glass .fab > * { border-color: transparent; background-image: var(--rim, none); background-size: 100% 100%; backdrop-filter: blur(2px) var(--lens,) saturate(1.6) brightness(1.04); box-shadow: 0 6px 18px rgb(0 0 0 / .14), 0 1px 3px rgb(0 0 0 / .1) }
+}
 
 /* Native popover: light dismiss and Esc for free; opens above its button, out of it as the lists do (::picker below). */
 #filters { position-anchor: --filters; inset: auto; bottom: anchor(top); right: anchor(right); margin: 0 0 .5rem; overflow: visible; padding: 14px; color: inherit; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .14); grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: 10px 14px; opacity: 0; translate: 0 var(--from); transition: opacity .15s, translate .15s cubic-bezier(.2, 0, 0, 1), display .15s allow-discrete, overlay .15s allow-discrete }
@@ -153,7 +165,7 @@ section { outline: none; grid-area: 1 / 1; display: none; min-height: 0; overflo
 section:target { display: block }
 #settings:has(:target), #projects:target { display: grid }
 
-:is(#lobby, #pgrid, #ghosts) h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 1rem 0 .5rem }
+:is(#lobby, #pgrid, #ghosts, #general) h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 1rem 0 .5rem }
 :is(#lobby, #pgrid) > div:first-child h3 { margin-top: 0 }
 :is(#lobby, #pgrid) > div:not(:has(img:not([hidden]))) { display: none }
 /* Nothing on show: a face in the middle of the window, no words (renderer.js face). */

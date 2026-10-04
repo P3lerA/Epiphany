@@ -15,7 +15,7 @@ let profs // the caption profiles, for Statistics' quality order
 const settingsUI = profiles => {
   profs = profiles
   showStats()
-  const general = $('#general ul')
+  const general = $('#general')
   api.quoteSources().then(names => {
     general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
   })
@@ -23,6 +23,7 @@ const settingsUI = profiles => {
     general.querySelector('[name=engine]').innerHTML = names.map(n => `<option ${n === s.engine ? 'selected' : ''}>${n}</option>`).join('')
   })
   general.querySelector('[name=theme]').value = localStorage.theme || 'system'
+  general.querySelector('[name=glass]').checked = root.classList.contains('glass')
   general.querySelector('[name=lookup]').checked = s.lookup
   general.querySelector('[name=autotag]').checked = s.autotag
   general.querySelector('[name=aliases]').checked = s.aliases
@@ -34,6 +35,7 @@ const settingsUI = profiles => {
   general.onchange = e => {
     if (e.target.name === 'slow') { localStorage.slow = e.target.value; return debug() } // per machine, like the theme
     if (e.target.name === 'theme') return setTheme(e.target.value) // per machine, like the filters
+    if (e.target.name === 'glass') return setGlass(e.target.checked)
     s[e.target.name] = e.target.type === 'checkbox' ? e.target.checked : e.target.name === 'accept' ? Number(e.target.value) : e.target.value
     save()
     if (e.target.name === 'quote') quote()

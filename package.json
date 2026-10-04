@@ -33,6 +33,7 @@
       "sites.js",
       "quotes.js",
       "theme.js",
+      "glass.js",
       "index.html",
       "style.css",
       "package.json",

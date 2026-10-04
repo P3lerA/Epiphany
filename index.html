@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src file: https:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src file: https: data:">
   <title>Epiphany</title>
   <link rel="stylesheet" href="style.css">
   <script src="theme.js"></script>
@@ -36,7 +36,10 @@
     </aside>
     <div id="general">
       <h2>General</h2>
-      <ul class="panel"><li><span>Theme</span><select name="theme"><option value="system">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></li><li><span>Title quote</span><select name="quote"></select></li><li><span>Search engine</span><select name="engine"></select></li><li><span>Safe mode</span><input type="checkbox" name="safe"></li><li><span>Look up tags when saving</span><input type="checkbox" name="lookup"></li><li><span>Auto-tag when no match</span><input type="checkbox" name="autotag"></li><li><span>Old tag names to danbooru's</span><input type="checkbox" name="aliases"></li><li><span>Accept a similar match</span><select name="accept"><option value="101">Always ask</option><option value="95">At 95%</option><option value="90">At 90%</option><option value="80">At 80%</option></select></li><li><span>Debug mode</span><input type="checkbox" name="debug"></li><li class="debug"><span>Animation speed</span><select name="slow"><option value="1">Normal</option><option value="3">3× slower</option><option value="5">5× slower</option><option value="10">10× slower</option></select></li></ul>
+      <h3>Appearance</h3>
+      <ul class="panel"><li><span>Theme</span><select name="theme"><option value="system">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select></li><li><span>Liquid glass</span><input type="checkbox" name="glass"></li><li><span>Title quote</span><select name="quote"></select></li></ul>
+      <h3>Behavior</h3>
+      <ul class="panel"><li><span>Search engine</span><select name="engine"></select></li><li><span>Safe mode</span><input type="checkbox" name="safe"></li><li><span>Look up tags when saving</span><input type="checkbox" name="lookup"></li><li><span>Auto-tag when no match</span><input type="checkbox" name="autotag"></li><li><span>Old tag names to danbooru's</span><input type="checkbox" name="aliases"></li><li><span>Accept a similar match</span><select name="accept"><option value="101">Always ask</option><option value="95">At 95%</option><option value="90">At 90%</option><option value="80">At 80%</option></select></li><li><span>Debug mode</span><input type="checkbox" name="debug"></li><li class="debug"><span>Animation speed</span><select name="slow"><option value="1">Normal</option><option value="3">3× slower</option><option value="5">5× slower</option><option value="10">10× slower</option></select></li></ul>
     </div>
     <div id="profile">
       <h2>Profile</h2>
@@ -98,5 +101,6 @@
   <script src="settings.js"></script>
   <script src="spinners.js"></script>
   <script src="tasks.js"></script>
+  <script src="glass.js"></script>
 </body>
 </html>
