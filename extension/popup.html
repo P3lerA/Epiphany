@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg: #F8F8F6; --fg: #1E1F2A; --muted: #6B6C76; --rule: #E0E0DC; --active: #EDEDEA; color-scheme: light dark }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1C1C20; --fg: #E6E6EA; --muted: #8D8E98; --rule: #2D2D33; --active: #2A2A30 } }
+  body { margin: 0; width: 320px; background: var(--bg); color: var(--fg); font: 13px/1.4 'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif }
+  main { padding: 10px 0 4px }
+  h2 { display: flex; align-items: center; margin: 4px 14px 2px; font-size: .85em; font-weight: 500; color: var(--muted) }
+  h2 button { margin-left: auto }
+  ul { list-style: none; margin: 0 0 6px; padding: 0 6px }
+  li { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 8px; border-radius: 6px }
+  li.new { animation: rise .2s cubic-bezier(.2, 0, 0, 1) both }
+  li:hover { background: var(--active) }
+  li > span { min-width: 0; flex: 1; display: grid }
+  li b, li small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
+  li b { font-weight: 500 }
+  li small { color: var(--muted); font-size: .9em }
+  button { all: unset; cursor: pointer; color: var(--muted); padding: 2px 6px; border-radius: 4px; transition: color .15s, background .15s }
+  button:hover { color: var(--fg); background: var(--active) }
+  li button { visibility: hidden; font-size: 15px; line-height: 1 }
+  li:hover button { visibility: visible }
+  p { margin: 6px 14px 8px; color: var(--muted) }
+  .dots { display: grid; grid: repeat(4, var(--dot)) / repeat(4, var(--dot)); gap: var(--dot); flex: none }
+  .dots i { border-radius: 50%; background: currentColor; opacity: .25; transition: opacity var(--frame) }
+  .dots i.on { opacity: 1 }
+  .face { margin: 18px 0 20px; text-align: center; font-size: 22px }
+  .away { margin: 2px 0 0; padding: 8px 14px 6px; border-top: 1px solid var(--rule); font-size: .9em }
+  @keyframes rise { from { opacity: 0; translate: 0 4px } }
+  @media (prefers-reduced-motion: reduce) { li { animation: none } }
+</style>
+</head>
+<body>
+<main></main>
+<script src="looks.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

@@ -257,7 +257,6 @@ const tally = () => {
 }
 // Nothing on show (no pictures yet, a search that finds none, no piles): a face in the middle, no words (style.css). Picked anew
 // while it is hidden, so each time it comes up it is another one.
-const FACES = ['(・_・)', '(´・ω・`)', '(・∀・)', '(￣▽￣)', '(°ー°〃)', '(´-ω-`)', '(・ε・)', '(o_O)', '(>_<)', '( ˘ω˘ )', 'ヽ(・∀・)ﾉ', '(ﾟДﾟ)', '(=^・ω・^=)', '¯\\_(ツ)_/¯', '(っ´ω`c)', '(・・?)']
 const face = () => { for (const r of [$('#lobby'), pgrid]) if (!r.dataset.face || r.querySelector(r.classList.contains('piling') ? '.pile' : '.grid img:not([hidden])')) { r.dataset.face = FACES[Math.random() * FACES.length | 0]; delete r.dataset.say } }
 
 // Projects: sidebar picks the active project (where pulls land) and shows its grid.

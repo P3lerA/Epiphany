@@ -3,13 +3,13 @@
 // when it can stop (a pull, lookups, tagging).
 const tasksUI = $('#tasks'), taskLine = tasksUI.children[1], stopUI = tasksUI.querySelector('.stop')
 let running = [], noted = null, noteTimer
-let stopSpin // while busy, a spinner (spinners.js), a new one picked each time the line starts running
-const spinning = on => { if (on !== !!stopSpin) { stopSpin?.(); stopSpin = on ? spinner(tasksUI.firstElementChild) : null } }
+let stopSpin, spun // while busy, a spinner (extension/looks.js): the newest task's own (a pull's from the extension), else any, picked as the line starts
+const spinning = (on, anim) => { if (on !== !!stopSpin || anim && anim !== spun) { stopSpin?.(); stopSpin = on ? spinner(tasksUI.firstElementChild, anim) : null; spun = anim } }
 const drawTasks = () => {
   const now = running.at(-1)
   tasksUI.hidden = !now && !noted
   tasksUI.classList.toggle('busy', !!now)
-  spinning(!!now)
+  spinning(!!now, now?.anim)
   tasksUI.classList.toggle('error', !!noted?.error)
   taskLine.textContent = noted?.text ?? (now?.text ?? '') + (running.length > 1 ? `  +${running.length - 1}` : '')
   tasksUI.title = [noted?.text, ...running.toReversed().map(t => t.text)].filter(Boolean).join('\n')

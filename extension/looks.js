@@ -1,5 +1,6 @@
-// The task line's spinner: 4x4 dots (style.css), the icon's grid made small. name: [ms per frame, frames], a frame the dots it lights,
-// 0-15 row by row. spinner(el) plays a random one in el and returns its stop.
+// What the app and its extension both show, loaded by each (index.html; the extension's pages, content script and worker): the
+// task spinner, 4x4 dots (the icon's grid made small), and the faces of an empty page. A pull carries its spinner's name (anim) from
+// the extension to the app's task line. SPINNERS name: [ms per frame, frames], a frame the dots it lights, 0-15 row by row.
 const RING = [0, 1, 2, 3, 7, 11, 15, 14, 13, 12, 8, 4], SPIRAL = [...RING, 5, 6, 10, 9], ALL = [...Array(16).keys()]
 const SPINNERS = {
   snake: [100, RING.map((_, k) => [0, 1, 2].map(j => RING[(k + 12 - j) % 12]))], // three dots round the edge
@@ -9,14 +10,18 @@ const SPINNERS = {
   quads: [220, [[0, 1, 4, 5], [2, 3, 6, 7], [10, 11, 14, 15], [8, 9, 12, 13]]], // the icon's four squares in turn
   pulse: [260, [[5, 6, 9, 10], RING, []]] // the middle, then the edge
 }
-const spinner = el => {
-  const [ms, frames] = Object.values(SPINNERS)[Math.random() * Object.keys(SPINNERS).length | 0]
+const FACES = ['(・_・)', '(´・ω・`)', '(・∀・)', '(￣▽￣)', '(°ー°〃)', '(´-ω-`)', '(・ε・)', '(o_O)', '(>_<)', '( ˘ω˘ )', 'ヽ(・∀・)ﾉ', '(ﾟДﾟ)', '(=^・ω・^=)', '¯\\_(ツ)_/¯', '(っ´ω`c)', '(・・?)']
+const anyOf = list => list[Math.random() * list.length | 0]
+// Plays spinner name (any, when not given) in el as 16 <i>, lit by the class on; returns its stop.
+const spinner = (el, name = anyOf(Object.keys(SPINNERS))) => {
+  const [ms, frames] = SPINNERS[Object.hasOwn(SPINNERS, name) ? name : 'snake'] // a name from a request is checked, not trusted
   const dots = ALL.map(() => document.createElement('i')), show = f => dots.forEach((d, i) => d.classList.toggle('on', f.includes(i)))
   el.replaceChildren(...dots)
   el.style.setProperty('--dot', Math.round(2 * devicePixelRatio) / devicePixelRatio + 'px') // whole device pixels: at 175% 2px dots blur into ovals
+  el.style.setProperty('--frame', ms + 'ms') // each dot fades over a frame: smooth, not stop-motion (the UI around it is)
   let k = 0
   show(frames[0])
-  if (calm.matches) return () => {} // motion off: its first frame, still
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return () => {} // motion off: its first frame, still
   const t = setInterval(() => show(frames[++k % frames.length]), ms)
   return () => clearInterval(t)
 }

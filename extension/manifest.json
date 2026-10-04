@@ -20,13 +20,14 @@
     "service_worker": "background.js"
   },
   "commands": {
-    "_execute_action": {
+    "pull": {
       "suggested_key": { "default": "Alt+S" },
       "description": "Pull this page into Epiphany"
     }
   },
   "action": {
-    "default_title": "Pull into Epiphany",
+    "default_title": "Epiphany",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"
@@ -59,6 +60,7 @@
         "*://bsky.app/*"
       ],
       "js": [
+        "looks.js",
         "content.js"
       ]
     }

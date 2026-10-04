@@ -136,12 +136,13 @@ const send = (ch, ...a) => win?.webContents.send(ch, ...a)
 const running = new Map()
 let taskN = 0
 // stop: how to cut it short, for the ✕ beside the line (tasks.js); work without one runs to its end.
-const task = (text, stop) => {
-  const id = ++taskN, show = () => send('tasks', [...running].map(([id, t]) => ({ id, text: t.text, stop: !!t.stop })))
-  running.set(id, { text, stop }); show()
+const task = (text, stop, from) => { // from: the extension's request, its spinner (anim: the task line plays the one it shows) and id (to stop it from there)
+  const id = ++taskN, show = () => send('tasks', [...running].map(([id, t]) => ({ id, text: t.text, stop: !!t.stop, anim: t.anim })))
+  running.set(id, { text, stop, anim: from?.anim, req: from?.id }); show()
   return { set: t => { running.get(id).text = t; show() }, end: result => { running.delete(id); show(); if (result) note(result) } }
 }
 const stopTask = id => running.get(id)?.stop?.()
+const stopRequest = req => [...running.values()].find(t => t.req === req)?.stop?.()
 const note = (text, error) => send('note', { text, error: !!error })
 
 
@@ -170,9 +171,9 @@ function createWindow() {
 const web = u => { if (!URL.canParse(u) || !/^https?:$/.test(new URL(u).protocol)) throw new Error(`Not a web URL: ${u}`) }
 
 // Right-click: one image URL, fetched directly. On E-Hentai's viewer that is a resample: gallery-dl pulls the original instead.
-async function save({ src, page }) {
+async function save({ src, page, anim, id }) {
   web(src); web(page)
-  if (EH.test(new URL(page).host) && new URL(page).pathname.startsWith('/s/')) return pull({ page })
+  if (EH.test(new URL(page).host) && new URL(page).pathname.startsWith('/s/')) return pull({ page, anim, id })
   const res = await fetch(src, { headers: { Referer: page, 'User-Agent': 'Mozilla/5.0 Epiphany/0.1' } })
   if (!res.ok) throw new Error(`${res.status} ${src}`)
   let name = decodeURIComponent(path.basename(new URL(src).pathname)).replace(/[<>:"/\\|?*]/g, '_') || 'image'
@@ -301,7 +302,7 @@ const shareItem = async item => {
 }
 const pull = q => {
   const host = URL.canParse(q.page) ? new URL(q.page).host : q.page, stop = {}
-  const t = task(`Waiting to pull from ${host}`, () => { stop.asked = true; stop.child ? kill(stop.child) : t.end() }) // still waiting: gone now
+  const t = task(`Waiting to pull from ${host}`, () => { stop.asked = true; stop.child ? kill(stop.child) : t.end() }, q) // still waiting: gone now
   const run = () => { if (stop.asked) throw Object.assign(new Error('Stopped'), { quiet: true }); t.set(`Pulling from ${host}`); return pullOne(q, stop) }
   pulling = pulling.then(run, run)
   return pulling.then(items => { t.end(`${items.length} from ${host}`); return items }, e => { t.end(); throw e })
@@ -728,7 +729,8 @@ app.whenReady().then(() => {
     req.on('end', () => {
       let q
       try { q = JSON.parse(body) } catch { return res.writeHead(400).end() }
-      ;(q.src ? save(q) : pull({ page: q.page })).then(
+      if (q.stop) { stopRequest(q.stop); return res.end('{}') } // the extension's ✕: as the task line's
+      ;(q.src ? save(q) : pull({ page: q.page, anim: q.anim, id: q.id })).then(
         r => res.end(JSON.stringify(r)),
         err => { console.error(err.message); note(err.message, !err.quiet); res.writeHead(500).end(err.message) }
       )

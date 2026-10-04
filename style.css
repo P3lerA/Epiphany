@@ -153,8 +153,8 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 #tasks .stop { flex: none; display: flex; padding: .2rem; border: none; border-radius: 4px; background: none; color: var(--muted) }
 #tasks .stop:hover { color: var(--fg); background: var(--active) }
 #tasks .stop[hidden] { display: none }
-#tasks .spin { --dot: 2px; display: none; flex: none; grid: repeat(4, var(--dot)) / repeat(4, var(--dot)); gap: var(--dot) } /* 4x4 dots, the lit ones in ink (spinners.js) */
-#tasks .spin i { border-radius: 50%; background: currentColor; opacity: .25 }
+#tasks .spin { --dot: 2px; display: none; flex: none; grid: repeat(4, var(--dot)) / repeat(4, var(--dot)); gap: var(--dot) } /* 4x4 dots, the lit ones in ink (extension/looks.js) */
+#tasks .spin i { border-radius: 50%; background: currentColor; opacity: .25; transition: opacity var(--frame) }
 #tasks .spin i.on { opacity: 1 }
 #tasks.busy .spin { display: grid }
 #tasks.error { color: var(--fg) }
