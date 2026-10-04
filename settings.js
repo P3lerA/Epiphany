@@ -30,6 +30,7 @@ const settingsUI = profiles => {
   Object.assign(general.querySelector('[name=safe]'), { checked: !!s.safe || safeCli, disabled: safeCli })
   general.querySelector('[name=accept]').value = s.accept
   general.querySelector('[name=debug]').checked = !!s.debug
+  general.querySelector('[name=ethereal]').checked = !!s.ethereal
   general.querySelector('[name=slow]').value = localStorage.slow || '1'
   debug()
   general.onchange = e => {
@@ -100,7 +101,7 @@ const settingsUI = profiles => {
 }
 
 // Debug mode: the reload button (Shift restarts the app, for main.js), Ctrl+R / Ctrl+Shift+R, F12 for DevTools, the animation
-// speed, and a DevTools port from the next start (main.js).
+// speed, ethereal pulls (main.js: gone once counted), and a DevTools port from the next start (main.js).
 const debug = () => { document.body.classList.toggle('debug', !!s.debug); SLOW = s.debug ? +localStorage.slow || 1 : 1 }
 const reload = restart => restart ? api.restart() : location.reload()
 $('.fab .reload').onclick = e => reload(e.shiftKey)

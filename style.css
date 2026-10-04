@@ -109,11 +109,14 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
    platter (a see-through fill is lost over some picture or other). :where keeps the ink under the hover, open and accent rules.
    Not with the system's reduced transparency. */
 @media (prefers-reduced-transparency: no-preference) {
-  .glass .fab { --surface: var(--glass); --active: var(--platter); --ink: color-mix(in srgb, var(--fg) 75%, var(--muted)) }
+  .glass { --ink: color-mix(in srgb, var(--fg) 75%, var(--muted)) }
+  .glass .fab { --surface: var(--glass); --active: var(--platter) }
+  .glass #edit > * { background-color: var(--glass); --active: var(--platter) }
   .glass .piles-toggle::before { background: var(--thumb); box-shadow: var(--thumb-edge) }
   :where(.glass) .fab > *, :where(.glass) .fab select, :where(.glass) .fab select::picker-icon, :where(.glass) .piles-toggle svg { color: var(--ink) }
-  :where(.glass) .fab input::placeholder { color: var(--ink); opacity: .75 }
-  .glass .fab > * { border-color: transparent; background-image: var(--rim, none); background-size: 100% 100%; backdrop-filter: blur(2px) var(--lens,) saturate(1.6) brightness(1.04); box-shadow: 0 6px 18px rgb(0 0 0 / .14), 0 1px 3px rgb(0 0 0 / .1) }
+  .glass #edit { color: var(--ink) } /* not :where: #edit's own color: inherit would win; a picked name sets its own */
+  :where(.glass) :is(.fab, #edit) input::placeholder { color: var(--ink); opacity: .75 }
+  .glass .fab > *, .glass #edit > * { border-color: transparent; background-image: var(--rim, none); background-size: 100% 100%; backdrop-filter: blur(2px) var(--lens,) saturate(1.6) brightness(1.04); box-shadow: 0 6px 18px rgb(0 0 0 / .14), 0 1px 3px rgb(0 0 0 / .1) }
 }
 
 /* Native popover: light dismiss and Esc for free; opens above its button, out of it as the lists do (::picker below). */
@@ -130,16 +133,17 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 #filters label { display: contents; cursor: pointer } /* its name and switch sit in the two columns like any row */
 #filters label input { justify-self: end } /* right, like the settings rows: the panel sits balanced */
 #filters select { justify-self: end; padding-right: 0 } /* controls sit right, like the switch above it */
-/* Right-click > Edit (renderer.js): one line where the menu was, the search pill's shape, floating like the filters. */
-#edit { position: fixed; inset: auto; margin: 0; height: 2.5rem; padding: 0 1rem; background: var(--surface); color: inherit; border: 1px solid var(--rule); border-radius: 999px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
-#edit:focus-within { border-color: var(--muted) }
+/* Right-click > Edit (renderer.js): one line where the menu was, the search pill's shape, floating like the filters, the names it
+   offers under it. The two side by side in a bare frame, not one in the other: glass inside glass would bend only the glass. */
+#edit { position: fixed; inset: auto; margin: 0; padding: 0; color: inherit; background: none; border: none; overflow: visible }
+#edit > div { height: 2.5rem; padding: 0 1rem; background: var(--surface); border: 1px solid var(--rule); border-radius: 999px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
+#edit:focus-within > div { border-color: var(--muted) }
 #edit input { width: 18rem; height: 100%; padding: 0; border: none; background: none; color: inherit; font: inherit; outline: none }
-#edit { overflow: visible }
 #edit ul { position: absolute; top: calc(100% + .25rem); left: 0; right: 0; margin: 0; padding: .25rem; list-style: none; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
 #edit.up ul { top: auto; bottom: calc(100% + .25rem) } /* opened low: the list goes above */
 #edit ul:empty { display: none }
 #edit li { padding: .35rem .75rem; border-radius: 8px; cursor: pointer }
-#edit li:hover, #edit li.on { background: var(--active) }
+#edit li:hover, #edit li.on { background: var(--active); color: var(--fg) }
 .seg { display: flex; gap: 2px; padding: 2px; background: var(--field); border: 1px solid var(--rule); border-radius: 6px }
 .seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem }
 .seg button:hover { color: var(--fg) }

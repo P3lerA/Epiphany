@@ -1,5 +1,5 @@
 // What the app and its extension both show, loaded by each (index.html; the extension's pages, content script and worker): the
-// task spinner, 4x4 dots (the icon's grid made small), and the faces of an empty page. A pull carries its spinner's name (anim) from
+// task spinner, 4x4 dots (the icon's grid made small), the faces of an empty page, and the ✕ of a stop. A pull carries its spinner's name (anim) from
 // the extension to the app's task line. SPINNERS name: [ms per frame, frames], a frame the dots it lights, 0-15 row by row.
 const RING = [0, 1, 2, 3, 7, 11, 15, 14, 13, 12, 8, 4], SPIRAL = [...RING, 5, 6, 10, 9], ALL = [...Array(16).keys()]
 const SPINNERS = {
@@ -24,4 +24,13 @@ const spinner = (el, name = anyOf(Object.keys(SPINNERS))) => {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return () => {} // motion off: its first frame, still
   const t = setInterval(() => show(frames[++k % frames.length]), ms)
   return () => clearInterval(t)
+}
+// The task line's ✕ (index.html has its own copy), for the extension's panel and Pull button: an icon with round ends, not a glyph
+// thinner than the text beside it. Built with DOM calls: a site's CSP can refuse innerHTML in the Pull button.
+const cross = () => {
+  const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg'), path = document.createElementNS(ns, 'path')
+  for (const [k, v] of Object.entries({ width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-linecap': 'round' })) svg.setAttribute(k, v)
+  path.setAttribute('d', 'M6 6l12 12M18 6 6 18')
+  svg.append(path)
+  return svg
 }

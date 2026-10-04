@@ -132,7 +132,7 @@ step('local server: only the extension, only web URLs', async () => {
   const post = (body, headers = {}) => fetch(`http://127.0.0.1:${server}/`, { method: 'POST', body: JSON.stringify(body), headers })
   assert.equal((await post({ page: 'https://example.com' })).status, 403)
   const r = await post({ page: 'file:///C:/Windows' }, { Origin: 'chrome-extension://smoke' })
-  assert.equal(r.status, 500); assert.match(await r.text(), /Not a web URL/)
+  assert.deepEqual(JSON.parse(await r.text()), { why: 'Not a web URL: file:///C:/Windows' })
 })
 if (models) step('tagger tags a WebP', async () => {
   await js(`await api.tag([items.find(i => i.file.endsWith('saved.webp'))])`)

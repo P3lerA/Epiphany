@@ -3,24 +3,29 @@
 <head>
 <meta charset="utf-8">
 <style>
-  :root { --bg: #F8F8F6; --fg: #1E1F2A; --muted: #6B6C76; --rule: #E0E0DC; --active: #EDEDEA; color-scheme: light dark }
-  @media (prefers-color-scheme: dark) { :root { --bg: #1C1C20; --fg: #E6E6EA; --muted: #8D8E98; --rule: #2D2D33; --active: #2A2A30 } }
-  body { margin: 0; width: 320px; background: var(--bg); color: var(--fg); font: 13px/1.4 'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, sans-serif }
+  :root { --bg: #F8F8F6; --fg: #1E1F2A; --muted: #6B6C76; --rule: #E0E0DC; color-scheme: light dark }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1C1C20; --fg: #E6E6EA; --muted: #8D8E98; --rule: #2D2D33 } }
+  :root { --hover: color-mix(in srgb, var(--fg) 6%, transparent) } /* the app's (style.css) */
+  body { margin: 0; width: 320px; background: var(--bg); color: var(--fg); font: 14px/1.45 'Segoe UI Variable Text', 'Segoe UI', -apple-system, system-ui, 'Microsoft YaHei UI', sans-serif }
   main { padding: 10px 0 4px }
   h2 { display: flex; align-items: center; margin: 4px 14px 2px; font-size: .85em; font-weight: 500; color: var(--muted) }
-  h2 button { margin-left: auto }
+  h2 button { margin: 0 -6px 0 auto } /* its word ends where the rows' counts do */
   ul { list-style: none; margin: 0 0 6px; padding: 0 6px }
-  li { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 8px; border-radius: 6px }
+  li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 2px 8px; border-radius: 8px }
   li.new { animation: rise .2s cubic-bezier(.2, 0, 0, 1) both }
-  li:hover { background: var(--active) }
+  li:hover { background: var(--hover) }
   li > span { min-width: 0; flex: 1; display: grid }
   li b, li small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
-  li b { font-weight: 500 }
-  li small { color: var(--muted); font-size: .9em }
+  li b { font-weight: 400 }
+  li small { color: var(--muted); font-size: .85em }
+  .end { flex: none; display: grid; justify-items: end; align-items: center }
+  .end > * { grid-area: 1 / 1 }
+  li em { font-style: normal; color: var(--muted); font-variant-numeric: tabular-nums }
   button { all: unset; cursor: pointer; color: var(--muted); padding: 2px 6px; border-radius: 4px; transition: color .15s, background .15s }
-  button:hover { color: var(--fg); background: var(--active) }
-  li button { visibility: hidden; font-size: 15px; line-height: 1 }
+  button:hover { color: var(--fg); background: var(--hover) }
+  li button { display: grid; padding: 5px; visibility: hidden }
   li:hover button { visibility: visible }
+  li:hover em { visibility: hidden }
   p { margin: 6px 14px 8px; color: var(--muted) }
   .dots { display: grid; grid: repeat(4, var(--dot)) / repeat(4, var(--dot)); gap: var(--dot); flex: none }
   .dots i { border-radius: 50%; background: currentColor; opacity: .25; transition: opacity var(--frame) }

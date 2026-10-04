@@ -1,4 +1,4 @@
-// The toolbar's Liquid Glass (style.css .fab): each piece bends what scrolls under it near its rim, as a lens would. Per piece, a
+// The toolbar's Liquid Glass (style.css .fab), and Edit's field over the grid (#edit): each piece bends what scrolls under it near its rim, as a lens would. Per piece, a
 // displacement map drawn from its rounded-rect distance field drives the SVG filter its backdrop-filter runs (--lens), red, green
 // and blue bent a little apart; a second map is the rim's highlight (--rim). Both are baked for the piece's size, corner and the
 // screen's pixel ratio, so they are redrawn when it changes size or the window changes screens. After kube.io's "Liquid Glass in
@@ -13,7 +13,10 @@ const profile = t => { const u = 1 - t; return bend(Math.atan(2 * u ** 3 / Math.
 // The two maps of a w x h piece with corner r at s device pixels per px: R, G the offset its backdrop is sampled at (128 none,
 // inward along the normal: a convex lens, and the backdrop only reaches as far as the piece); white, as opaque as the rim catches
 // a light from the top left.
+const baked = new Map() // by size: Edit's list takes the same few heights over and over as names are typed
 const lensMaps = (w, h, r, s) => {
+  const key = `${w} ${h} ${r} ${s}`
+  if (baked.has(key)) return baked.get(key)
   const W = Math.round(w * s), H = Math.round(h * s), bezel = Math.min(GLASS.edge, w / 2, h / 2)
   const [map, rim] = [0, 0].map(() => Object.assign(document.createElement('canvas'), { width: W, height: H }))
   const M = new ImageData(W, H), R = new ImageData(W, H)
@@ -30,7 +33,8 @@ const lensMaps = (w, h, r, s) => {
     R.data.set([255, 255, 255, 255 * Math.min(1, GLASS.highlight * lit * (Math.min(1, Math.max(0, 1.4 - d)) * .9 + .35 * Math.exp(-d / 2.5)))], o)
   }
   map.getContext('2d').putImageData(M, 0, 0); rim.getContext('2d').putImageData(R, 0, 0)
-  return [map.toDataURL(), rim.toDataURL()]
+  baked.set(key, [map.toDataURL(), rim.toDataURL()])
+  return baked.get(key)
 }
 
 const lensDefs = document.body.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
@@ -38,7 +42,7 @@ lensDefs.style.cssText = 'position: absolute; width: 0; height: 0' // not the at
 const only = c => [0, 1, 2].map(k => [0, 1, 2, 3, 4].map(x => +(x === k && k === c)).join(' ')).join(' ') + ' 0 0 0 1 0' // keeps channel c
 const lens = (el, n) => {
   const w = el.offsetWidth, h = el.offsetHeight
-  if (!w) return // hidden (the debug reload button)
+  if (!w || !root.classList.contains('glass')) return // hidden (the debug reload button, Edit closed), or no glass to bend
   const r = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius), w / 2, h / 2), [map, rim] = lensMaps(w, h, r, devicePixelRatio)
   const split = c => `<feDisplacementMap in="SourceGraphic" in2="map" scale="${2 * GLASS.refraction * (1 + (c - 1) * GLASS.aberration)}" xChannelSelector="R" yChannelSelector="G"/><feColorMatrix values="${only(c)}" result="c${c}"/>`
   lensDefs.querySelector(`#lens${n}`)?.remove()
@@ -48,8 +52,10 @@ const lens = (el, n) => {
   el.style.setProperty('--lens', `url(#lens${n})`)
   el.style.setProperty('--rim', `url(${rim})`)
 }
-const pieces = [...$('.fab').children]
+const pieces = [...$('.fab').children, ...$('#edit').children] // Edit's field and names: drawn as they show (hidden, no size)
 const reshaped = new ResizeObserver(l => l.forEach(e => lens(e.target, pieces.indexOf(e.target))))
 pieces.forEach(p => reshaped.observe(p))
+// Glass turned on: drawn now (off, nothing is drawn as pieces change size).
+new MutationObserver(() => root.classList.contains('glass') && pieces.forEach(lens)).observe(root, { attributeFilter: ['class'] })
 const moved = () => matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener('change', () => { pieces.forEach(lens); moved() }, { once: true })
 moved()

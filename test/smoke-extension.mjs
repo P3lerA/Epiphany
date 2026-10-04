@@ -51,7 +51,8 @@ const value = async (expression, sessionId, contextId) => {
   return r.result.value
 }
 
-// Epiphany, faked: a pull of a page with "slow" in it holds until it is stopped; any other gets two pictures.
+// Epiphany, faked, answering in lines: a pull of a page with "slow" in it holds until it is stopped (or let go, held); any other
+// gets two pictures. (An answer is sent whole here: how far a pull is, line by line, is extension-queue.mjs's.)
 const posts = [], held = new Map()
 const answer = (sessionId, requestId, code, body) => send('Fetch.fulfillRequest', { requestId, responseCode: code,
   responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(body).toString('base64') }, sessionId)
@@ -60,8 +61,9 @@ const app = (p, s) => {
   const q = JSON.parse(p.request.postData)
   posts.push(q)
   if (q.stop) { const h = held.get(q.stop); held.delete(q.stop); h?.(); return answer(s, p.requestId, 200, '{}') }
-  if (q.page.includes('slow')) return held.set(q.id, () => answer(s, p.requestId, 500, 'Stopped'))
-  return answer(s, p.requestId, 200, '[{},{}]')
+  const say = (...l) => answer(s, p.requestId, 200, l.map(o => JSON.stringify(o) + '\n').join(''))
+  if (q.page.includes('slow')) return held.set(q.id, (got = { why: 'Stopped' }) => say(got))
+  return say({ n: 1, total: 2 }, { n: 2, total: 2 }, { got: 2 })
 }
 const site = (p, s) => send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'text/html' }],
   body: Buffer.from('<!doctype html><title>post</title><p>a picture').toString('base64') }, s)
@@ -106,6 +108,65 @@ const steps = [
     await b('x.click()')
     await until('Stopped', async () => await b('text.textContent') === 'Stopped')
     assert.equal(posts.at(-1).stop, posts.findLast(q => q.page?.includes('slow')).id)
+  }],
+  ['back to a page whose pull landed while it was away: how many', async () => {
+    const s = await open('https://danbooru.donmai.us/posts/slow-2')
+    let b = await button(s)
+    await b('btn.click()')
+    await until('Pulling', async () => await b('btn.dataset.state') === 'busy')
+    await b('window.kept = 1')
+    const q = await until('it went out', () => posts.findLast(q => q.page?.endsWith('slow-2')))
+    contexts.delete(s)
+    await send('Page.navigate', { url: 'https://danbooru.donmai.us/posts/3' }, s)
+    await button(s)
+    held.get(q.id)({ got: 3 })
+    await until('it landed', async () => !(await value('chrome.storage.session.get("out")', worker)).out.length)
+    contexts.delete(s)
+    const h = await send('Page.getNavigationHistory', {}, s)
+    await send('Page.navigateToHistoryEntry', { entryId: h.entries[h.currentIndex - 1].id }, s)
+    b = await button(s)
+    assert.ok(await b('window.kept'), 'kept by the back/forward cache')
+    await until('3 pulled', async () => await b('text.textContent') === '3 pulled')
+  }],
+  ['back to the page before while the pull is out: its dots beside Pull', async () => {
+    const s = await open('https://danbooru.donmai.us/posts?tags=list')
+    await button(s)
+    contexts.delete(s)
+    await send('Page.navigate', { url: 'https://danbooru.donmai.us/posts/slow-4' }, s)
+    let b = await button(s)
+    await b('btn.click()')
+    const q = await until('it went out', () => posts.findLast(q => q.page?.endsWith('slow-4')))
+    contexts.delete(s)
+    const h = await send('Page.getNavigationHistory', {}, s)
+    await send('Page.navigateToHistoryEntry', { entryId: h.entries[h.currentIndex - 1].id }, s)
+    b = await button(s)
+    await until('its dots', async () => await b('btn.dataset.state') === 'elsewhere')
+    assert.equal(await b('text.textContent'), 'Pull')
+    held.get(q.id)({ got: 1 })
+    await until('Pull, still', async () => await b('btn.dataset.state') === 'idle')
+  }],
+  ['a site that moves to another post itself (x.com, pixiv): the button follows the page, not the pull', async () => {
+    const s = await open('https://danbooru.donmai.us/posts/slow-5')
+    const b = await button(s)
+    await b('btn.click()')
+    const q = await until('it went out', () => posts.findLast(q => q.page?.endsWith('slow-5')))
+    await value("history.pushState({}, '', '/posts/6')", s)
+    await until('its dots, as another page', async () => await b('btn.dataset.state') === 'elsewhere')
+    await value('history.back()', s)
+    await until('Pulling again', async () => await b('btn.dataset.state') === 'busy')
+    held.get(q.id)({ got: 1 })
+    await until('Done', async () => await b('text.textContent') === 'Done')
+  }],
+  ['Pull while another is out: Queued, then it goes', async () => {
+    const a = await button(await open('https://danbooru.donmai.us/posts/slow-3'))
+    await a('btn.click()')
+    const q = await until('it went out', () => posts.findLast(q => q.page?.endsWith('slow-3')))
+    const b = await button(await open('https://danbooru.donmai.us/posts/4'))
+    await until('its dots', async () => await b('btn.dataset.state') === 'elsewhere')
+    await b('btn.click()')
+    await until('Queued', async () => await b('btn.dataset.state') === 'queued')
+    held.get(q.id)({ got: 1 })
+    await until('2 pulled', async () => await b('text.textContent') === '2 pulled')
   }],
   ['the panel opens: a face, Epiphany in reach', async () => {
     const { targetId } = await send('Target.createTarget', { url: `chrome-extension://${id}/popup.html` }), s = await session(targetId)

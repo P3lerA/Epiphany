@@ -123,9 +123,9 @@ const thumb = async item => {
 const sidecar = (item, none = { category: new URL(item.page).host, page: item.page }) => { try { return readJson(item.file + '.json', none) } catch { return none } }
 const enrich = async (item, prof) => { const e = withUrl({ ...item, ...info(item, prof) }); e.thumb = await thumb(e); return e }
 
-const record = item => {
-  fs.appendFileSync(path.join(dir(), 'meta.jsonl'), JSON.stringify(item) + '\n')
-  item = { ...item, project: settings().project }
+const record = (item, p = settings().project) => { // p: a pull's own project, though another be opened before its files land
+  fs.appendFileSync(path.join(dir(p), 'meta.jsonl'), JSON.stringify(item) + '\n')
+  item = { ...item, project: p }
   enrich(item).then(e => send('saved', e))
   return item
 }
@@ -170,6 +170,8 @@ function createWindow() {
 // Only web URLs reach fetch/gallery-dl; anything else (file:, "--exec=...") is refused.
 const web = u => { if (!URL.canParse(u) || !/^https?:$/.test(new URL(u).protocol)) throw new Error(`Not a web URL: ${u}`) }
 
+// Debug's ethereal mode: a pull or a save lands, is counted, and is gone, never in the library (the same page pulls again).
+const ethereal = () => !!(settings().debug && settings().ethereal)
 // Right-click: one image URL, fetched directly. On E-Hentai's viewer that is a resample: gallery-dl pulls the original instead.
 async function save({ src, page, anim, id }) {
   web(src); web(page)
@@ -179,8 +181,9 @@ async function save({ src, page, anim, id }) {
   let name = decodeURIComponent(path.basename(new URL(src).pathname)).replace(/[<>:"/\\|?*]/g, '_') || 'image'
   if (!path.extname(name)) name += '.' + (res.headers.get('content-type')?.split('/')[1]?.split(';')[0] || 'bin')
   if (fs.existsSync(path.join(dir(), name))) name = `${Date.now()}_${name}`
-  const file = path.join(dir(), name)
-  fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()))
+  const file = path.join(dir(), name), buf = Buffer.from(await res.arrayBuffer())
+  if (ethereal()) return { file }
+  fs.writeFileSync(file, buf)
   const item = record({ file, src, page, time: new Date().toISOString() })
   // Same matching as a pull, after the reply; it reports its own errors. Not a field: the item is spread into every 'saved' after
   // this, and IPC can't clone a Promise (importShared awaits it).
@@ -269,9 +272,8 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
   return hit
 }
 
-// Toolbar button: a page URL, handed to gallery-dl. A pull takes the new sidecars in the dataset as its own, so pulls go one at a
-// time (two at once would each take the other's), and a picture already recorded is skipped (a right-click save's lookup writes
-// its sidecar mid-pull).
+// Toolbar button: a page URL, handed to gallery-dl. Pulls go one at a time, in the order they came (the extension sends one at a
+// time too: the rest wait in its Next).
 let pulling = Promise.resolve()
 // Ctrl+V on the page: every web address on the clipboard is pulled, as the extension's button would. A copied image carries its own.
 // Electron's clipboard is the W3C one: async, and HTML only through read().
@@ -303,36 +305,51 @@ const shareItem = async item => {
 const pull = q => {
   const host = URL.canParse(q.page) ? new URL(q.page).host : q.page, stop = {}
   const t = task(`Waiting to pull from ${host}`, () => { stop.asked = true; stop.child ? kill(stop.child) : t.end() }, q) // still waiting: gone now
-  const run = () => { if (stop.asked) throw Object.assign(new Error('Stopped'), { quiet: true }); t.set(`Pulling from ${host}`); return pullOne(q, stop) }
+  const tick = (n, total) => { t.set(`Pulling from ${host}${total ? ` ${n}/${total}` : n > 1 ? ` ${n}` : ''}`); q.tick?.(n, total) } // no total: a count from 2
+  const run = () => { if (stop.asked) throw Object.assign(new Error('Stopped'), { quiet: true }); t.set(`Pulling from ${host}`); return pullOne(q, stop, tick) }
   pulling = pulling.then(run, run)
   return pulling.then(items => { t.end(`${items.length} from ${host}`); return items }, e => { t.end(); throw e })
 }
-async function pullOne({ page, range: r }, stop = {}) { // r: which of the page's pictures (a shared one)
+async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: which of the page's pictures (a shared one)
   web(page)
+  r ??= range(page)
   // Signed out, E-Hentai hands gallery-dl resamples without a word; with too few GP, gp=stop makes it say so.
   if (EH.test(new URL(page).host) && !readJson(GDL, {}).extractor?.exhentai?.cookies?.ipb_pass_hash) throw new Error('ehentai cookies needed in Sites')
-  const d = dir()
+  const d = dir(), s = settings(), gone = ethereal()
   const before = new Set(fs.readdirSync(d))
-  const g = gdl(['--write-metadata', '-o', 'tags=true', '-o', 'gp=stop', '--range', r ?? range(page), '-D', d, '--', page])
+  // output.stdout: file names in UTF-8 (Windows' code page would garble a Japanese one); output.mode, skip: the lines below as
+  // gallery-dl prints them by default, whatever the user's own config of it says; post: the + line below.
+  const g = gdl(['--write-metadata', '-o', 'tags=true', '-o', 'gp=stop', '-o', 'output.stdout=utf-8', '-o', 'output.mode=pipe', '-o', 'skip=true',
+    '--Print', 'post:+{count|filecount|page_count}',
+    '--range', r, '-D', d, '--', page])
   stop.child = g.child
-  const failed = await g.then(() => null, e => e) // what arrived before a failure or a stop is kept all the same
-  for (const f of fs.readdirSync(d)) if (!before.has(f) && f.endsWith('.part')) fs.rmSync(path.join(d, f), { force: true })
-  const s = settings(), m = path.join(d, 'meta.jsonl')
-  const known = new Set(fs.existsSync(m) ? fs.readFileSync(m, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l).file) : [])
-  const items = [], later = []
-  for (const f of fs.readdirSync(d)) {
-    if (before.has(f) || !f.endsWith('.json')) continue
-    const img = f.slice(0, -5)
-    if (!fs.existsSync(path.join(d, img)) || known.has(path.join(d, img))) continue
-    const j = readJson(path.join(d, f), {})
-    const item = record({ file: path.join(d, img), src: page, page, time: new Date().toISOString() })
+  // gallery-dl's lines as it goes: a file it fetched (its path, its sidecar written by then), one already there (# path), a post
+  // (+ how many files it has). A new picture goes into the grid and the lookups as it lands. Out of how many: when the page is one
+  // post that says (a gallery, a pixiv work, a tweet), as many as the range takes of them; a page of posts doesn't say.
+  const [a, b] = r.split('-'), most = b === undefined ? 1 : b === '' ? Infinity : b - a + 1
+  const items = []
+  const land = file => {
+    const j = readJson(file + '.json', {})
+    const item = gone ? { file } : record({ file, src: page, page, time: new Date().toISOString() }, s.project)
     items.push(item)
-    // The site's own tags caption it right away; a booru match (below) replaces that.
-    if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(item.file), tagLine(meta(j).tags))
-    if (s.lookup && !BOORU.has(j.category)) later.push(item)
+    if (gone) return
+    // The site's own tags caption it right away; a booru match (lookSoon) replaces that.
+    if (BOORU.has(j.category) || s.sites.includes(j.category)) fs.writeFileSync(txt(file), tagLine(meta(j).tags))
+    if (s.lookup && !BOORU.has(j.category)) lookSoon(item)
   }
-  // After the grid has them, and after the extension gets its answer: IQDB uploads take seconds each.
-  items.looked = later.length && lookupAll(later) // a shared picture's own fields go on once these are done
+  let n = 0, posts = 0, total, rest = '', broke // broke: a file that couldn't be recorded (a locked meta.jsonl): the pull fails, not the app
+  g.child.stdout.on('data', c => {
+    const lines = (rest + c).split('\n'); rest = lines.pop()
+    for (const l of lines.map(l => l.trim()).filter(Boolean)) try {
+      if (l.startsWith('+')) total = ++posts === 1 && parseInt(l.slice(1)) ? Math.min(parseInt(l.slice(1)), most) : undefined
+      else { if (!l.startsWith('# ')) land(path.join(d, path.basename(l))); tick(++n, total) }
+    } catch (e) { broke ??= e }
+  })
+  const failed = await g.then(() => broke, e => e) // what arrived before a failure or a stop is kept all the same
+  for (const f of fs.readdirSync(d)) if (!before.has(f) && f.endsWith('.part')) fs.rmSync(path.join(d, f), { force: true })
+  if (gone) for (const i of items) for (const f of [i.file, i.file + '.json']) fs.rmSync(f, { force: true })
+  if (looking?.stopped) looking = null // lookups stopped by their ✕ stay so to the end of the pull (lookSoon)
+  items.looked = lookups // a shared picture's own fields go on once these are done
   if (stop.asked) throw Object.assign(new Error(items.length ? `Stopped, ${items.length} kept` : 'Stopped'), { quiet: true })
   if (failed) throw items.length ? new Error(`${items.length} kept, then: ${failed.message}`) : failed
   if (!items.length) throw new Error('Nothing new from ' + new URL(page).host)
@@ -533,13 +550,13 @@ const exportItems = async items => {
   note(`${items.length} pictures, ${captions} captions → ${path.basename(d)}`)
   shell.showItemInFolder(d)
 }
-// Several at once, one result at the end.
+// Several at once, one result at the end. items may grow as it goes (lookSoon).
 const lookupAll = async items => {
   let stopped
   const t = task(`Looking up 0/${items.length}`, () => stopped = true)
   let matched = 0, unsure = 0, tagged = 0
   for (const [k, item] of items.entries()) {
-    if (stopped) { items = items.slice(0, k); break }
+    if (stopped) { items.stopped = true; items = items.slice(0, k); break } // stopped: the array lookSoon keeps adding to
     try {
       const j = sidecar(item)
       if (await resolve(item, j, s => t.set(`Looking up ${k + 1}/${items.length}: ${s}`))) matched++
@@ -560,6 +577,10 @@ const setField = (items, field, text) => {
     enrich(item).then(e => send('saved', { ...e, replace: true }))
   }
 }
+// Pulled pictures, looked up one at a time as they land (IQDB uploads take seconds each): one joins the lookups under way, its
+// count growing, or starts them. Stopped by their ✕, the rest of the pull isn't looked up either: it joins the stopped ones.
+let looking, lookups
+const lookSoon = item => { if (looking) return looking.push(item); looking = [item]; lookups = lookupAll(looking).finally(() => looking = looking.stopped ? looking : null) }
 // The user picked one of the close matches.
 const pick = (item, i) => { const j = sidecar(item); adopt(item, j, j.candidates[i].post) }
 // A site's search for a tag, in the browser: the search box's site scope and the tag menu.
@@ -730,9 +751,12 @@ app.whenReady().then(() => {
       let q
       try { q = JSON.parse(body) } catch { return res.writeHead(400).end() }
       if (q.stop) { stopRequest(q.stop); return res.end('{}') } // the extension's ✕: as the task line's
-      ;(q.src ? save(q) : pull({ page: q.page, anim: q.anim, id: q.id })).then(
-        r => res.end(JSON.stringify(r)),
-        err => { console.error(err.message); note(err.message, !err.quiet); res.writeHead(500).end(err.message) }
+      // The answer in lines as it goes: how far a pull is ({ n, total }), then { got } pictures, or { why } not.
+      const line = o => res.write(JSON.stringify(o) + '\n')
+      res.writeHead(200).flushHeaders()
+      ;(q.src ? save(q) : pull({ page: q.page, anim: q.anim, id: q.id, tick: (n, total) => line({ n, total }) })).then(
+        r => res.end(JSON.stringify({ got: [r].flat().length }) + '\n'),
+        err => { console.error(err.message); note(err.message, !err.quiet); res.end(JSON.stringify({ why: err.message }) + '\n') }
       )
     })
   }).on('listening', () => listening = true).on('error', () => { // taken, or reserved by Windows (its ranges move): the app runs, only the extension can't reach it
