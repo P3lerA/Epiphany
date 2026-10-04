@@ -189,7 +189,7 @@ section:target { display: block }
 .pile small { margin-left: .4rem; color: var(--muted); font-size: .85rem; font-weight: 400 }
 .flying { z-index: 1 } /* over the rest while it moves; not in the keyframes, which must stay compositor-only */
 #ghosts { position: fixed; inset: var(--bar) 0 0; overflow: hidden; pointer-events: none }
-#ghosts > img { object-fit: cover; border-radius: 6px }
+#ghosts > div > img { object-fit: cover; border-radius: 6px }
 
 /* The preview dims the title bar too: while it is open the caption buttons' strip is transparent (theme.js bar), so the backdrop shows through. */
 dialog { inset: var(--bar) 0 0; width: 92vw; height: calc(86vh - var(--bar)); padding: 1rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--fg); outline: none; grid-template-columns: minmax(0, 1fr) 20rem; gap: 1rem; opacity: 0; transition: opacity .15s, display .15s allow-discrete, overlay .15s allow-discrete } /* scales with the window, however big */

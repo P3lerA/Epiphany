@@ -13,7 +13,7 @@ const at = (p, box) => {
   const cy = Math.min(Math.max(p.box.top + h / 2 + y, -h / 2), innerHeight + h / 2)
   return { translate: `${p.box.left + p.box.width / 2 + x - box.left - box.width / 2}px ${cy - box.top - box.height / 2}px`, rotate: p.rotate, scale: p.box.width / box.width }
 }
-const frame = p => ({ border: `${p.frame ? 3 : 0}px solid var(--paper)`, boxShadow: p.frame ? 'var(--print)' : 'none' })
+const frame = (p, box) => ({ border: `${p.frame ? 3 * box.width / p.box.width : 0}px solid var(--paper)`, boxShadow: p.frame ? 'var(--print)' : 'none' }) // 3px as it shows, however scaled
 // From a to b, for something laid out at box. The move runs on the compositor; the lift over the rest is a class, since z-index
 // in the keyframes would pull the move onto the main thread. The frame grows in its own (main-thread) animation.
 // ponytail: the frame repaints each flying print every frame (~75fps main thread while flying, the move stays smooth). A print
@@ -25,10 +25,11 @@ const fly = (el, a, b, box, o) => {
   play(el, [at(a, box), at(b, box)], o).finished.then(() => lifted(el).classList.remove('flying'), () => {}) // one by one: all at once stalls a frame
   // A frame grows in the last quarter of the flight, or goes in the first: while it changes, the print repaints every frame, so
   // the rest of the flight stays a move. One flying off the screen keeps its frame: at 4K, 200 frames going at once were most of
-  // piles -> grid's cost, for pictures nobody sees land.
+  // piles -> grid's cost, for pictures nobody sees land. Coming, only the border grows: the print casts its shadow from the start,
+  // lifted (a blur growing was drawn anew every frame, ~270 at once at 4K: grid -> piles stalled as it landed).
   if (a.frame !== undefined && a.frame !== b.frame && (b.frame || onScreen(b))) {
     const d = o.duration * FRAME
-    play(el, [frame(a), frame(b)], { ...o, duration: d, delay: (o.delay ?? 0) + (b.frame ? o.duration - d : 0) })
+    play(el, [frame(a, box), frame(b, box)].map(k => b.frame ? { border: k.border } : k), { ...o, duration: d, delay: (o.delay ?? 0) + (b.frame ? o.duration - d : 0) })
   }
 }
 const EASE = 'cubic-bezier(.2, 0, 0, 1)'
@@ -40,10 +41,11 @@ let SLOW = 1 // slow motion for looking closely: Settings > General > Animation 
 const play = (el, keys, o) => { const a = el.animate(keys, o); a.playbackRate = 1 / SLOW; air?.anims.push(a); return a }
 const settle = f => { const gen = f.gen = (f.gen ?? 0) + 1; Promise.all(f.anims.map(a => a.finished)).then(() => f.gen === gen && land(f), () => {}) }
 const land = (f, now) => {
+  f.gen = NaN // a settle still waiting must not land it again: finish() resolves what it waits on, and a take-back undone twice is redone
   if (now) f.anims.forEach(a => a.finish())
   if (f.dir < 0) { const sec = f.root.closest('section'); f.change(); sec.scrollTop = f.top; tops.set(sec, f.top) } // back where it started: undo the change under the held poses, on its own page
+  f.ghosts.remove() // in one go, before their animations are cancelled: one by one, at 4K, they were half the landing frame
   for (const a of f.anims) if (a.effect.getTiming().fill !== 'backwards') { a.cancel(); lifted(a.effect.target).classList.remove('flying') } // the rest ended holding nothing
-  f.ghosts.forEach(g => g.remove())
   if (flight === f) flight = null
 }
 // Toggled again mid-flight: everything turns around from where it is and eases back (a reversed ease-out would slam home).
@@ -68,11 +70,13 @@ let ghostsTop = 0 // read once per swap: reading it per ghost laid the page out 
 const ghost = (a, to, bare, d = 0) => {
   const g = a.el.cloneNode(!bare)
   g.hidden = false // a picture a filter just hid still fades where it was
-  bare ? ghosts.prepend(g) : ghosts.append(g) // a pile's label under the flying prints
-  air.ghosts.push(g)
+  bare ? air.ghosts.prepend(g) : air.ghosts.append(g) // a pile's label under the flying prints
   if (bare) g.append(a.el.firstElementChild.cloneNode(false), a.el.lastElementChild.cloneNode(true)) // a pile leaving with the view: its label, over its empty place; the prints fly on their own
-  Object.assign(g.style, { position: 'absolute', margin: 0, left: a.box.left + 'px', top: a.box.top - ghostsTop + 'px', width: a.box.width + 'px', height: a.box.height + 'px', translate: a.translate, rotate: a.rotate })
-  if (to) fly(g, a, to, a.box, { duration: 650, delay: d, easing: EASE, fill: 'both' })
+  // Laid out where it lands: a layer is rastered at the size it starts at, so a print's copy flying to a grid spot twice its size
+  // blurred up all the way and sharpened at once when the flight landed.
+  const box = to?.box ?? a.box
+  Object.assign(g.style, { position: 'absolute', margin: 0, left: box.left + 'px', top: box.top - ghostsTop + 'px', width: box.width + 'px', height: box.height + 'px', translate: a.translate, rotate: a.rotate })
+  if (to) fly(g, a, to, box, { duration: 650, delay: d, easing: EASE, fill: 'both' })
   else play(g, [{ opacity: 1 }, { opacity: 0, scale: .96 }], { duration: 250, easing: EASE, fill: 'both' })
   return g
 }

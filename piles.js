@@ -72,7 +72,7 @@ const swap = (change, key) => {
   const lay = el => el.closest('.pile').dataset.tag + ' ' + el.dataset.file, lain = piling && new Set(pics().map(lay)) // which pile each print lay in
   const from = new Map() // picture -> where it shows
   for (const p of before) from.set(p.el.dataset.file, [...from.get(p.el.dataset.file) ?? [], p])
-  const f = air = { anims: [], ghosts: [], key, dir: 1, change, root, top: root.closest('section').scrollTop }
+  const f = air = { anims: [], ghosts: ghosts.appendChild(document.createElement('div')), key, dir: 1, change, root, top: root.closest('section').scrollTop }
   ghostsTop = ghosts.getBoundingClientRect().top
   try { // a throw must not leave later animations recording into a dead flight
     change()
@@ -151,12 +151,13 @@ pilesUI.onclick = () => { // again mid-flight: everything flies back
 // switched, so the new page flashed its grid; navigate runs before the switch.
 navigation.addEventListener('navigate', e => {
   const to = { '#lobby': $('#lobby'), '#projects': pgrid }[new URL(e.destination.url).hash]
-  if (!piling || !e.hashChange || !to || to.classList.contains('piling')) return
-  if (flight) land(flight, true)
+  if (!e.hashChange || !to || to.classList.contains('piling')) return
+  if (flight) land(flight, true) // first: a take-back landing leaves the piles
+  if (!piling) return
   gridTop = 0
   setPiling(true, to)
 })
 addEventListener('hashchange', () => { back = null; buildAhead(); if (flight) land(flight, true); if (piling && !page().classList.contains('piling')) { gridTop = 0; setPiling(true) } })
 // Pulls, lookups and deletes reach the piles in one redraw once they stop coming: a pull saves dozens in a row.
 let refresh
-const refreshPiles = () => { clearTimeout(refresh); refresh = setTimeout(() => piling && swap(() => drawPiles(page())), 300) }
+const refreshPiles = () => { clearTimeout(refresh); refresh = setTimeout(() => piling && !(flight?.dir < 0) && swap(() => drawPiles(page())), 300) } // not under a take-back: it leaves the piles

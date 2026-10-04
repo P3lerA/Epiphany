@@ -85,7 +85,7 @@ interface Pose { el: HTMLElement; box: DOMRect; translate: string; rotate: strin
 
 /** A swap in the air (piles.js swap): what it animates, the ghosts it left, and the change, to take it back (motion.js rewind). */
 interface Flight {
-  anims: Animation[]; ghosts: HTMLElement[]
+  anims: Animation[]; ghosts: HTMLElement // its own layer in #ghosts
   key?: 'piles' // only the piles toggle can be taken back
   dir: 1 | -1; change: () => void; root: HTMLElement; top: number
   gen?: number // settle's generation: a rewind re-settles, the older wait must not land it
