@@ -10,22 +10,16 @@ Download from [Releases](https://github.com/P3lerA/Epiphany/releases/latest).
 
 **Windows**: the Setup, or the portable exe.
 
-**macOS** (Apple silicon): the dmg, drag Epiphany into Applications. It isn't signed: the first open is blocked, then System Settings → Privacy & Security → Open Anyway. Updates don't ask again.
+**macOS**: the dmg, drag Epiphany into Applications. It isn't signed: the first open is blocked, then System Settings -> Privacy & Security -> Open Anyway. Updates don't ask again. Epiphany doesn't work on Intel Macs.
 
-In the app, Settings → Instruments:
-**gallery-dl**: Install. It does the downloading.
-
-**extension**: Export, then load the folder at `chrome://extensions`, enable Developer mode and Load unpacked.
-
-**tagger**: Install (1 GB). Tags pictures no booru knows. Best with a GPU.
+After first launch, settings -> instruments -> export extension. Then "load unpacked" in Chrome extension manager.
 
 ## Use
+Click pull on topright to download current image(s). Alt-S also works. Epiphany tries to lookup tags from boorus first, if they have nothing to say about that image tagger comes next.
 
-**Pull**: the extension button or Alt+S takes the page; right-click an image to save just it.
+Some websites might require login to pull images. Click the key button in settings -> sites to do so.
 
-**Shortcut**: right-click the extension button → Change shortcut.
+Hold ctrl(cmd) click/drag to select images, then do whatever you want, lookup, tag, export.
 
-**Tags**: Automatically lookup missing tags. Tag with tagger if can't find any.
-
-**Export**: pictures and `.txt` captions into a folder, ready for training. Caption format: Settings → Profile.
+The "Profile" in settings only defines captions exported. UI will always use standard modern danboorunese.
 
