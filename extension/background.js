@@ -1,4 +1,6 @@
-importScripts('looks.js') // the spinner names a pull carries (anim): the panel and the app's task line play that one
+try { importScripts('looks.js') } catch {} // the spinner names a pull carries (anim): the panel and the app's task line play that one. Not
+// there, the worker runs on all the same: such a pull carries none, and the app picks one
+const anim = () => typeof SPINNERS === 'object' ? anyOf(Object.keys(SPINNERS)) : undefined
 
 // The badge: how many pulls there are, out and waiting alike; ✓ a moment as one lands (a red ! if it failed); nothing with none.
 const INK = '#1E1F2A'
@@ -75,7 +77,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 })
 
 // Alt+S (its own command: the icon opens the panel) on any site -> gallery-dl. activeTab lends it the tab's URL off the listed sites.
-chrome.commands.onCommand.addListener((name, tab) => name === 'pull' && send({ page: tab.url, anim: anyOf(Object.keys(SPINNERS)), id: crypto.randomUUID() }))
+chrome.commands.onCommand.addListener((name, tab) => name === 'pull' && send({ page: tab.url, anim: anim(), id: crypto.randomUUID() }))
 
 // Right-click on an image -> fetch that image directly.
-chrome.contextMenus.onClicked.addListener(info => send({ src: info.srcUrl, page: info.pageUrl, anim: anyOf(Object.keys(SPINNERS)), id: crypto.randomUUID() }))
+chrome.contextMenus.onClicked.addListener(info => send({ src: info.srcUrl, page: info.pageUrl, anim: anim(), id: crypto.randomUUID() }))
