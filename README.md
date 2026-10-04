@@ -1,7 +1,8 @@
-<picture>
+<p align="center"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.png">
   <img src="docs/logo-light.png" alt="Epiphany: collect, sort, export" width="600">
-</picture>
+</picture></p>
+<br>
 
 ![Tag view](docs/tag-view.gif)
 
