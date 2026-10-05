@@ -8,7 +8,7 @@ const covers = new Map() // tag -> pictures that have lain on top, latest first:
 const tilt = s => { let h = 7; for (const c of s) h = h * 31 + c.charCodeAt(0) | 0; return (h >>> 0) / 2 ** 32 - .5 } // steady per pile across redraws
 const buildPiles = root => {
   const by = new Map()
-  for (const img of shown(root)) for (const t of img.item[F.piles || 'tags']?.split(', ') ?? []) if (t) { const k = t.replace(/^@/, ''); by.has(k) ? by.get(k).push(img) : by.set(k, [img]) } // the kind the filters pick; artists come as 'a, @b'
+  for (const img of shown(root)) for (const t of img.item[F.piles?.[0] === '!' ? 'tags' : F.piles || 'tags']?.split(', ') ?? []) if (t) { const k = t.replace(/^@/, ''); by.has(k) ? by.get(k).push(img) : by.set(k, [img]) } // the kind the filters pick; artists come as 'a, @b'
   const el = document.createElement('div')
   el.className = 'piles'
   el.picks = new Map()

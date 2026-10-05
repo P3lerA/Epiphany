@@ -91,6 +91,13 @@ step('piles by tags and by characters', async () => {
   await js(`filters.querySelector('[data-name=piles] [value=character]').click(); pilesUI.click()`)
   await until(`!page().querySelector('.piles') && !flight`, 'back to the grid')
 })
+step('right-click on Series: the pictures with none, on the grid; again, all', async () => {
+  const rc = () => js(`filters.querySelector('[data-name=piles] [value=copyright]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }))`)
+  await rc(); await until(`shown(page()).length === 2 && shown(page()).every(i => !i.item.copyright) && !piling && F.piles === '!copyright'`, 'no series')
+  await rc(); await until(`shown(page()).length === 4 && !F.piles`, 'all again')
+  await rc(); await until(`shown(page()).length === 2`, 'no series')
+  await js(`$('.filter-toggle').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }))`); await until(`shown(page()).length === 4 && !F.piles`, 'cleared by the filter button')
+})
 step('preview shows the tags, the head from the sidecar under them', async () => {
   await js(`shown(page()).find(i => i.dataset.file.endsWith('booru1.webp')).click()`); await until('dlg.open', 'preview open')
   await until(`dlg.querySelector('textarea').value === '1girl, solo'`, 'tags')
