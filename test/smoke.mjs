@@ -29,7 +29,7 @@ for (const [f, j] of Object.entries(pics)) {
 fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ lookup: false, autotag: false, quote: 'none', sites: [], aliases: true }))
 fs.mkdirSync(path.join(home, 'cache'))
 fs.writeFileSync(path.join(home, 'cache', 'tag-aliases.json'), JSON.stringify({ tags: { smile: 'smiling' }, artist: {}, character: {}, copyright: {} })) // fresh: no pull
-fs.writeFileSync(path.join(home, 'cache', 'tag-wiki.json'), JSON.stringify({ '': 'smoke', solo: 'Only one character.' })) // '': the first-start pull is done
+fs.writeFileSync(path.join(home, 'cache', 'danbooru-tags.json'), JSON.stringify({ '': new Date().toISOString(), solo: ['Only one character.', 0] })) // '': pulled just now
 if (process.env.EPIPHANY_SMOKE_AT) { const [x, y] = process.env.EPIPHANY_SMOKE_AT.split(',').map(Number); fs.writeFileSync(path.join(home, 'window.json'), JSON.stringify({ bounds: { x, y, width: 1200, height: 800 } })) }
 if (models) fs.symlinkSync(path.resolve(models), path.join(home, 'models'), 'junction') // rmSync below unlinks it, the model stays
 

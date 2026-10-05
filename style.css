@@ -91,7 +91,7 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 .fab .search { font-weight: 500 } /* text on the toolbar, over the pictures, as on Edit's field; its hint lighter */
 .search input::placeholder { font-weight: 400 }
 .search select { padding: 0 .25rem 0 .75rem }
-.search input { width: 11rem; padding: 0 .25rem; font: inherit; color: inherit } /* not the UA's Arial */
+.search input { width: 11rem; padding: 0 .25rem; font: inherit; color: inherit; outline: none } /* not the UA's Arial; focused, the pill's border says so (.search:focus-within) */
 .search input::-webkit-search-cancel-button { display: none } /* too small to hit: .clear-q instead */
 /* Clearing the search: a real button in space the pill always keeps, so it appearing never moves the box. */
 .search .clear-q { flex: none; width: 1.75rem; height: 1.75rem; margin-right: .1rem; display: flex; align-items: center; justify-content: center; padding: 0; border: none; border-radius: 50%; background: none; color: var(--muted); opacity: 0; visibility: hidden; transition: opacity .15s, visibility .15s, background .15s, color .15s } /* hidden: out of the Tab order too */
@@ -149,7 +149,8 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 /* The search's names for a word in another language (renderer.js): Edit's list, over the box, as wide. */
 .fab .search { anchor-name: --search }
 #said { position-anchor: --search; inset: auto; bottom: anchor(top); left: anchor(left); width: anchor-size(width); margin: 0 0 .5rem; padding: .25rem; list-style: none; color: inherit; font-weight: 500; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
-#said small { margin-left: .5rem; font-weight: 400; color: var(--muted) } /* the name it matched */
+#said li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis } /* one line each */
+#said small { margin-left: .5rem; font-weight: 400; opacity: .6 } /* the name it matched; the ink faded, not the muted grey: that one is lost on glass */
 .seg { display: flex; gap: 2px; padding: 2px; background: var(--field); border: 1px solid var(--rule); border-radius: 6px }
 .seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem }
 .seg button:hover { color: var(--fg) }

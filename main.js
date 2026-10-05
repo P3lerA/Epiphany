@@ -57,7 +57,7 @@ const editTemplate = () => {
 const templateInfo = () => ({ text: profile().caption.split(',').map(x => x.trim()).filter(Boolean).join(', '), custom: template() != null })
 const resetTemplate = () => fs.existsSync(templateFile()) && shell.trashItem(templateFile())
 const gallery = require('./gdl')(HOME), { gdl, kill, oauth } = gallery
-const { UA, pullWikis, tagWiki, useAliases, renamed, aliasing, artistOf, tagsFor } = require('./danbooru')({ home: HOME, readJson, settings })
+const { UA, pullTags, tagWiki, useAliases, renamed, aliasing, artistOf, tagsFor } = require('./danbooru')({ home: HOME, readJson, settings })
 const GDL = gallery.CONFIG // site credentials live here, where gallery-dl reads them
 const PROJ = path.join(HOME, 'project')
 
@@ -694,7 +694,7 @@ app.whenReady().then(() => {
     win.webContents.isLoading() ? win.webContents.once('did-finish-load', say) : say()
   }).listen(PORT, '127.0.0.1')
   createWindow()
-  pullWikis()
+  pullTags()
   useAliases(settings().aliases)
   app.on('activate', () => { win.show(); win.focus() }) // macOS: the Dock icon brings back the parked window
 })

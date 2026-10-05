@@ -1,44 +1,52 @@
-// What danbooru knows about tags, kept in HOME/cache: what a tag means (its wiki), old names for current ones (its alias table),
-// whose an account elsewhere is (its artists' pages), and the tags a word in another language names (their other names). And how Epiphany introduces itself to the sites it asks (UA).
+// What danbooru knows about tags, kept in HOME/cache: what a tag means and what else it is called (its wiki), old names for current
+// ones (its alias table), whose an account elsewhere is (its artists' pages). And how Epiphany introduces itself to the sites it
+// asks (UA).
 const fs = require('fs')
 const path = require('path')
 const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
 
 module.exports = ({ home, readJson, settings }) => {
-  // A tag's explanation: the first paragraph of its danbooru wiki, DText links and markup turned to plain text. Kept in
-  // HOME/cache for good, a tag without a wiki as null; a failed request isn't kept, so it is asked again next time.
-  const WIKI = path.join(home, 'cache', 'tag-wiki.json')
-  let wiki
-  const saveWiki = () => { fs.mkdirSync(path.dirname(WIKI), { recursive: true }); fs.writeFileSync(WIKI, JSON.stringify(wiki)) } // ~3MB: no indent
+  // danbooru's tags as their wikis tell them, kept in HOME/cache: { tag: [explanation, posts, ...other names] }. The explanation is
+  // the first paragraph, DText links and markup turned to plain text (null: no wiki); the other names are the tag's in other
+  // languages and spellings (初音ミク, 双马尾...). Pulled whole at the first start and again once it is a month old: every general,
+  // artist, series and character tag on 100+ posts that has a wiki (~57k; 57 requests, ~60MB down, ~10MB kept). Anything rarer is
+  // asked for when it comes up, and kept. '' (no tag has that name) is when the last pull was done.
+  const TAGS = path.join(home, 'cache', 'danbooru-tags.json')
+  let tags
+  const load = () => tags ??= readJson(TAGS, {})
+  const saveTags = () => { fs.mkdirSync(path.dirname(TAGS), { recursive: true }); fs.writeFileSync(TAGS, JSON.stringify(tags)) } // no indent
   const plain = body => body.split(/\r?\n\s*\r?\n/).map(p => p.trim()).find(p => p && !/^(h\d\.|\*|!post|\[(table|expand|quote|spoiler))/i.test(p))
     ?.replace(/\[\[([^\]|]+)\|\]\]/g, (_, t) => t.replace(/\s*\(.*\)$/, '')) // [[poster (object)|]]: the pipe trick drops the qualifier
     .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1').replace(/\[\[([^\]]+)\]\]/g, '$1')
     .replace(/"([^"]+)":\[[^\]]*\]/g, '$1').replace(/"([^"]+)":\S+/g, '$1')
     .replace(/\[\/?[a-z]+(=[^\]]*)?\]/gi, '').replace(/\s+/g, ' ').trim() || null
-  // First start pulls the lot: every general tag on 100+ danbooru posts (~24k; 25 requests, ~17MB down, ~4MB kept, 97% of a
-  // sample library's tags). Anything rarer is asked for when it comes up. '' (no tag has that name) marks the pull done.
-  const pullWikis = async () => {
-    wiki ??= readJson(WIKI, {})
-    if (wiki['']) return
-    for (let page = 1; ; page++) {
-      const l = await fetch(`https://danbooru.donmai.us/wiki_pages.json?search[tag][category]=0&search[tag][post_count]=>=100&search[is_deleted]=false&limit=1000&only=title,body&page=${page}`, { signal: AbortSignal.timeout(30000), ...UA }).then(r => r.ok ? r.json() : null).catch(() => null)
+  const entry = w => [plain(w.body ?? ''), w.tag?.post_count ?? 0, ...w.other_names ?? []]
+  const ONLY = 'title,body,other_names,tag[post_count]'
+  const pullTags = async () => {
+    load()
+    if (Date.now() - Date.parse(tags['']) < 30 * 864e5) return // NaN for none: pulled
+    const got = {}
+    for (const category of [0, 1, 3, 4]) for (let page = 1; ; page++) {
+      const q = new URLSearchParams({ 'search[tag][category]': category, 'search[tag][post_count]': '>=100', 'search[is_deleted]': false, limit: 1000, only: ONLY, page })
+      const l = await fetch(`https://danbooru.donmai.us/wiki_pages.json?${q}`, { signal: AbortSignal.timeout(60000), ...UA }).then(r => r.ok ? r.json() : null).catch(() => null)
       if (!l) return // offline or refused: the next start tries again
-      for (const w of l) wiki[w.title] ??= plain(w.body ?? '')
+      for (const w of l) got[w.title] = entry(w)
       if (l.length < 1000) break
     }
-    wiki[''] = new Date().toISOString()
-    saveWiki()
+    tags = { ...tags, ...got, '': new Date().toISOString() } // the ones asked for one by one stay
+    saveTags()
+    fs.rmSync(path.join(home, 'cache', 'tag-wiki.json'), { force: true }) // an older version's, explanations alone
   }
   const tagWiki = async tag => {
-    wiki ??= readJson(WIKI, {})
-    if (tag in wiki) return wiki[tag]
-    const r = await fetch(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(tag)}.json`, { signal: AbortSignal.timeout(8000), ...UA }).catch(() => null)
+    load()
+    if (Object.hasOwn(tags, tag)) return tags[tag][0]
+    const r = await fetch(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(tag)}.json?only=${ONLY}`, { signal: AbortSignal.timeout(8000), ...UA }).catch(() => null)
     if (!r || (!r.ok && r.status !== 404)) return null
     const j = r.ok && await r.json().catch(() => null)
     if (r.ok && !j) return null // cut off mid-read: asked again next time
-    wiki[tag] = j ? plain(j.body ?? '') : null
-    saveWiki()
-    return wiki[tag]
+    tags[tag] = j ? entry(j) : [null]
+    saveTags()
+    return tags[tag][0]
   }
   // Old names to danbooru's current ones (clouds -> cloud, catgirl -> cat_girl; konachan still writes many), when Settings > General
   // says so: danbooru's whole alias table (~41k, 42 requests, ~3MB), pulled then and again once it is a month old. Each name is
@@ -75,9 +83,19 @@ module.exports = ({ home, readJson, settings }) => {
     fs.mkdirSync(path.dirname(ARTISTS), { recursive: true }); fs.writeFileSync(ARTISTS, JSON.stringify(artists))
     return artists[url]
   }
-  // The tags a word in another language names: danbooru's autocomplete matches their other names too (初音: hatsune_miku, 双马尾:
-  // twintails), most used first. [{ tag, said }], said the name it matched; none when danbooru can't be reached.
-  const tagsFor = q => fetch(`https://danbooru.donmai.us/autocomplete.json?${new URLSearchParams({ 'search[query]': q, 'search[type]': 'tag_query', limit: 20 })}`,
-    { signal: AbortSignal.timeout(5000), ...UA }).then(r => r.ok ? r.json() : []).then(l => l.map(x => ({ tag: x.value, said: x.antecedent ?? '' })), () => [])
-  return { UA, pullWikis, tagWiki, useAliases, renamed, aliasing: () => alias !== null, artistOf, tagsFor }
+  // The tags a word in another language names (初音: hatsune_miku, 双马尾: twintails): [{ tag, said }], said the name it matched.
+  // From the cache: a name that is the word, then one that begins with it, then one with it inside, more posts first. None
+  // there (a tag on fewer posts, one newer than the pull): danbooru's autocomplete, which matches other names too; none when it
+  // can't be reached.
+  const tagsFor = async q => {
+    const found = []
+    for (const [tag, e] of Object.entries(load())) if (tag) {
+      const said = e.slice(2).find(n => n === q) ?? e.slice(2).find(n => n.startsWith(q)) ?? e.slice(2).find(n => n.includes(q))
+      if (said) found.push({ tag, said, rank: (said === q) * 2 + said.startsWith(q), posts: e[1] })
+    }
+    if (found.length) return found.sort((a, b) => b.rank - a.rank || b.posts - a.posts).slice(0, 20).map(({ tag, said }) => ({ tag, said }))
+    return fetch(`https://danbooru.donmai.us/autocomplete.json?${new URLSearchParams({ 'search[query]': q, 'search[type]': 'tag_query', limit: 20 })}`,
+      { signal: AbortSignal.timeout(5000), ...UA }).then(r => r.ok ? r.json() : []).then(l => l.map(x => ({ tag: x.value, said: x.antecedent ?? '' })), () => [])
+  }
+  return { UA, pullTags, tagWiki, useAliases, renamed, aliasing: () => alias !== null, artistOf, tagsFor }
 }
