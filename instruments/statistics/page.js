@@ -9,8 +9,8 @@ api.profiles().then(p => { profs = p; drawStats() })
 $('#settings aside').append(Object.assign(document.createElement('a'), { href: '#statistics', textContent: 'Statistics' }))
 $('#settings').insertAdjacentHTML('beforeend', '<div id="statistics"><h2>Statistics</h2><p></p><div class="charts"></div></div>')
 const showStats = () => {
-  $('#settings aside a[href="#statistics"]').hidden = !s.statistics
-  if (!s.statistics && location.hash === '#statistics') location.hash = '#instruments'
+  $('#settings aside a[href="#statistics"]').hidden = !s.instruments.statistics
+  if (!s.instruments.statistics && location.hash === '#statistics') location.hash = '#instruments'
   drawStats()
 }
 const RATED = { g: 'General', s: 'Sensitive', q: 'Questionable', e: 'Explicit' }
@@ -43,7 +43,7 @@ const SEP = { rating: '' } // rating's choices are letters (gs), the others' com
 const chosen = (f, neg) => { const c = F[f] || ''; return c.startsWith('!') === neg ? c.replace(/^!/, '').split(SEP[f] ?? ',').filter(Boolean) : [] }
 const drawStats = () => {
   const box = $('#statistics .charts')
-  if (!profs || !s.statistics || !box.checkVisibility()) return
+  if (!profs || !s.instruments.statistics || !box.checkVisibility()) return
   const on = shown($('#lobby')).map(i => i.item), ai = on.filter(i => i.ai).length
   $('#statistics p').textContent = `${plural(on.length, 'picture')} of ${items.length.toLocaleString()}${ai ? `, ${ai.toLocaleString()} AI-generated` : ''}`
   const chart = ([title, key, order, top, f, value, note]) => {
@@ -106,7 +106,7 @@ $('#statistics .charts').onclick = e => {
   $('#statistics .saved').innerHTML = saved(shown($('#lobby')).map(i => i.item))
 }
 $('#statistics .charts').oncontextmenu = e => cut(e, true)
-addEventListener('hashchange', () => { if (location.hash === '#statistics') s.statistics ? drawStats() : location.replace('#instruments') }) // removed: no page
+addEventListener('hashchange', () => { if (location.hash === '#statistics') s.instruments.statistics ? drawStats() : location.replace('#instruments') }) // removed: no page
 showStats()
 addEventListener('instrument', e => e.detail === 'statistics' && showStats())
 addEventListener('library', () => drawStats())

@@ -134,7 +134,7 @@ const drawInstruments = say => Promise.all([api.instruments(), api.checkUpdate(s
   const ul = $('#instruments ul')
   const newer = u.latest && u.latest !== u.current
   const rows = { Epiphany: { status: u.current, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v,
-    ...Object.fromEntries(INSTRUMENTS.map(i => [i.name, { action: s[i.name] ? 'Remove' : 'Install' }])) }
+    ...Object.fromEntries(INSTRUMENTS.map(i => [i.name, { action: s.instruments[i.name] ? 'Remove' : 'Install' }])) }
   const about = { ...ABOUT, ...Object.fromEntries(INSTRUMENTS.map(i => [i.name, i.about])) }
   ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
     `<li><span>${name}${about[name] ? `<small>${esc(about[name])}</small>` : ''}</span><span class="status"${name === 'Epiphany' ? ' data-egg' : ''}>${status ?? ''}</span><button data-act="${name}">${action}</button></li>`
@@ -146,7 +146,7 @@ const drawInstruments = say => Promise.all([api.instruments(), api.checkUpdate(s
     if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
     if (n === 'extension') api.exportExtension()
     if (n === 'tagger') (e.target.textContent === 'Remove' ? api.removeTagger() : api.installTagger()).then(drawInstruments)
-    if (INSTRUMENTS.some(i => i.name === n)) { s[n] = !s[n]; save(); dispatchEvent(new CustomEvent('instrument', { detail: n })); drawInstruments() }
+    if (INSTRUMENTS.some(i => i.name === n)) { if (s.instruments[n]) delete s.instruments[n]; else s.instruments[n] = true; save(); dispatchEvent(new CustomEvent('instrument', { detail: n })); drawInstruments() }
     if (n === 'Epiphany') newer && u.how !== 'dev' ? api.update().then(drawInstruments) : drawInstruments(true)
   }
 }) // first drawn once the instruments are in

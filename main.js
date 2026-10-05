@@ -16,8 +16,8 @@ const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIR
 const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
 const SETTINGS = path.join(HOME, 'settings.json')
 const WIN = path.join(HOME, 'window.json') // last window bounds; separate file so renderer settings saves never clobber it
-const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru', statistics: false, aliases: false,
-  folders: {}, hideInLobby: [] } // folders: projects opened from elsewhere, name -> path; hideInLobby: projects the Lobby leaves out
+const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru', aliases: false,
+  folders: {}, hideInLobby: [], instruments: {} } // folders: projects opened from elsewhere, name -> path; hideInLobby: projects the Lobby leaves out; instruments: the installed ones, name -> true
 let win
 const MAC = process.platform === 'darwin'
 // From source the icon's blue square is red (red and blue swapped): a dev instance stands apart in the Dock or taskbar.
@@ -77,9 +77,11 @@ const made = d => { // d with its .epiphany
   return d
 }
 const dir = (p = settings().project) => made(folder(p))
-// A picture's sidecar (x.jpg.json) and caption (x.txt), in its folder's .epiphany; a project's meta.jsonl.
+// A picture's sidecar (x.jpg.json) and caption (x.jpg.txt: x.png's is another), in its folder's .epiphany; a project's meta.jsonl,
+// a line a picture, which it names: the picture is in the project's folder, wherever that went (moved, another drive letter, the
+// other OS). A line is read by path.win32.basename, which splits on either separator: one that keeps a path names it too.
 const json = f => path.join(inner(path.dirname(f)), path.basename(f) + '.json')
-const txt = f => path.join(inner(path.dirname(f)), path.basename(f).replace(/\.[^.]+$/, '.txt'))
+const txt = f => path.join(inner(path.dirname(f)), path.basename(f) + '.txt')
 const jsonl = p => path.join(inner(dir(p)), 'meta.jsonl')
 
 const projects = () => {
@@ -115,8 +117,8 @@ const info = (item, prof = profile()) => {
   const tagged = j.booru ? 'booru' : j.candidates ? 'unsure' : BOORU.has(j.category) ? 'booru' : j.tagger ? 'tagger' : 'none'
   // Each candidate with the tags only it has, so look-alike variants can be told apart.
   const sets = j.candidates?.map(c => new Set(words(c.post.tag_string_general)))
-  // A candidate's thumb by its name in the picture's own thumbs: the path a sidecar keeps goes stale as a library moves (or migrates).
-  const cand = c => c.thumb && path.join(inner(path.dirname(item.file)), 'thumbs', path.basename(c.thumb))
+  // A candidate's thumb, which the sidecar names (an older one keeps its path), in the picture's own thumbs.
+  const cand = c => c.thumb && path.join(inner(path.dirname(item.file)), 'thumbs', path.win32.basename(c.thumb))
   const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: cand(c) && fs.existsSync(cand(c)) ? pathToFileURL(cand(c)).href : c.post.preview_file_url ?? c.post.preview_url, head: caption(prof, meta(c.post)), tags: tagLine(meta(c.post).tags), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
   const p = j.booru ?? (BOORU.has(j.category) ? j : null), from = p && { site: p.category, url: postUrl(p) }
@@ -150,7 +152,7 @@ const sidecar = (item, none = { category: new URL(item.page).host, page: item.pa
 const enrich = async (item, prof, load) => { const e = withUrl({ ...item, ...info(item, prof) }); e.thumb = await thumb(e, load); return e }
 
 const record = (item, p = settings().project) => { // p: a pull's own project, though another be opened before its files land
-  fs.appendFileSync(jsonl(p), JSON.stringify(item) + '\n')
+  fs.appendFileSync(jsonl(p), JSON.stringify({ ...item, file: path.basename(item.file) }) + '\n')
   item = { ...item, project: p }
   enrich(item).then(e => send('saved', e))
   return item
@@ -162,13 +164,13 @@ const send = (ch, ...a) => win?.webContents.send(ch, ...a)
 const running = new Map()
 let taskN = 0
 // stop: how to cut it short, for the ✕ beside the line (tasks.js); work without one runs to its end.
-const task = (text, stop, from) => { // from: the extension's request, its spinner (anim: the task line plays the one it shows) and id (to stop it from there)
-  const id = ++taskN, show = () => send('tasks', [...running].map(([id, t]) => ({ id, text: t.text, stop: !!t.stop, anim: t.anim })))
-  running.set(id, { text, stop, anim: from?.anim, req: from?.id }); show()
+// A task's id: the extension's request's (a string, never one of ours, numbers), so its ✕ stops it as the task line's does.
+const task = (text, stop, from) => { // from: the extension's request, its spinner (anim: the task line plays the one it shows) and id
+  const id = from?.id ?? ++taskN, show = () => send('tasks', [...running].map(([id, t]) => ({ id, text: t.text, stop: !!t.stop, anim: t.anim })))
+  running.set(id, { text, stop, anim: from?.anim }); show()
   return { set: t => { running.get(id).text = t; show() }, end: result => { running.delete(id); show(); if (result) note(result) } }
 }
 const stopTask = id => running.get(id)?.stop?.()
-const stopRequest = req => [...running.values()].find(t => t.req === req)?.stop?.()
 const note = (text, error) => send('note', { text, error: !!error })
 
 
@@ -294,7 +296,7 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
       for (const c of near) {
         const t = path.join(thumbs(path.dirname(file)), `cand-${c.post.category}-${c.post.id}.jpg`) // ids collide across sites
         if (!fs.existsSync(t)) await net.fetch(c.post.preview_file_url ?? c.post.preview_url, { signal: AbortSignal.timeout(15000) }).then(async r => r.ok && fs.writeFileSync(t, Buffer.from(await r.arrayBuffer()))).catch(() => {})
-        if (fs.existsSync(t)) c.thumb = t
+        if (fs.existsSync(t)) c.thumb = path.basename(t)
       }
     }
   }
@@ -414,10 +416,10 @@ async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: w
 const list = async () => (await Promise.all(projects().map(async p => { try {
   if (!fs.existsSync(folder(p))) return []
   const d = dir(p), f = jsonl(p), prof = profile()
-  const lines = fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').flatMap(l => { try { return [JSON.parse(l)] } catch { return [] } }) : [], named = new Set(lines.map(l => l.file))
+  const lines = fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').flatMap(l => { try { const o = JSON.parse(l); return [{ ...o, file: path.join(d, path.win32.basename(o.file)) }] } catch { return [] } }) : [], named = new Set(lines.map(l => l.file))
   for (const file of fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isFile() && PICTURE.test(e.name)).map(e => path.join(d, e.name))) if (!named.has(file)) {
     const l = { file, src: pathToFileURL(file).href, page: pathToFileURL(file).href, time: fs.statSync(file).mtime.toISOString() }
-    fs.appendFileSync(f, JSON.stringify(l) + '\n')
+    fs.appendFileSync(f, JSON.stringify({ ...l, file: path.basename(file) }) + '\n')
     lines.push(l)
   }
   return await Promise.all(lines.filter(l => fs.existsSync(l.file)).map(l => enrich({ ...l, project: p }, prof, true)))
@@ -456,8 +458,8 @@ const capybara = () => { const l = readJson(path.join(__dirname, 'capybara_s_pla
 // Right-click on a picture. Delete goes to the Recycle Bin, so no confirm.
 const remove = async item => {
   for (const f of [item.file, json(item.file), txt(item.file)]) if (fs.existsSync(f)) await shell.trashItem(f)
-  const m = jsonl(item.project)
-  fs.writeFileSync(m, fs.readFileSync(m, 'utf8').split('\n').filter(l => { try { return l && JSON.parse(l).file !== item.file } catch { return true } }).join('\n') + '\n') // one cut off stays
+  const m = jsonl(item.project), name = path.basename(item.file)
+  fs.writeFileSync(m, fs.readFileSync(m, 'utf8').split('\n').filter(l => { try { return l && path.win32.basename(JSON.parse(l).file) !== name } catch { return true } }).join('\n') + '\n') // one cut off stays
   fs.rmSync(thumbPath(item), { force: true })
   send('removed', item.file)
 }
@@ -498,7 +500,7 @@ const resolve = async (item, j, say) => {
   if (hit) { await adopt(item, j, hit); return hit }
   // No booru post: whose the account it came from is, if danbooru knows (facts puts it over the tagger's guess).
   const at = ACCOUNT[j.category]?.(j), who = at && await artistOf(at)
-  if (who) j.account = { url: at, artist: who }
+  if (who) j.account = { artist: who }
   if (!j.candidates && !j.booru && !j.tagger && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
   else if (j.candidates || who) { writeJson(json(item.file), j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
   return hit
@@ -569,16 +571,20 @@ const projectMenu = name => { const s = settings(); return void Menu.buildFromTe
   { type: 'separator' },
   s.folders[name] ? { label: 'Remove from Epiphany', click: () => removeProject(name) } : { label: 'Delete project', enabled: name !== 'default', click: () => removeProject(name) }
 ]).popup({ window: win }) }
-// Export: pictures and their captions into a folder of the user's choosing, which is all a trainer reads. Same names; a clash gets the project as prefix.
+// Export: pictures and their captions into a folder of the user's choosing, which is all a trainer reads, a caption beside its
+// picture by stem (x.jpg, x.txt). Same names, unless a file there has the stem already (x.png after x.jpg would write over its
+// x.txt; in either case, one file on Windows and macOS): then the project as prefix, numbered on if that's taken too.
 // A caption: the profile's head from the sidecar, then the .txt's tags.
 const exportItems = async items => {
   const { filePaths: [d] } = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
   if (!d) return
   let captions = 0
-  const name = settings().profile, prof = profile()
+  const name = settings().profile, prof = profile(), stem = f => f.replace(/\.[^.]+$/, '').toLowerCase(), stems = new Set(fs.readdirSync(d).map(stem))
   for (const it of items) {
-    let to = path.join(d, path.basename(it.file))
-    if (fs.existsSync(to)) to = path.join(d, it.project + '_' + path.basename(it.file))
+    const base = path.basename(it.file)
+    let to = base
+    for (let k = 1; stems.has(stem(to)); k++) to = `${it.project}_${k > 1 ? k + '_' : ''}${base}`
+    stems.add(stem(to)); to = path.join(d, to)
     fs.copyFileSync(it.file, to)
     const text = exported(name, caption(prof, facts(sidecar(it)), tagsOf(it.file)))
     if (text) { fs.writeFileSync(to.replace(/\.[^.]+$/, '.txt'), text); captions++ } // beside the picture, as a trainer reads it
@@ -737,7 +743,7 @@ app.whenReady().then(() => {
       let q
       try { q = JSON.parse(body) } catch {}
       if (typeof q !== 'object' || !q) return res.writeHead(400).end() // not JSON, or not an object (null)
-      if (q.stop) { stopRequest(q.stop); return res.end('{}') } // the extension's ✕: as the task line's
+      if (q.stop) { stopTask(q.stop); return res.end('{}') } // the extension's ✕: as the task line's
       // The answer in lines as it goes: how far a pull is ({ n, total }), then { got } pictures, or { why } not.
       const line = o => res.write(JSON.stringify(o) + '\n')
       res.writeHead(200).flushHeaders()

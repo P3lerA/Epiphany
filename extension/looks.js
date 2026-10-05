@@ -12,6 +12,8 @@ const SPINNERS = {
 }
 const FACES = ['(・_・)', '(´・ω・`)', '(・∀・)', '(￣▽￣)', '(°ー°〃)', '(´-ω-`)', '(・ε・)', '(o_O)', '(>_<)', '( ˘ω˘ )', 'ヽ(・∀・)ﾉ', '(ﾟДﾟ)', '(=^・ω・^=)', '¯\\_(ツ)_/¯', '(っ´ω`c)', '(・・?)']
 const anyOf = list => list[Math.random() * list.length | 0]
+// How far a pull is, as Epiphany says (background.js): n/total, or with no total a count from 2; '' before.
+const far = q => q.total ? `${q.n}/${q.total}` : q.n > 1 ? `${q.n}` : ''
 // Plays spinner name (any, when not given) in el as 16 <i>, lit by the class on; returns its stop.
 const spinner = (el, name = anyOf(Object.keys(SPINNERS))) => {
   const [ms, frames] = SPINNERS[Object.hasOwn(SPINNERS, name) ? name : 'snake'] // a name from a request is checked, not trusted

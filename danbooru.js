@@ -37,7 +37,6 @@ module.exports = ({ home, readJson, settings }) => {
     }
     tags = { ...tags, ...got, '': new Date().toISOString() } // the ones asked for one by one stay
     saveTags()
-    fs.rmSync(path.join(home, 'cache', 'tag-wiki.json'), { force: true }) // an older version's, explanations alone
   }
   const tagWiki = async tag => {
     load()

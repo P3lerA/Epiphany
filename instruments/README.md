@@ -10,8 +10,8 @@ instrument's (the Instruments row says it as it is). Nothing outside the folder 
 - `page.css`: its styles, if any.
 - `instrument.json`, if any: `{ "about": "..." }`, a line under its name in Instruments (five words or so).
 
-On or off: `s[name]` in settings.json, off until installed. Removed, an instrument shows nothing and does nothing; its
-code is still loaded (it ships with the app).
+On or off: `s.instruments[name]` (settings.json's `instruments: { name: true }`), off until installed. Removed, an
+instrument shows nothing and does nothing; its code is still loaded (it ships with the app).
 
 What the window says, as events on `window`:
 - `instrument`: one was installed or removed; `detail` is its name.

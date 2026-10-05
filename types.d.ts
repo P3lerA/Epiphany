@@ -19,8 +19,11 @@ interface Item {
 interface Profile { caption: string; qualities: string; scores: string; spaces: boolean }
 
 interface Settings {
-  project: string; quote: string; lookup: boolean; sites: string[]; engine: string; accept: number; autotag: boolean; statistics: boolean; aliases: boolean; safe?: boolean; debug?: boolean
+  project: string; quote: string; lookup: boolean; sites: string[]; engine: string; accept: number; autotag: boolean; aliases: boolean; safe?: boolean; debug?: boolean; ethereal?: boolean
   profile: string; overrides: Partial<Record<keyof Profile, string | boolean>>
+  folders: Record<string, string> // projects opened from elsewhere (Projects > Open folder): name -> path
+  hideInLobby: string[] // projects the Lobby leaves out
+  instruments: Record<string, true> // the installed ones (instruments/README.md)
 }
 
 interface Api {
@@ -34,6 +37,9 @@ interface Api {
   setCaption(item: Item, text: string): Promise<void> // the .txt only; a rebuild from the sidecar replaces it
   setField(items: Item[], field: 'quality' | 'copyright' | 'character' | 'artist', text: string): Promise<void> // comma-separated names, over the booru's or the tagger's
   open(url: string): Promise<void>
+  capybara(): Promise<void>
+  oldLayout(): Promise<boolean> // 0.1.2 only: a project still in the layout before (main.js migrate)
+  migrate(): Promise<void>
   editTemplate(): Promise<string>
   templateInfo(): Promise<{ text: string; custom: boolean }>
   resetTemplate(): Promise<void>
@@ -41,6 +47,8 @@ interface Api {
   lookupAll(items: Item[]): Promise<void>
   pick(item: Item, candidate: number): Promise<void>
   projectMenu(name: string): Promise<void>
+  removeProject(name: string): Promise<void> // smoke.mjs; the page goes through projectMenu
+  openFolder(d?: string): Promise<string | null> // the project's name; no folder given, a dialog asks
   searchSites(): Promise<string[]>
   search(site: string, q: string): Promise<void> // opens the site's search in the browser
   tagMenu(tag: string): Promise<void>
@@ -50,13 +58,15 @@ interface Api {
   getCreds(): Promise<Record<string, Record<string, string>>>
   setCred(site: string, key: string, value: string): Promise<void>
   oauth(site: string): Promise<void>
-  checkUpdate(): Promise<{ current: string; latest: string | null; how: 'portable' | 'installed' | 'dev' }>
+  checkUpdate(say?: boolean): Promise<{ current: string; latest: string | null; how: 'portable' | 'installed' | 'dev' }>
   update(): Promise<void>
   instruments(): Promise<Record<string, { status: string; action: string }>>
+  instrumentList(): Promise<{ name: string; about?: string; files: string[] }[]> // instruments/README.md
   exportExtension(): Promise<void>
   installGdl(): Promise<string>
   export(items: Item[]): Promise<void>
   tagWiki(tag: string): Promise<string | null> // null: no wiki, or not reachable now
+  tagsFor(word: string): Promise<{ tag: string; said: string }[]> // a word in another language: danbooru's tags for it, said the name it matched
   safe(): Promise<boolean> // launched with -safe: safe mode on, whatever Settings say
   tag(items: Item[]): Promise<void>
   installTagger(): Promise<void>
@@ -64,16 +74,19 @@ interface Api {
   devtools(): Promise<void>
   restart(): Promise<void>
   theme(theme: 'system' | 'light' | 'dark', bar: { color: string; symbolColor: string; height: number }): void
+  pathOf(file: File): string // a dropped file's path
   onSaved(cb: (item: Item) => void): void
   onRemoved(cb: (file: string) => void): void
   onProjectRemoved(cb: (name: string) => void): void
-  onTasks(cb: (running: { id: number; text: string; stop: boolean }[]) => void): void // every task's current line, oldest first
-  stopTask(id: number): Promise<void> // a task with stop: true
-  paste(): Promise<void> // pulls the clipboard's web addresses, or takes in shared pictures (share.js)
+  onTasks(cb: (running: { id: number | string; text: string; stop: boolean; anim?: string }[]) => void): void // every task's current line, oldest first; id: a string for the extension's
+  stopTask(id: number | string): Promise<void> // a task with stop: true
+  paste(dropped?: { text: string; html: string }): Promise<void> // pulls the clipboard's (or the dropped text's) web addresses, or takes in shared pictures (share.js)
+  importFiles(paths: string[]): Promise<void> // pictures dropped from the file manager
   share(item: Item): Promise<void> // the picture's share line, onto the clipboard
   onNote(cb: (note: { text: string; error: boolean }) => void): void
   onSearch(cb: (tag: string) => void): void
   onOpenProject(cb: (name: string) => void): void
+  onLobbyToggle(cb: (name: string) => void): void // right-click > Show in Lobby
   onEdit(cb: (e: { items: Item[]; field: 'quality' | 'copyright' | 'character' | 'artist'; label: string; options?: string[] }) => void): void // right-click > Edit
 }
 declare const api: Api

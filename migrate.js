@@ -14,18 +14,24 @@ module.exports = proj => {
     const move = (from, to) => fs.existsSync(from) && !fs.existsSync(to) && fs.renameSync(from, to)
     if (!fs.existsSync(own)) { fs.mkdirSync(own); if (process.platform === 'win32') execFile('attrib', ['+h', own], () => {}) } // hidden, as main.js makes them
     move(path.join(dir, 'thumbs'), path.join(own, 'thumbs'))
-    for (const f of fs.readdirSync(old)) if (f !== 'meta.jsonl') move(path.join(old, f), path.join(/\.(json|txt)$/.test(f) ? own : dir, f))
-    // meta.jsonl's paths rebased by their folder's name, not the old path: a library copied from elsewhere (or from the other OS)
-    // comes out right too. One begun meanwhile (pulled to before the move; a picture that reached the root, its placeholder from
-    // list()) adds its lines for the pictures the old one doesn't name: the old record wins. Written whole, then the old one goes:
-    // cut off between, the next run writes the same again.
+    // Captions first, while their pictures are beside them: x.txt was x.jpg's and x.png's alike, now each picture has its own, named
+    // as its sidecar is (x.jpg.txt). Copied to all but one, moved to that one: cut off between, the next run copies what isn't there.
+    // One no picture has goes as it is.
+    const files = fs.readdirSync(old).sort(), stem = f => f.replace(/\.[^.]+$/, '')
+    for (const t of files.filter(f => f.endsWith('.txt'))) {
+      const to = files.filter(f => !/\.(jsonl?|txt)$/.test(f) && stem(f) === stem(t)).map(f => f + '.txt')
+      for (const f of to.slice(0, -1)) if (!fs.existsSync(path.join(own, f))) fs.copyFileSync(path.join(old, t), path.join(own, f))
+      move(path.join(old, t), path.join(own, to.at(-1) ?? t))
+    }
+    for (const f of fs.readdirSync(old)) if (f !== 'meta.jsonl' && !f.endsWith('.txt')) move(path.join(old, f), path.join(f.endsWith('.json') ? own : dir, f))
+    // meta.jsonl's lines name their pictures (main.js), a path kept by an old one read as its name: a library copied from elsewhere
+    // (or from the other OS) comes out right too. One begun meanwhile (pulled to before the move; a picture that reached the root,
+    // its placeholder from list()) adds its lines for the pictures the old one doesn't name: the old record wins. Written whole, then
+    // the old one goes: cut off between, the next run writes the same again.
     const meta = path.join(old, 'meta.jsonl'), META = path.join(own, 'meta.jsonl'), tmp = META + '.tmp'
     if (fs.existsSync(meta)) {
-      const rebase = l => {
-        try { const o = JSON.parse(l), [file, parent] = o.file.split(/[\\/]/).reverse(); return parent === 'dataset' ? JSON.stringify({ ...o, file: path.join(dir, file) }) : l } catch { return l }
-      }
-      const key = l => { try { return JSON.parse(l).file } catch { return l } } // a line that isn't JSON is kept, once
-      const lines = fs.readFileSync(meta, 'utf8').split('\n').filter(Boolean).map(rebase), named = new Set(lines.map(key))
+      const pic = l => { try { return path.win32.basename(JSON.parse(l).file) } catch {} }, key = l => pic(l) ?? l // a line that isn't JSON is kept, once
+      const lines = fs.readFileSync(meta, 'utf8').split('\n').filter(Boolean).map(l => pic(l) ? JSON.stringify({ ...JSON.parse(l), file: pic(l) }) : l), named = new Set(lines.map(key))
       const added = fs.existsSync(META) ? fs.readFileSync(META, 'utf8').split('\n').filter(l => l && !named.has(key(l))) : []
       fs.writeFileSync(tmp, [...lines, ...added].map(l => l + '\n').join('')); fs.renameSync(tmp, META); fs.rmSync(meta)
     }

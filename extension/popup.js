@@ -17,7 +17,7 @@ const row = (q, next) => {
   try { const u = new URL(q.src ?? q.page); site = new URL(q.page).host || u.protocol; rest = q.src ? decodeURIComponent(u.pathname.split('/').pop()) : decodeURIComponent(u.pathname + u.search) } catch {}
   return el('li', { title: q.src ?? q.page, className: seen.has(key) ? '' : 'new' }, next ? '' : dots(q),
     el('span', {}, el('b', { textContent: site }), el('small', { textContent: rest || '/' })),
-    el('span', { className: 'end' }, q.total || q.n > 1 ? el('em', { textContent: q.total ? `${q.n}/${q.total}` : q.n }) : '', // how far (no total: from 2); ✕ over it on hover
+    el('span', { className: 'end' }, far(q) && el('em', { textContent: far(q) }), // how far; ✕ over it on hover
       el('button', { title: next ? 'Drop it' : 'Stop it', onclick: () => chrome.runtime.sendMessage({ stop: q.id }) }, cross())))
 }
 let away = false, project = '', face = anyOf(FACES) // Epiphany out of reach, as the panel opened, or the project pulls go to; the face it shows when empty, one per opening

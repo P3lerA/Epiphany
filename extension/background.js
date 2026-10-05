@@ -1,6 +1,5 @@
-try { importScripts('looks.js') } catch {} // the spinner names a pull carries (anim): the panel and the app's task line play that one. Not
-// there, the worker runs on all the same: such a pull carries none, and the app picks one
-const anim = () => typeof SPINNERS === 'object' ? anyOf(Object.keys(SPINNERS)) : undefined
+importScripts('looks.js') // the spinner names a pull carries (anim): the panel and the app's task line play that one
+const anim = () => anyOf(Object.keys(SPINNERS))
 
 // The badge: how many pulls there are, out and next alike; ✓ a moment as one lands (a red ! if it failed); nothing with none.
 const INK = '#1E1F2A'

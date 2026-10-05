@@ -23,8 +23,8 @@ const pics = { 'booru1.webp': booru, 'booru2.webp': booru, 'saved.webp': null, '
 for (const [f, j] of Object.entries(pics)) {
   fs.copyFileSync(path.join(import.meta.dirname, 'half.webp'), path.join(data, f))
   if (j) fs.writeFileSync(path.join(own, f + '.json'), typeof j === 'string' ? j : JSON.stringify(j))
-  if (j?.id) fs.writeFileSync(path.join(own, f.replace('.webp', '.txt')), '1girl, solo')
-  fs.appendFileSync(path.join(own, 'meta.jsonl'), JSON.stringify({ file: path.join(data, f), src: 'https://example.com/a.webp', page: 'https://example.com/post', time: new Date().toISOString() }) + '\n')
+  if (j?.id) fs.writeFileSync(path.join(own, f + '.txt'), '1girl, solo')
+  fs.appendFileSync(path.join(own, 'meta.jsonl'), JSON.stringify({ file: f, src: 'https://example.com/a.webp', page: 'https://example.com/post', time: new Date().toISOString() }) + '\n')
 }
 fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ lookup: false, autotag: false, quote: 'none', sites: [], aliases: true }))
 fs.mkdirSync(path.join(home, 'cache'))
@@ -121,7 +121,7 @@ step('after a pick, the next pending one: the other, from either', async () => {
 })
 step('tags written by hand stay in the .txt, the sidecar untouched', async () => {
   await js(`await api.setCaption(items.find(i => i.file.endsWith('booru1.webp')), 'solo, smile')`)
-  assert.equal(fs.readFileSync(path.join(own, 'booru1.txt'), 'utf8'), 'solo, smile')
+  assert.equal(fs.readFileSync(path.join(own, 'booru1.webp.txt'), 'utf8'), 'solo, smile')
   assert.equal(await js('return pendingUI.textContent'), '2 pending')
 })
 step('a field written by hand for several: the page and the heads follow, the tags stay', async () => {
@@ -145,11 +145,11 @@ step('settings pages draw, Instruments lists the tools', async () => {
 })
 step('an instrument: statistics installed, its page drawn from the library, removed', async () => {
   await js(`location.hash = '#instruments'`); await until(`$('#instruments [data-act=statistics]')`, 'its row')
-  await js(`$('#instruments [data-act=statistics]').click()`); await until(`s.statistics && $('#instruments [data-act=statistics]')?.textContent === 'Remove'`, 'installed')
+  await js(`$('#instruments [data-act=statistics]').click()`); await until(`s.instruments.statistics && $('#instruments [data-act=statistics]')?.textContent === 'Remove'`, 'installed')
   await js(`location.hash = '#statistics'`); await until(`$('#statistics .chart')`, 'charts')
   assert.match(await js(`return $('#statistics p').textContent`), /4 pictures of 4/)
   await js(`location.hash = '#instruments'`); await until(`$('#instruments [data-act=statistics]')`, 'its row')
-  await js(`$('#instruments [data-act=statistics]').click()`); await until(`!s.statistics && $('#settings aside a[href="#statistics"]').hidden`, 'removed')
+  await js(`$('#instruments [data-act=statistics]').click()`); await until(`!s.instruments.statistics && $('#settings aside a[href="#statistics"]').hidden`, 'removed')
   await js(`location.hash = '#lobby'`)
 })
 step('a picture dropped from the file manager is imported, its page where it was', async () => {
@@ -157,6 +157,7 @@ step('a picture dropped from the file manager is imported, its page where it was
   for (const type of ['dragEnter', 'dragOver', 'drop']) await send('Input.dispatchDragEvent', { type, x: 400, y: 400, data: { items: [], files: [file], dragOperationsMask: 1 } })
   await until(`items.length === 5`, 'imported')
   assert.equal(await js(`return items.find(i => i.file.endsWith('half.webp'))?.page`), pathToFileURL(file).href)
+  assert.equal(JSON.parse(fs.readFileSync(path.join(own, 'meta.jsonl'), 'utf8').trim().split('\n').at(-1)).file, 'half.webp') // its line names it
 })
 step('local server: only the extension, only web URLs', async () => {
   const post = (body, headers = {}) => fetch(`http://127.0.0.1:${server}/`, { method: 'POST', body: JSON.stringify(body), headers })
@@ -178,7 +179,7 @@ step('a folder opened as a project: its pictures in, .epiphany made, shown in th
   opened = await js(`return api.openFolder(${d})`)
   await js(`await openFolder(${d})`)
   assert.ok(await js(`return projects.includes(${JSON.stringify(opened)}) && items.some(i => i.file === ${JSON.stringify(path.join(outside, 'outside.webp'))})`))
-  assert.ok(fs.existsSync(path.join(outside, '.epiphany', 'meta.jsonl')))
+  assert.equal(JSON.parse(fs.readFileSync(path.join(outside, '.epiphany', 'meta.jsonl'), 'utf8')).file, 'outside.webp')
   assert.equal(await js(`return shown($('#lobby')).length`), lobby + 1)
 })
 step('a project left out of the Lobby, and back', async () => {

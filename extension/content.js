@@ -37,13 +37,12 @@ const show = (state, label, why = '') => { btn.dataset.state = state; text.textC
 // the pull again, by its page, and shows where it is. On a site that moves between posts without loading a page (x.com, pixiv), the
 // one it follows stays with the post it was asked for.
 let back, id, page, spinning, other // page: where the pull it follows was asked for; other: the pull from another page whose dots it plays
-const far = q => q.total ? ` ${q.n}/${q.total}` : q.n > 1 ? ` ${q.n}` : '' // no total: a count from 2
 const still = () => { spinning?.(); spinning = other = undefined }
 const idle = o => {
   if (o?.id !== other) { still(); spinning = o ? spinner(dots, o.anim) : null; other = o?.id }
-  show(o ? 'elsewhere' : 'idle', 'Pull', o ? `Pulling ${o.page}${far(o)}` : '')
+  show(o ? 'elsewhere' : 'idle', 'Pull', o ? `Pulling ${o.page} ${far(o)}`.trim() : '')
 }
-const busy = q => { clearTimeout(back); if (other) still(); show('busy', 'Pulling' + far(q)); spinning ??= spinner(dots, q.anim) }
+const busy = q => { clearTimeout(back); if (other) still(); show('busy', `Pulling ${far(q)}`.trim()); spinning ??= spinner(dots, q.anim) }
 const end = (state, label, why) => {
   still(); id = null
   clearTimeout(back); show(state, label, why)
