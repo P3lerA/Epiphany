@@ -2,6 +2,11 @@
 
 const SITES = ['danbooru', 'gelbooru', 'safebooru', 'yandere', 'konachan', 'sankaku', 'e621', 'rule34',
   'zerochan', 'animepictures', 'ehentai', 'pixiv', 'twitter', 'deviantart', 'artstation', 'fanbox', 'fantia', 'bluesky']
+// Where a site's name goes, clicked.
+const HOMEPAGE = { danbooru: 'danbooru.donmai.us', gelbooru: 'gelbooru.com', safebooru: 'safebooru.org', yandere: 'yande.re', konachan: 'konachan.com',
+  sankaku: 'chan.sankakucomplex.com', e621: 'e621.net', rule34: 'rule34.xxx', zerochan: 'www.zerochan.net', animepictures: 'anime-pictures.net',
+  ehentai: 'e-hentai.org', pixiv: 'www.pixiv.net', twitter: 'x.com', deviantart: 'www.deviantart.com', artstation: 'www.artstation.com',
+  fanbox: 'www.fanbox.cc', fantia: 'fantia.jp', bluesky: 'bsky.app' }
 // What gallery-dl needs per site. 'oauth' = a browser login flow, the rest are config fields.
 // Field names are gallery-dl's keys, a dot for one inside another; danbooru and e621 take the API key as 'password'. ehentai: the
 // browser's login cookies (Cloudflare stops gallery-dl's own login).
@@ -51,11 +56,12 @@ const settingsUI = profiles => {
       const c = CREDS[site]
       const fields = c === 'oauth' ? `<button data-oauth="${site}">Log in</button>`
         : (c || []).map(k => `<input name="${k}" placeholder="${HINT[site]?.[k] ?? k.split('.').pop()}" type="${SECRET.test(k) ? 'password' : 'text'}" value="${esc(k.split('.').reduce((o, p) => o?.[p], creds[site]) ?? '')}" spellcheck="false">`).join('')
-      return `<li data-site="${site}"><label>${site}<input type="checkbox" value="${site}" ${s.sites.includes(site) ? 'checked' : ''}></label>${c ? `<button class="key" aria-label="Credentials">${KEY}</button><div class="creds" hidden>${fields}</div>` : ''}</li>`
+      return `<li data-site="${site}"><label><a href="https://${HOMEPAGE[site]}">${site}</a><input type="checkbox" value="${site}" ${s.sites.includes(site) ? 'checked' : ''}></label>${c ? `<button class="key" aria-label="Credentials">${KEY}</button><div class="creds" hidden>${fields}</div>` : ''}</li>`
     }).join('')
   })
   sites.onclick = e => {
-    const key = e.target.closest('.key'), oauth = e.target.closest('[data-oauth]')
+    const key = e.target.closest('.key'), oauth = e.target.closest('[data-oauth]'), link = e.target.closest('a')
+    if (link) { e.preventDefault(); api.open(link.href) } // in the browser; the switch beside it stays as it was
     if (key) { const d = key.nextElementSibling; d.hidden = !d.hidden }
     if (oauth) api.oauth(oauth.dataset.oauth)
   }
@@ -117,10 +123,11 @@ $('.fab .theme-toggle').onclick = () => {
   $('#general [name=theme]').value = localStorage.theme
 }
 
+let updateChecked = false // Check pressed: what it found is said beside the version
 const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]).then(([v, u]) => {
   const ul = $('#instruments ul')
-  const newer = u.latest && u.latest !== u.current
-  const rows = { Epiphany: { status: u.current, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v,
+  const newer = u.latest && u.latest !== u.current, found = updateChecked && !newer ? (u.latest ? ', up to date' : ', no answer from GitHub') : ''
+  const rows = { Epiphany: { status: u.current + found, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v,
     statistics: s.statistics ? { status: 'installed', action: 'Remove' } : { status: 'not installed', action: 'Install' } }
   ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
     `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
@@ -132,7 +139,7 @@ const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]
     if (n === 'extension') api.exportExtension()
     if (n === 'tagger') (e.target.textContent === 'Remove' ? api.removeTagger() : api.installTagger()).then(drawInstruments)
     if (n === 'statistics') { s.statistics = !s.statistics; save(); showStats() }
-    if (n === 'Epiphany') (newer && u.how !== 'dev' ? api.update() : Promise.resolve()).then(drawInstruments)
+    if (n === 'Epiphany') { updateChecked = true; (newer && u.how !== 'dev' ? api.update() : Promise.resolve()).then(drawInstruments) }
   }
 }) // first drawn by showStats, once settings are loaded
 
