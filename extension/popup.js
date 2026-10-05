@@ -20,7 +20,7 @@ const row = (q, next) => {
     el('span', { className: 'end' }, q.total || q.n > 1 ? el('em', { textContent: q.total ? `${q.n}/${q.total}` : q.n }) : '', // how far (no total: from 2); ✕ over it on hover
       el('button', { title: next ? 'Drop it' : 'Stop it', onclick: () => chrome.runtime.sendMessage({ stop: q.id }) }, cross())))
 }
-let away = false, face = anyOf(FACES) // Epiphany out of reach, as the panel opened; the face it shows when empty, one per opening
+let away = false, project = '', face = anyOf(FACES) // Epiphany out of reach, as the panel opened, or the project pulls go to; the face it shows when empty, one per opening
 const draw = async () => {
   const [{ out = [] }, { waiting = [] }] = await Promise.all([chrome.storage.session.get('out'), chrome.storage.local.get('waiting')])
   now = new Set()
@@ -30,10 +30,12 @@ const draw = async () => {
     ...waiting.length ? [el('h2', {}, `Next ${waiting.length}`, el('button', { textContent: 'Clear', onclick: () => chrome.runtime.sendMessage({ clear: true }) })),
       el('ul', {}, ...waiting.map(q => row(q, true)))] : [],
     ...out.length || waiting.length ? [] : [el('p', { className: 'face', textContent: face })],
-    ...away ? [el('p', { className: 'away', textContent: "Can't reach Epiphany." })] : [])
+    ...away ? [el('p', { className: 'away', textContent: "Can't reach Epiphany." })] : project ? [el('p', { className: 'here', textContent: `Current project: ${project}` })] : [])
   seen = now
 }
 chrome.storage.onChanged.addListener(draw)
 draw()
-// Any answer is Epiphany there (a GET is turned away, harmlessly); a refused connection is it away. There: what waits for it goes.
-fetch('http://127.0.0.1:7676/').then(() => false, () => true).then(a => { away = a; draw(); if (!a) chrome.runtime.sendMessage({ go: true }) })
+// Any answer is Epiphany there, saying which project pulls go to (an older one turns a GET away: no line); a refused connection is
+// it away. There: what waits for it goes.
+fetch('http://127.0.0.1:7676/').then(r => r.ok ? r.json().then(j => j.project ?? '', () => '') : '')
+  .then(p => { project = p; draw(); chrome.runtime.sendMessage({ go: true }) }, () => { away = true; draw() })

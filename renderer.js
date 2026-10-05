@@ -321,7 +321,7 @@ const face = () => { for (const r of [$('#lobby'), pgrid]) if (!r.dataset.face |
 const plist = $('#plist'), pgrid = $('#pgrid')
 const drawProjects = force => {
   plist.innerHTML = projects.map(p => `<a href="#projects" data-p="${esc(p)}"${p === s.project ? ' class="on" title="New pictures land here"' : ''}>${esc(p)}</a>`).join('')
-    + '<input placeholder="+ New project" spellcheck="false"><button>Open folder</button>'
+    + '<input placeholder="New project" spellcheck="false"><button>Open folder</button>'
   plist.querySelectorAll('a').forEach(a => a.classList.toggle('away', s.hideInLobby.includes(a.dataset.p)))
   if (force || pgrid.dataset.p !== s.project) { pgrid.dataset.p = s.project; render(pgrid, items.filter(i => i.project === s.project)) } // redrawing the same grid would only replay the fade-in
 }

@@ -31,7 +31,7 @@
   .dots i { border-radius: 50%; background: currentColor; opacity: .25; transition: opacity var(--frame) }
   .dots i.on { opacity: 1 }
   .face { margin: 18px 0 20px; text-align: center; font-size: 22px }
-  .away { margin: 2px 0 0; padding: 8px 14px 6px; border-top: 1px solid var(--rule); font-size: .9em }
+  :is(.away, .here) { margin: 2px 0 0; padding: 8px 14px 6px; border-top: 1px solid var(--rule); font-size: .9em }
   @keyframes rise { from { opacity: 0; translate: 0 4px } }
   @media (prefers-reduced-motion: reduce) { li { animation: none } }
 </style>

@@ -57,6 +57,7 @@ const posts = [], held = new Map()
 const answer = (sessionId, requestId, code, body) => send('Fetch.fulfillRequest', { requestId, responseCode: code,
   responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(body).toString('base64') }, sessionId)
 const app = (p, s) => {
+  if (p.request.method === 'GET') return answer(s, p.requestId, 200, '{"project":"smoke"}') // where a pull goes, as the app says to anyone
   if (p.request.method !== 'POST') return answer(s, p.requestId, 404, '')
   const q = JSON.parse(p.request.postData)
   posts.push(q)
@@ -174,6 +175,7 @@ const steps = [
     await sleep(300) // its reach check
     assert.ok(await value('document.querySelector(".face")?.textContent', s))
     assert.equal(await value('!!document.querySelector(".away")', s), false)
+    assert.equal(await value('document.querySelector(".here")?.textContent', s), 'Current project: smoke')
   }],
   ['nothing threw', async () => assert.deepEqual(errors, [])]
 ]

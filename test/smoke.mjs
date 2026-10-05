@@ -162,6 +162,7 @@ step('local server: only the extension, only web URLs', async () => {
   assert.equal((await post({ page: 'https://example.com' })).status, 403)
   const r = await post({ page: 'file:///C:/Windows' }, { Origin: 'chrome-extension://smoke' })
   assert.deepEqual(JSON.parse(await r.text()), { why: 'Not a web URL: file:///C:/Windows' })
+  assert.deepEqual(await fetch(`http://127.0.0.1:${server}/`).then(r => r.json()), { project: 'default' }) // the panel's line: its GET has no Origin
 })
 if (models) step('tagger tags a WebP', async () => {
   await js(`await api.tag([items.find(i => i.file.endsWith('saved.webp'))])`)

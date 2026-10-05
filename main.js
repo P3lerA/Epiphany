@@ -715,6 +715,9 @@ app.whenReady().then(() => {
     tray.on('click', () => { win.show(); win.focus() })
   }
   http.createServer((req, res) => {
+    // The panel asks where a pull goes. Its GET comes without an Origin (the extension's host permission skips CORS); a page
+    // elsewhere can send one too, but can't read the answer (no CORS header here).
+    if (req.method === 'GET') return res.end(JSON.stringify({ project: settings().project }))
     // Only the extension: web pages can POST here too (text/plain skips preflight), but can't fake Origin.
     if (!req.headers.origin?.startsWith('chrome-extension://')) return res.writeHead(403).end()
     if (req.method !== 'POST') return res.writeHead(404).end()
