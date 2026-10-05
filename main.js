@@ -3,7 +3,6 @@ const http = require('http')
 const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
-const { spawn, execFile } = require('child_process')
 const crypto = require('crypto')
 const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
@@ -11,7 +10,6 @@ const share = require('./share')
 const { BOORU, EH, gdlName, postUrl, SEARCH, own, range } = require('./sites')
 const { thumbnail } = require('./thumbnail')
 const quotes = require('./quotes')
-const { autoUpdater } = require('electron-updater')
 
 const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIRI, 67xx is a Windows reserved range; env override keeps test runs off the real app
 const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
@@ -59,6 +57,7 @@ const editTemplate = () => {
 const templateInfo = () => ({ text: profile().caption.split(',').map(x => x.trim()).filter(Boolean).join(', '), custom: template() != null })
 const resetTemplate = () => fs.existsSync(templateFile()) && shell.trashItem(templateFile())
 const gallery = require('./gdl')(HOME), { gdl, kill, oauth } = gallery
+const { UA, pullWikis, tagWiki, useAliases, renamed, aliasing } = require('./danbooru')({ home: HOME, readJson, settings })
 const GDL = gallery.CONFIG // site credentials live here, where gallery-dl reads them
 const PROJ = path.join(HOME, 'project')
 
@@ -373,7 +372,7 @@ const txt = f => f.replace(/\.[^.]+$/, '.txt')
 // The .txt, its old names read as the current ones while aliases are on (below), so its tags agree with the names above them.
 const tagsOf = file => {
   const t = fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : ''
-  return alias ? [...new Set(t.split(',').map(x => x.trim()).filter(Boolean).map(x => {
+  return aliasing() ? [...new Set(t.split(',').map(x => x.trim()).filter(Boolean).map(x => {
     const k = x.replace(/ /g, '_'), to = renamed('tags', k)
     return to === k ? x : to.replace(/_/g, ' ')
   }))].join(', ') : t
@@ -395,62 +394,6 @@ const remove = async item => {
 
 // Manual lookup for any picture, including right-click saves that have no sidecar.
 // The post as the site has it now: iqdb.org's index lags, and a similarity hit may carry an old tag list.
-const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
-
-// A tag's explanation: the first paragraph of its danbooru wiki, DText links and markup turned to plain text. Kept in
-// HOME/cache for good, a tag without a wiki as null; a failed request isn't kept, so it is asked again next time.
-const WIKI = path.join(HOME, 'cache', 'tag-wiki.json')
-let wiki
-const saveWiki = () => { fs.mkdirSync(path.dirname(WIKI), { recursive: true }); fs.writeFileSync(WIKI, JSON.stringify(wiki)) } // ~3MB: no indent
-const plain = body => body.split(/\r?\n\s*\r?\n/).map(p => p.trim()).find(p => p && !/^(h\d\.|\*|!post|\[(table|expand|quote|spoiler))/i.test(p))
-  ?.replace(/\[\[([^\]|]+)\|\]\]/g, (_, t) => t.replace(/\s*\(.*\)$/, '')) // [[poster (object)|]]: the pipe trick drops the qualifier
-  .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1').replace(/\[\[([^\]]+)\]\]/g, '$1')
-  .replace(/"([^"]+)":\[[^\]]*\]/g, '$1').replace(/"([^"]+)":\S+/g, '$1')
-  .replace(/\[\/?[a-z]+(=[^\]]*)?\]/gi, '').replace(/\s+/g, ' ').trim() || null
-// First start pulls the lot: every general tag on 100+ danbooru posts (~24k; 25 requests, ~17MB down, ~4MB kept, 97% of a
-// sample library's tags). Anything rarer is asked for when it comes up. '' (no tag has that name) marks the pull done.
-const pullWikis = async () => {
-  wiki ??= readJson(WIKI, {})
-  if (wiki['']) return
-  for (let page = 1; ; page++) {
-    const l = await fetch(`https://danbooru.donmai.us/wiki_pages.json?search[tag][category]=0&search[tag][post_count]=>=100&search[is_deleted]=false&limit=1000&only=title,body&page=${page}`, { signal: AbortSignal.timeout(30000), ...UA }).then(r => r.ok ? r.json() : null).catch(() => null)
-    if (!l) return // offline or refused: the next start tries again
-    for (const w of l) wiki[w.title] ??= plain(w.body ?? '')
-    if (l.length < 1000) break
-  }
-  wiki[''] = new Date().toISOString()
-  saveWiki()
-}
-const tagWiki = async tag => {
-  wiki ??= readJson(WIKI, {})
-  if (tag in wiki) return wiki[tag]
-  const r = await fetch(`https://danbooru.donmai.us/wiki_pages/${encodeURIComponent(tag)}.json`, { signal: AbortSignal.timeout(8000), ...UA }).catch(() => null)
-  if (!r || (!r.ok && r.status !== 404)) return null
-  const j = r.ok && await r.json().catch(() => null)
-  if (r.ok && !j) return null // cut off mid-read: asked again next time
-  wiki[tag] = j ? plain(j.body ?? '') : null
-  saveWiki()
-  return wiki[tag]
-}
-// Old names to danbooru's current ones (clouds -> cloud, catgirl -> cat_girl; konachan still writes many), when Settings > General
-// says so: danbooru's whole alias table (~41k, 42 requests, ~3MB), pulled then and again once it is a month old. Each name is
-// renamed only to one of its kind (an artist "x" stays, though the general tag x is now x_(symbol)). Renamed as they are read
-// (meta, tagsOf), the files as written: off, the old names are back.
-const ALIASES = path.join(HOME, 'cache', 'tag-aliases.json')
-let alias = null // { tags|artist|character|copyright: { old: new } }
-const renamed = (kind, t) => alias && Object.hasOwn(alias[kind], t) ? alias[kind][t] : t // own keys: a tag "constructor" is no alias
-const useAliases = async on => {
-  if (on && !(fs.existsSync(ALIASES) && Date.now() - fs.statSync(ALIASES).mtimeMs < 30 * 864e5)) {
-    const all = { tags: {}, artist: {}, character: {}, copyright: {} }
-    for (let page = 1; ; page++) {
-      const l = await fetch(`https://danbooru.donmai.us/tag_aliases.json?search[status]=active&limit=1000&only=antecedent_name,consequent_name,consequent_tag[category]&page=${page}`, { signal: AbortSignal.timeout(30000), ...UA }).then(r => r.ok ? r.json() : null).catch(() => null)
-      if (!l) break // offline or refused: the table there is, if any; the next start tries again
-      for (const a of l) all[{ 1: 'artist', 3: 'copyright', 4: 'character' }[a.consequent_tag?.category] ?? 'tags'][a.antecedent_name] = a.consequent_name
-      if (l.length < 1000) { fs.mkdirSync(path.dirname(ALIASES), { recursive: true }); fs.writeFileSync(ALIASES, JSON.stringify(all)); break }
-    }
-  }
-  alias = settings().aliases ? readJson(ALIASES, null) : null // turned off meanwhile: off
-}
 const gelCreds = () => { const g = readJson(GDL, {}).extractor?.gelbooru ?? {}; return `&api_key=${g['api-key'] ?? ''}&user_id=${g['user-id'] ?? ''}` }
 const live = p => {
   if (p.category === 'danbooru') return fetch(`https://danbooru.donmai.us/posts/${p.id}.json`, UA).then(r => r.ok ? r.json() : null, () => null)
@@ -633,66 +576,7 @@ const setCred = (site, key, value) => {
 
 // The Chrome extension ships inside the app (extraResources when packaged) and is exported for "Load unpacked".
 const EXT = app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension')
-// Self-update. Installed builds use electron-updater (latest.yml on the GitHub release); macOS swaps its .app (update, below).
-// The portable exe is a self-extracting shell that runs from %TEMP%; it stays locked (no rename, no overwrite) until its launcher has
-// cleaned up, seconds after we quit. So the new one waits beside it, and takes over as Epiphany.exe once this one is let go and
-// deleted: one name from then on, so shortcuts keep working.
-const PORTABLE = process.env.PORTABLE_EXECUTABLE_FILE
-const RELEASES = 'https://api.github.com/repos/P3lerA/Epiphany/releases/latest'
-autoUpdater.autoDownload = false
-// An update quits without asking, so it first waits for the rest of the task line (a pull, a lookup) to finish.
-const idle = async own => {
-  if (running.size > (own ? 1 : 0)) own?.set('Update waits for the work in progress')
-  while (running.size > (own ? 1 : 0)) await new Promise(r => setTimeout(r, 1000))
-  app.quitting = true
-}
-autoUpdater.on('update-downloaded', () => idle(updating).then(() => autoUpdater.quitAndInstall(true, true))) // silent: else the whole setup wizard, waiting for clicks; then relaunched
-let updating
-autoUpdater.on('download-progress', p => (updating ??= task('Downloading the update')).set(`Downloading the update ${Math.round(p.percent)}%`))
-autoUpdater.on('error', e => { updating?.end(); updating = null; note(`Update: ${e.message}`, true) })
-let latestRelease, updateCall // the update under way: another click joins it (two would wait on each other forever)
-
-const checkUpdate = async () => {
-  const current = require('./package.json').version // app.getVersion() is Electron's own when launched without a package.json
-  latestRelease = await fetch(RELEASES, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null).catch(() => null)
-  const latest = latestRelease?.tag_name?.replace(/^v/, '') ?? null
-  return { current, latest, how: PORTABLE ? 'portable' : app.isPackaged ? 'installed' : 'dev' }
-}
-
-const update = async () => {
-  if (!PORTABLE && !MAC) return autoUpdater.checkForUpdates().then(() => autoUpdater.downloadUpdate())
-  if (process.execPath.includes('/AppTranslocation/')) throw new Error('move Epiphany into Applications first') // run where it was unzipped: Gatekeeper runs a read-only copy
-  const asset = latestRelease.assets.find(a => MAC ? a.name.endsWith('-mac.zip') : /^Epiphany[ .][0-9.]+\.exe$/.test(a.name)) // GitHub swaps spaces for dots in asset names
-  if (!asset) throw new Error(`no ${MAC ? 'macOS zip' : 'portable exe'} in ` + latestRelease.tag_name)
-  const t = task('Downloading ' + asset.name) // until the app quits for it
-  const buf = await fetch(asset.browser_download_url).then(r => r.arrayBuffer()).then(Buffer.from).catch(e => { t.end(); throw e })
-  if (buf.length !== asset.size) { t.end(); throw new Error('download incomplete') }
-  // macOS: Squirrel.Mac takes signed apps only, so the .app is swapped in place. A running app's bundle can be renamed and deleted
-  // (its files stay open): the new one moves in before we quit, and app.relaunch starts it. Fetched by us, it carries no quarantine,
-  // so Gatekeeper doesn't ask again.
-  if (MAC) {
-    const APP = path.resolve(process.execPath, '../../..'), nw = APP + '.new', zip = nw + '.zip'
-    try { for (const d of [nw, APP + '.old']) fs.rmSync(d, { recursive: true, force: true }); fs.writeFileSync(zip, buf); await new Promise((ok, no) => execFile('ditto', ['-x', '-k', zip, nw], e => e ? no(e) : ok())) }
-    catch (e) { t.end(); throw e } finally { fs.rmSync(zip, { force: true }) }
-    await idle(t)
-    fs.renameSync(APP, APP + '.old')
-    fs.renameSync(path.join(nw, 'Epiphany.app'), APP)
-    fs.rmSync(APP + '.old', { recursive: true }); fs.rmSync(nw, { recursive: true })
-    app.relaunch()
-    return app.quit()
-  }
-  const to = path.join(path.dirname(PORTABLE), 'Epiphany.exe'), nw = to + '.new'
-  fs.writeFileSync(nw, buf)
-  // After we quit: delete this exe once its launcher lets go (retried for a minute), then the new one becomes Epiphany.exe and
-  // starts. Not app.relaunch: its helper runs from the unpacked copy and keeps the launcher from deleting it. The swap outlives us:
-  // Node's children die with it (a job object) unless detached, and a detached PowerShell has no console and does nothing. So one
-  // PowerShell starts it as its own child, outside the job, and we quit once that is done.
-  const q = s => `'${s.replace(/'/g, "''")}'`
-  await idle(t) // the swap below can't be called off
-  const swap = Buffer.from(`for ($i = 0; $i -lt 60; $i++) { try { Remove-Item -LiteralPath ${q(PORTABLE)} -Force -ErrorAction Stop; break } catch { Start-Sleep 1 } }; Move-Item -LiteralPath ${q(nw)} -Destination ${q(to)} -Force; Start-Process -FilePath ${q(to)}`, 'utf16le').toString('base64')
-  await new Promise(r => spawn('powershell.exe', ['-NoProfile', '-Command', `Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','${swap}'`], { stdio: 'ignore', windowsHide: true }).on('exit', r))
-  app.quit()
-}
+const { checkUpdate, update } = require('./update')({ task, note, busy: () => running.size })
 
 const instruments = async () => {
   const v = await gdl(['--version']).then(v => v.trim(), () => null)
@@ -717,9 +601,9 @@ const installGdl = async () => {
   try { const v = await gallery.install(); t.end(`gallery-dl ${v} installed`); return v } catch (e) { t.end(); note(e.message, true) }
 }
 
-const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => { writeJson(SETTINGS, v); if (!v.aliases !== !alias) useAliases(v.aliases) }, profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
+const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => { writeJson(SETTINGS, v); if (!v.aliases !== !aliasing()) useAliases(v.aliases) }, profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
-  checkUpdate, update: () => updateCall ??= update().catch(e => note(`Update: ${e.message}`, true)).finally(() => updateCall = null), instruments, exportExtension, installGdl, export: exportItems,
+  checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
   tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))

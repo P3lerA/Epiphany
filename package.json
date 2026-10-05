@@ -30,6 +30,8 @@
       "profiles.js",
       "tagger.js",
       "thumbnail.js",
+      "danbooru.js",
+      "update.js",
       "share.js",
       "gdl.js",
       "sites.js",
