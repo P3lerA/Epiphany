@@ -91,7 +91,7 @@ const cut = (e, not) => {
     const was = Q().names, n = asQ(v)
     const to = add ? (was.includes(n) ? was.filter(x => x !== n) : [...was, n]) : was.length === 1 && was[0] === n && !Q().text.length ? [] : [n]
     scope.value = ''; search.value = [...to, ...add ? Q().text : []].map(x => x.replace(/_/g, ' ')).join(', ')
-    return search.dispatchEvent(new Event('input'))
+    return applyQ()
   }
   if (f === 'rating' && safe !== null) return // safe mode: Rating locked
   if (f === 'site') not = false // a source has no "everything but" on the grid either

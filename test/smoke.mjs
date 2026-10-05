@@ -77,7 +77,9 @@ step('right-click: everything but a choice; on the filter button, all off', asyn
   await rc(`$('.filter-toggle')`); await until(`shown(page()).length === 4 && !F.tagged`, 'all off')
 })
 step('search filters, a tag gets its wiki in the title', async () => {
-  await js(`search.value = 'solo'; search.dispatchEvent(new Event('input'))`)
+  await js(`search.value = 'solo'; search.dispatchEvent(new Event('input'))`); await sleep(400)
+  assert.equal(await js('return shown(page()).length'), 4) // typed: nothing yet
+  await js(`search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))`)
   await until('shown(page()).length === 2', 'search result')
   await until(`h1.title === 'Only one character.'`, 'wiki in the title')
   await js(`search.value = '1girl, vocal'; localQ()`); await until('shown(page()).length === 2', 'a name and a piece of one')

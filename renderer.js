@@ -211,7 +211,7 @@ const drawSites = () => {
   sel.innerHTML = '<option value="">All sources</option>' + [...new Set(items.map(i => i.site).filter(Boolean).map(source))].sort((a, b) => (a === 'other') - (b === 'other') || a.localeCompare(b))
     .map(x => `<option ${x === F.site ? 'selected' : ''}>${x}</option>`).join('') + (F.site?.includes(',') ? `<option value="${F.site}" selected>${F.site.replace(/,/g, ', ')}</option>` : '') // several, from Statistics
 }
-// Search box: local scope filters the grid as you type; a site scope opens that site's search in the browser on Enter.
+// Search box: on Enter, local scope filters the grid; a site scope opens that site's search in the browser.
 const search = $('.search input'), scope = $('.search select')
 const localQ = () => { F.q = scope.value ? '' : search.value.trim().toLowerCase().replace(/ /g, '_'); applyFilters(); explain() }
 // What the search asks: comma-separated pieces, all of them. A piece that is a name in the library is that whole name; any other
@@ -223,9 +223,11 @@ const Q = () => {
   const known = new Set(items.flatMap(namesOf)), pieces = F.q.split(',').map(p => p.replace(/^_+|_+$/g, '')).filter(Boolean)
   return asks = { q: F.q, names: pieces.filter(p => known.has(p)), text: pieces.filter(p => !known.has(p)) }
 }
-let typing
-search.oninput = scope.onchange = () => { clearTimeout(typing); typing = setTimeout(() => swap(() => { localQ(); backToPiles() }), 120) } // filter changes move the pictures, see swap; one move once typing pauses, not one per key
-$('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(new Event('input')); search.focus() }
+// What is typed applies on Enter (as a site's search goes), or as a scope is chosen, the box cleared or a name picked: half a word
+// filters nothing. Filter changes move the pictures, see swap.
+const applyQ = () => swap(() => { localQ(); backToPiles() })
+scope.onchange = applyQ
+$('.search .clear-q').onclick = () => { search.value = ''; applyQ(); search.focus() }
 // local, the search engine (Settings > General), the other sites in use.
 const drawScope = () => api.searchSites().then(names => {
   scope.innerHTML = '<option value="">local</option>' + [s.engine, ...names.filter(n => s.sites.includes(n) && n !== s.engine)].map(n => `<option>${n}</option>`).join('')
@@ -237,7 +239,7 @@ let saying = 0, sayHi = -1, sayAfter
 const sayTake = tag => {
   search.value = [...search.value.split(',').slice(0, -1).map(t => t.trim()), tag.replace(/_/g, ' ')].join(', ')
   saidUI.hidePopover()
-  search.dispatchEvent(new Event('input'))
+  applyQ()
 }
 const askSaid = () => {
   const word = search.value.split(',').at(-1).trim(), n = ++saying
@@ -269,7 +271,7 @@ search.onkeydown = e => {
     ;[...li].forEach((x, i) => x.classList.toggle('on', i === sayHi))
   } else if (e.key === 'Enter' && sayHi >= 0) { e.preventDefault(); sayTake(li[sayHi].dataset.tag) }
   else if (e.key === 'Escape' && li.length) { e.stopPropagation(); saidUI.hidePopover() }
-  else if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {})
+  else if (e.key === 'Enter') scope.value ? search.value.trim() && api.search(scope.value, search.value.trim()).catch(() => {}) : applyQ()
 }
 const drawInputs = () => filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 drawInputs()
