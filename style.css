@@ -255,42 +255,6 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem }
 #sites .creds { flex-basis: 100%; display: flex; gap: .5rem; padding-bottom: .25rem; transition: opacity .15s; @starting-style { opacity: 0 } }
 #sites .creds input { flex: 1; min-width: 0 }
 #instruments .status { margin-left: auto; color: var(--muted); font-size: .85rem }
-/* Statistics (settings.js): a sheet of bar lists, as wide as the window lets it. One series each, so one ink: the accent. Each row
-   is its bar's track, the name over a wash as long as its count (the longest full), so a long name keeps the whole width. */
-#settings:has(#statistics:target) { grid-template-columns: 13rem minmax(0, 1fr) }
-#statistics > p { margin: -.5rem 0 1rem; color: var(--muted) }
-/* Where the pictures come from down the left, the short lists to cut by, staying in view; what is in them at the right, two by two.
-   One column when narrow. */
-.charts { display: grid; grid-template-columns: minmax(14rem, 1fr) 3fr; gap: 1rem; align-items: start; padding-bottom: 3.5rem } /* clear of the fab, as the lobby's tally */
-.charts > div { display: grid; gap: 1rem; align-items: start }
-.charts > .from { position: sticky; top: 3.25rem } /* under the sticky h2 (2rem line, .25rem padding) and its 1rem margin */
-.charts > .in { grid-template-columns: repeat(2, minmax(0, 1fr)) } /* pairs of about the same length: the dataset's shape, then the names */
-@media (width < 60rem) { .charts { grid-template-columns: 1fr } .charts > .from { position: static } }
-.chart { padding: .75rem 1rem 1rem; border: 1px solid var(--rule); border-radius: 8px }
-.chart h3 { font-size: .85rem; font-weight: 500; color: var(--muted); margin-bottom: .4rem }
-.chart h3 small { font-size: inherit; font-weight: 400 } /* a note after the title: Tags per picture's average */
-.chart > div { position: relative; display: flex; justify-content: space-between; gap: 1rem; padding: .15rem .5rem; border-radius: 4px; transition: background .15s }
-.chart > div + div { margin-top: 2px }
-.chart > div:hover { background: var(--hover) }
-.chart [data-f] { cursor: pointer }
-.chart :is(.on, .not) span { color: var(--accent) } /* the filter this bar set */
-.chart .not span { text-decoration: line-through } /* right-click: everything but it */
-.chart i { position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 100%); border-radius: 4px; background: color-mix(in srgb, var(--accent) 24%, transparent); transition: width .3s cubic-bezier(.2, 0, 0, 1); @starting-style { width: 0 } } /* grows from the left when drawn */
-.chart i.all { background: color-mix(in srgb, var(--accent) 8%, transparent) } /* the whole library, behind what is on show */
-.chart span, .chart b { position: relative }
-.chart span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis }
-.chart b { flex: none; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums }
-/* Saved per day (or hour), across under both columns: the bars' two washes, a line on what is on show. */
-.charts > .saved { grid-column: 1 / -1 }
-.saved h3 { display: flex; align-items: center; gap: .3rem }
-.saved .seg { margin-left: auto } /* Month, Week, Day */
-.saved svg { display: block; width: 100%; height: 7rem }
-.saved path { fill: color-mix(in srgb, var(--accent) 24%, transparent) }
-.saved path.all { fill: color-mix(in srgb, var(--accent) 8%, transparent) }
-.saved path.line { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke }
-.saved rect { fill: transparent }
-.saved rect:hover { fill: var(--hover) }
-.saved p { display: flex; justify-content: space-between; margin-top: .25rem; font-size: .8rem; color: var(--muted) }
 
 /* One button, one field, one switch, everywhere. */
 :is(#sites .creds, #instruments) button, .meta .use { padding: .4rem .9rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--field); transition: background .15s }

@@ -128,6 +128,15 @@ step('settings pages draw, Instruments lists the tools', async () => {
   await js(`location.hash = '#instruments'`); await until(`$('#instruments ul').children.length === 5`, 'instruments', 20000)
   await js(`location.hash = '#lobby'`)
 })
+step('an instrument: statistics installed, its page drawn from the library, removed', async () => {
+  await js(`location.hash = '#instruments'`); await until(`$('#instruments [data-act=statistics]')`, 'its row')
+  await js(`$('#instruments [data-act=statistics]').click()`); await until(`s.statistics && $('#instruments [data-act=statistics]')?.textContent === 'Remove'`, 'installed')
+  await js(`location.hash = '#statistics'`); await until(`$('#statistics .chart')`, 'charts')
+  assert.match(await js(`return $('#statistics p').textContent`), /4 pictures of 4/)
+  await js(`location.hash = '#instruments'`); await until(`$('#instruments [data-act=statistics]')`, 'its row')
+  await js(`$('#instruments [data-act=statistics]').click()`); await until(`!s.statistics && $('#settings aside a[href="#statistics"]').hidden`, 'removed')
+  await js(`location.hash = '#lobby'`)
+})
 step('local server: only the extension, only web URLs', async () => {
   const post = (body, headers = {}) => fetch(`http://127.0.0.1:${server}/`, { method: 'POST', body: JSON.stringify(body), headers })
   assert.equal((await post({ page: 'https://example.com' })).status, 403)

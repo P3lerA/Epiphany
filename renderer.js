@@ -244,7 +244,7 @@ filters.onchange = e => swap(() => { F[e.target.name] = e.target.type === 'check
 const render = (root, list) => { root.innerHTML = ''; list.forEach(i => add(root, i)); if (root.classList.contains('piling')) drawPiles(root); changed() }
 // Everything drawn from the library or from what is on show, redrawn after any change to either: the pending pill, the source list,
 // the empty face, the foot. New ones go here. (The piles follow through applyFilters in a swap, or refreshPiles after a pull.)
-const changed = () => { if (!items) return; drawPending(); drawSites(); face(); tally(); buildAhead(); drawStats() }
+const changed = () => { if (!items) return; drawPending(); drawSites(); face(); tally(); buildAhead(); dispatchEvent(new Event('library')) } // library: the instruments listen
 // The Lobby's foot (style.css): what is on show, every filter applied. The grid: its pictures and the distinct tags they carry;
 // piles: the pictures in them (one with no tag is in none) and the piles.
 const plural = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`

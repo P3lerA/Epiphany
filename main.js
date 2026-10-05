@@ -587,6 +587,11 @@ const instruments = async () => {
   }
 }
 
+// The instruments' files for the window (instruments/README.md): each folder's page.js and page.css, as the page links them.
+const INSTR = path.join(__dirname, 'instruments')
+const instrumentFiles = () => fs.readdirSync(INSTR, { withFileTypes: true }).filter(d => d.isDirectory())
+  .flatMap(d => ['page.css', 'page.js'].filter(f => fs.existsSync(path.join(INSTR, d.name, f))).map(f => `instruments/${d.name}/${f}`))
+
 const exportExtension = async () => {
   const { filePaths: [d] } = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
   if (!d) return
@@ -603,7 +608,7 @@ const installGdl = async () => {
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => { writeJson(SETTINGS, v); if (!v.aliases !== !aliasing()) useAliases(v.aliases) }, profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
   lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
-  checkUpdate, update, instruments, exportExtension, installGdl, export: exportItems,
+  checkUpdate, update, instruments, instrumentFiles, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
   tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))

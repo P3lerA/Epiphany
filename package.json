@@ -38,6 +38,7 @@
       "quotes.js",
       "theme.js",
       "glass.js",
+      "instruments/**",
       "index.html",
       "style.css",
       "package.json",
