@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const crypto = require('crypto')
+const { execFile } = require('child_process')
 const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
 const Tagger = require('./tagger')
 const share = require('./share')
@@ -15,7 +16,8 @@ const PORT = Number(process.env.EPIPHANY_PORT) || 7676 // 7777 collides with AIR
 const HOME = process.env.EPIPHANY_HOME || (app.isPackaged ? app.getPath('userData') : __dirname)
 const SETTINGS = path.join(HOME, 'settings.json')
 const WIN = path.join(HOME, 'window.json') // last window bounds; separate file so renderer settings saves never clobber it
-const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru', statistics: false, aliases: false }
+const DEFAULTS = { project: 'default', quote: 'advice', lookup: true, sites: ['danbooru', 'gelbooru'], profile: 'anima', overrides: {}, accept: 90, autotag: true, engine: 'danbooru', statistics: false, aliases: false,
+  folders: {}, hideInLobby: [] } // folders: projects opened from elsewhere, name -> path; hideInLobby: projects the Lobby leaves out
 let win
 const MAC = process.platform === 'darwin'
 // From source the icon's blue square is red (red and blue swapped): a dev instance stands apart in the Dock or taskbar.
@@ -60,16 +62,28 @@ const gallery = require('./gdl')(HOME), { gdl, kill, oauth } = gallery
 const { UA, pullTags, tagWiki, useAliases, renamed, aliasing, artistOf, tagsFor } = require('./danbooru')({ home: HOME, readJson, settings })
 const GDL = gallery.CONFIG // site credentials live here, where gallery-dl reads them
 const PROJ = path.join(HOME, 'project')
+// 0.1.2 only, gone in the next: a library in the layout before (project/<name>/dataset) is moved over by Settings > General's button
+// (migrate.js); until then its projects show empty, and a note at start says where the button is.
+const oldLayout = () => fs.existsSync(PROJ) && fs.readdirSync(PROJ).some(p => fs.existsSync(path.join(PROJ, p, 'dataset')))
+const migrate = () => { require('./migrate')(PROJ); note('Library moved') }
 
+// A project is a folder, its pictures at its root; what Epiphany keeps about them (sidecars, captions, meta.jsonl, thumbs) in its
+// .epiphany, hidden on Windows as the dot hides it elsewhere. One opened from elsewhere (Projects > Open folder) is in settings.folders.
+const folder = p => settings().folders[p] ?? path.join(PROJ, p)
+const inner = d => path.join(d, '.epiphany')
 const dir = (p = settings().project) => {
-  const d = path.join(PROJ, p, 'dataset')
-  fs.mkdirSync(d, { recursive: true })
+  const d = folder(p), e = inner(d)
+  if (!fs.existsSync(e)) { fs.mkdirSync(e, { recursive: true }); if (process.platform === 'win32') execFile('attrib', ['+h', e], () => {}) }
   return d
 }
+// A picture's sidecar (x.jpg.json) and caption (x.txt), in its folder's .epiphany; a project's meta.jsonl.
+const json = f => path.join(inner(path.dirname(f)), path.basename(f) + '.json')
+const txt = f => path.join(inner(path.dirname(f)), path.basename(f).replace(/\.[^.]+$/, '.txt'))
+const jsonl = p => path.join(inner(dir(p)), 'meta.jsonl')
 
 const projects = () => {
   fs.mkdirSync(PROJ, { recursive: true })
-  return fs.readdirSync(PROJ, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name)
+  return [...new Set([...fs.readdirSync(PROJ, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name), ...Object.keys(settings().folders)])]
 }
 
 const words = v => (Array.isArray(v) ? v : String(v ?? '').split(' ')).filter(Boolean) // booru tag strings are space-separated
@@ -100,18 +114,20 @@ const info = (item, prof = profile()) => {
   const tagged = j.booru ? 'booru' : j.candidates ? 'unsure' : BOORU.has(j.category) ? 'booru' : j.tagger ? 'tagger' : 'none'
   // Each candidate with the tags only it has, so look-alike variants can be told apart.
   const sets = j.candidates?.map(c => new Set(words(c.post.tag_string_general)))
-  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: c.thumb && fs.existsSync(c.thumb) ? pathToFileURL(c.thumb).href : c.post.preview_file_url ?? c.post.preview_url, head: caption(prof, meta(c.post)), tags: tagLine(meta(c.post).tags), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
+  // A candidate's thumb by its name in the picture's own thumbs: the path a sidecar keeps goes stale as a library moves (or migrates).
+  const cand = c => c.thumb && path.join(inner(path.dirname(item.file)), 'thumbs', path.basename(c.thumb))
+  const candidates = j.candidates?.map((c, i) => ({ score: c.score, url: cand(c) && fs.existsSync(cand(c)) ? pathToFileURL(cand(c)).href : c.post.preview_file_url ?? c.post.preview_url, head: caption(prof, meta(c.post)), tags: tagLine(meta(c.post).tags), post: postUrl(c.post), plus: [...sets[i]].filter(t => !sets.some((o, k) => k !== i && o.has(t))) }))
   // The post the caption's tags came from: the matched one for lookups, the pulled one for booru pulls (a tag search's page URL isn't it).
   const p = j.booru ?? (BOORU.has(j.category) ? j : null), from = p && { site: p.category, url: postUrl(p) }
   const m = facts(j)
   return { site: j.category === 'exhentai' ? 'ehentai' : j.category, ai: tags.some(t => /^ai[-_]generated$/.test(t)), rating: rating(b), artist: m.artist, character: m.character, copyright: m.copyright, tags: m.tags, quality: quality(prof, m), tagged, candidates, from }
 }
 
-// Grid thumbnails live beside the dataset, never inside it: the square the grid shows (the middle), 400 px, cached as JPEG. A
-// long picture's short side is 400 too (it came back thin, blurred in the square; on macOS squashed), no other is any bigger.
+// Grid thumbnails live in the project's .epiphany, never among its pictures: the square the grid shows (the middle), 400 px, cached
+// as JPEG. A long picture's short side is 400 too (it came back thin, blurred in the square; on macOS squashed), no other is any bigger.
 // One made before (name.jpg, not name.sq.jpg) is shown until its square is made, one at a time behind the load, then removed.
-const thumbs = p => { const d = path.join(PROJ, p, 'thumbs'); fs.mkdirSync(d, { recursive: true }); return d }
-const thumbPath = item => path.join(thumbs(item.project), path.basename(item.file) + '.sq.jpg')
+const thumbs = d => { const t = path.join(inner(d), 'thumbs'); fs.mkdirSync(t, { recursive: true }); return t } // d: the project's folder
+const thumbPath = item => path.join(thumbs(path.dirname(item.file)), path.basename(item.file) + '.sq.jpg')
 const square = async (file, t) => {
   const img = await thumbnail(file, { short: 400 }), { width: w, height: h } = img.getSize(), side = Math.min(w, h)
   fs.writeFileSync(t, img.crop({ x: (w - side) >> 1, y: (h - side) >> 1, width: side, height: side }).toJPEG(82))
@@ -128,11 +144,11 @@ const thumb = async item => {
 
 // A picture's sidecar; a right-click save has none until a lookup writes one, and one cut off mid-write reads as none (the
 // library still loads; the next lookup writes it afresh).
-const sidecar = (item, none = { category: new URL(item.page).host, page: item.page }) => { try { return readJson(item.file + '.json', none) } catch { return none } }
+const sidecar = (item, none = { category: new URL(item.page).host, page: item.page }) => { try { return readJson(json(item.file), none) } catch { return none } }
 const enrich = async (item, prof) => { const e = withUrl({ ...item, ...info(item, prof) }); e.thumb = await thumb(e); return e }
 
 const record = (item, p = settings().project) => { // p: a pull's own project, though another be opened before its files land
-  fs.appendFileSync(path.join(dir(p), 'meta.jsonl'), JSON.stringify(item) + '\n')
+  fs.appendFileSync(jsonl(p), JSON.stringify(item) + '\n')
   item = { ...item, project: p }
   enrich(item).then(e => send('saved', e))
   return item
@@ -269,9 +285,8 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
       j.candidates = near
       // Their preview thumbnails, fetched here (Chromium's stack, proven against the CDN) and kept beside our own thumbs; one that
       // doesn't save shows from its site instead (info).
-      const p = path.basename(path.dirname(path.dirname(file)))
       for (const c of near) {
-        const t = path.join(thumbs(p), `cand-${c.post.category}-${c.post.id}.jpg`) // ids collide across sites
+        const t = path.join(thumbs(path.dirname(file)), `cand-${c.post.category}-${c.post.id}.jpg`) // ids collide across sites
         if (!fs.existsSync(t)) await net.fetch(c.post.preview_file_url ?? c.post.preview_url, { signal: AbortSignal.timeout(15000) }).then(async r => r.ok && fs.writeFileSync(t, Buffer.from(await r.arrayBuffer()))).catch(() => {})
         if (fs.existsSync(t)) c.thumb = t
       }
@@ -315,7 +330,7 @@ const importShared = async s => {
   const got = s.src ? await save({ src: s.src, page: s.page }) : await pull({ page: s.page, range: s.range }), list = [got].flat()
   await Promise.all([got.looked, ...list.map(i => i.looked)])
   const item = list.find(i => path.basename(i.file) === s.name) ?? list[0], j = sidecar(item)
-  if (Object.keys(s.edit).length) { j.edit = { ...j.edit, ...s.edit }; writeJson(item.file + '.json', j) }
+  if (Object.keys(s.edit).length) { j.edit = { ...j.edit, ...s.edit }; writeJson(json(item.file), j) }
   if (s.tags !== undefined) fs.writeFileSync(txt(item.file), s.tags)
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
@@ -343,8 +358,9 @@ async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: w
   const d = dir(), s = settings(), gone = ethereal()
   const before = new Set(fs.readdirSync(d))
   // output.stdout: file names in UTF-8 (Windows' code page would garble a Japanese one); output.mode, skip: the lines below as
-  // gallery-dl prints them by default, whatever the user's own config of it says; post: the + line below.
-  const g = gdl(['--write-metadata', '-o', 'tags=true', '-o', 'gp=stop', '-o', 'output.stdout=utf-8', '-o', 'output.mode=pipe', '-o', 'skip=true',
+  // gallery-dl prints them by default, whatever the user's own config of it says; post: the + line below; directory: the sidecars
+  // into .epiphany.
+  const g = gdl(['--write-metadata', '-O', 'directory=.epiphany', '-o', 'tags=true', '-o', 'gp=stop', '-o', 'output.stdout=utf-8', '-o', 'output.mode=pipe', '-o', 'skip=true',
     '--Print', 'post:+{count|filecount|page_count}',
     '--range', r, '-D', d, '--', page])
   stop.child = g.child
@@ -354,7 +370,7 @@ async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: w
   const [a, b] = r.split('-'), most = b === undefined ? 1 : b === '' ? Infinity : b - a + 1
   const items = []
   const land = file => {
-    const j = readJson(file + '.json', {})
+    const j = readJson(json(file), {})
     const item = gone ? { file } : record({ file, src: page, page, time: new Date().toISOString() }, s.project)
     items.push(item)
     if (gone) return
@@ -372,7 +388,7 @@ async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: w
   })
   const failed = await g.then(() => broke, e => e) // what arrived before a failure or a stop is kept all the same
   for (const f of fs.readdirSync(d)) if (!before.has(f) && f.endsWith('.part')) fs.rmSync(path.join(d, f), { force: true })
-  if (gone) for (const i of items) for (const f of [i.file, i.file + '.json']) fs.rmSync(f, { force: true })
+  if (gone) for (const i of items) for (const f of [i.file, json(i.file)]) fs.rmSync(f, { force: true })
   if (looking?.stopped) looking = null // lookups stopped by their ✕ stay so to the end of the pull (lookSoon)
   items.looked = lookups // a shared picture's own fields go on once these are done
   if (stop.asked) throw Object.assign(new Error(items.length ? `Stopped, ${items.length} kept` : 'Stopped'), { quiet: true })
@@ -382,13 +398,36 @@ async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: w
   return items
 }
 
+// Each project's meta.jsonl, the lines whose picture is there. A picture at the folder's root no line names (put there by hand, or a
+// folder opened as a project) gets one, and shows pending. No line is dropped: a picture that comes back has its record again. An
+// opened folder that isn't there (a drive not plugged in) is left out, its .epiphany untouched.
 const list = () => Promise.all(projects().flatMap(p => {
-  const f = path.join(dir(p), 'meta.jsonl'), prof = profile()
-  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map(l => enrich({ ...JSON.parse(l), project: p }, prof)) : []
+  if (!fs.existsSync(folder(p))) return []
+  const d = dir(p), f = jsonl(p), prof = profile()
+  const lines = fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [], named = new Set(lines.map(l => l.file))
+  for (const file of fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isFile() && PICTURE.test(e.name)).map(e => path.join(d, e.name))) if (!named.has(file)) {
+    const l = { file, src: pathToFileURL(file).href, page: pathToFileURL(file).href, time: fs.statSync(file).mtime.toISOString() }
+    fs.appendFileSync(f, JSON.stringify(l) + '\n')
+    lines.push(l)
+  }
+  return lines.filter(l => fs.existsSync(l.file)).map(l => enrich({ ...l, project: p }, prof))
 }))
 
 const newProject = name => { if (/^[\w-]+$/.test(name)) dir(name) }
-const txt = f => f.replace(/\.[^.]+$/, '.txt')
+// Projects > Open folder: any folder as a project, its pictures where they are, named after it (Pictures 2 where Pictures is taken).
+// One that is a project already is only opened.
+const openFolder = async d => {
+  d ??= (await dialog.showOpenDialog(win, { properties: ['openDirectory'] })).filePaths[0]
+  if (!d) return null
+  d = path.resolve(d)
+  const s = settings(), ps = projects(), known = path.dirname(d) === PROJ ? path.basename(d) : ps.find(p => s.folders[p] === d)
+  if (known) return known
+  let name = path.basename(d)
+  for (let k = 2; ps.includes(name); k++) name = `${path.basename(d)} ${k}`
+  writeJson(SETTINGS, { ...s, folders: { ...s.folders, [name]: d } })
+  dir(name)
+  return name
+}
 // The .txt, its old names read as the current ones while aliases are on (below), so its tags agree with the names above them.
 const tagsOf = file => {
   const t = fs.existsSync(txt(file)) ? fs.readFileSync(txt(file), 'utf8') : ''
@@ -406,8 +445,8 @@ const capybara = () => { const l = readJson(path.join(__dirname, 'capybara_s_pla
 
 // Right-click on a picture. Delete goes to the Recycle Bin, so no confirm.
 const remove = async item => {
-  for (const f of [item.file, item.file + '.json', txt(item.file)]) if (fs.existsSync(f)) await shell.trashItem(f)
-  const m = path.join(dir(item.project), 'meta.jsonl')
+  for (const f of [item.file, json(item.file), txt(item.file)]) if (fs.existsSync(f)) await shell.trashItem(f)
+  const m = jsonl(item.project)
   fs.writeFileSync(m, fs.readFileSync(m, 'utf8').split('\n').filter(l => l && JSON.parse(l).file !== item.file).join('\n') + '\n')
   fs.rmSync(thumbPath(item), { force: true })
   send('removed', item.file)
@@ -436,7 +475,7 @@ const categorize = async p => {
 const adopt = async (item, j, hit) => {
   j.booru = await categorize(hit)
   delete j.candidates
-  writeJson(item.file + '.json', j)
+  writeJson(json(item.file), j)
   recaption(item, j)
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
@@ -451,7 +490,7 @@ const resolve = async (item, j, say) => {
   const at = ACCOUNT[j.category]?.(j), who = at && await artistOf(at)
   if (who) j.account = { url: at, artist: who }
   if (!j.candidates && !j.booru && !j.tagger && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
-  else if (j.candidates || who) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
+  else if (j.candidates || who) { writeJson(json(item.file), j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
   return hit
 }
 // The account a picture was posted from, as a page of it danbooru's artist entries list (gallery-dl's fields per site).
@@ -475,7 +514,7 @@ const tagIt = async (item, j = sidecar(item)) => {
   j.tagger = await tagger.guess(item.file)
   delete j.booru // a match the tagger replaces: likely a look-alike variant; Look up finds it again
   delete j.candidates
-  writeJson(item.file + '.json', j)
+  writeJson(json(item.file), j)
   recaption(item, j)
   enrich(item).then(e => send('saved', { ...e, replace: true }))
 }
@@ -503,18 +542,23 @@ const installTagger = () => installing ??= (async () => {
   catch (e) { t.end(); note(`Tagger: ${e.message}`, true) }
   finally { installing = null }
 })()
-// Projects: right-click. Delete goes to the Recycle Bin; the active project falls back to the first one left.
+// Projects: right-click. Delete goes to the Recycle Bin; an opened folder is only let go of, it and its .epiphany stay where they are.
+// The active project falls back to the first one left. Show in Lobby: the page keeps hideInLobby (renderer.js lobbyToggle).
 const removeProject = async name => {
-  await shell.trashItem(path.join(PROJ, name))
+  if (name === 'default') return
   const s = settings()
-  if (s.project === name) { s.project = projects()[0] ?? 'default'; writeJson(SETTINGS, s); dir(s.project) }
+  if (s.folders[name]) delete s.folders[name]; else await shell.trashItem(path.join(PROJ, name))
+  s.hideInLobby = s.hideInLobby.filter(p => p !== name)
+  if (s.project === name) s.project = projects().find(p => p !== name) ?? 'default'
+  writeJson(SETTINGS, s); dir(s.project)
   send('projectRemoved', name)
 }
-const projectMenu = name => void Menu.buildFromTemplate([
-  { label: MAC ? 'Open in Finder' : 'Open in Explorer', click: () => shell.openPath(path.join(PROJ, name)) },
+const projectMenu = name => { const s = settings(); return void Menu.buildFromTemplate([
+  { label: 'Show in Lobby', type: 'checkbox', checked: !s.hideInLobby.includes(name), click: () => send('lobbyToggle', name) },
+  { label: MAC ? 'Open in Finder' : 'Open in Explorer', click: () => shell.openPath(folder(name)) },
   { type: 'separator' },
-  { label: 'Delete project', click: () => removeProject(name) }
-]).popup({ window: win })
+  s.folders[name] ? { label: 'Remove from Epiphany', click: () => removeProject(name) } : { label: 'Delete project', enabled: name !== 'default', click: () => removeProject(name) }
+]).popup({ window: win }) }
 // Export: pictures and their captions into a folder of the user's choosing, which is all a trainer reads. Same names; a clash gets the project as prefix.
 // A caption: the profile's head from the sidecar, then the .txt's tags.
 const exportItems = async items => {
@@ -527,7 +571,7 @@ const exportItems = async items => {
     if (fs.existsSync(to)) to = path.join(d, it.project + '_' + path.basename(it.file))
     fs.copyFileSync(it.file, to)
     const text = exported(name, caption(prof, facts(sidecar(it)), tagsOf(it.file)))
-    if (text) { fs.writeFileSync(txt(to), text); captions++ }
+    if (text) { fs.writeFileSync(to.replace(/\.[^.]+$/, '.txt'), text); captions++ } // beside the picture, as a trainer reads it
   }
   note(`${items.length} pictures, ${captions} captions → ${path.basename(d)}`)
   shell.showItemInFolder(d)
@@ -555,7 +599,7 @@ const setField = (items, field, text) => {
   for (const item of items) {
     const j = sidecar(item)
     ;(j.edit ??= {})[field] = v
-    writeJson(item.file + '.json', j)
+    writeJson(json(item.file), j)
     enrich(item).then(e => send('saved', { ...e, replace: true }))
   }
 }
@@ -640,7 +684,7 @@ const installGdl = async () => {
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => { writeJson(SETTINGS, v); if (!v.aliases !== !aliasing()) useAliases(v.aliases) }, profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
-  capybara, lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, importFiles, share: shareItem,
+  capybara, oldLayout, migrate, lookup: relookup, lookupAll, pick, projectMenu, removeProject, openFolder, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, importFiles, share: shareItem,
   checkUpdate, update, instruments, instrumentList, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
   tagWiki, tagsFor, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
@@ -662,7 +706,7 @@ app.on('before-quit', e => {
 let tray, listening // the extension's port: true once it listens, false when taken (Instruments says which)
 
 app.whenReady().then(() => {
-  dir()
+  if (!settings().folders[settings().project]) dir() // an opened folder may be on a drive not plugged in, and is left be
   app.dock?.setIcon(icon('icon-mac.png')) // macOS: from source the Dock would show Electron's
   if (!MAC) { // macOS: the Dock brings the window back and quits
     tray = new Tray(icon('icon.png').resize({ width: 32 }))
@@ -694,6 +738,7 @@ app.whenReady().then(() => {
     win.webContents.isLoading() ? win.webContents.once('did-finish-load', say) : say()
   }).listen(PORT, '127.0.0.1')
   createWindow()
+  if (oldLayout()) win.webContents.once('did-finish-load', () => note('Old library: move it in Settings'))
   pullTags()
   useAliases(settings().aliases)
   app.on('activate', () => { win.show(); win.focus() }) // macOS: the Dock icon brings back the parked window

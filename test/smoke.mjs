@@ -16,20 +16,24 @@ const packed = args.includes('dist'), models = args.find(a => a !== 'dist')
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 // The library: two danbooru pictures sharing tags (so piles form), a right-click save without a sidecar, one whose sidecar was cut off.
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'epiphany-smoke-')), data = path.join(home, 'project', 'default', 'dataset')
-fs.mkdirSync(data, { recursive: true })
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'epiphany-smoke-')), data = path.join(home, 'project', 'default'), own = path.join(data, '.epiphany')
+fs.mkdirSync(own, { recursive: true })
 const booru = { category: 'danbooru', id: 1, tag_string_general: '1girl solo', tag_string_character: 'hatsune_miku', tag_string_copyright: 'vocaloid', tag_string_artist: 'someone', rating: 'g' }
 const pics = { 'booru1.webp': booru, 'booru2.webp': booru, 'saved.webp': null, 'broken.webp': '{' }
 for (const [f, j] of Object.entries(pics)) {
   fs.copyFileSync(path.join(import.meta.dirname, 'half.webp'), path.join(data, f))
-  if (j) fs.writeFileSync(path.join(data, f + '.json'), typeof j === 'string' ? j : JSON.stringify(j))
-  if (j?.id) fs.writeFileSync(path.join(data, f.replace('.webp', '.txt')), '1girl, solo')
-  fs.appendFileSync(path.join(data, 'meta.jsonl'), JSON.stringify({ file: path.join(data, f), src: 'https://example.com/a.webp', page: 'https://example.com/post', time: new Date().toISOString() }) + '\n')
+  if (j) fs.writeFileSync(path.join(own, f + '.json'), typeof j === 'string' ? j : JSON.stringify(j))
+  if (j?.id) fs.writeFileSync(path.join(own, f.replace('.webp', '.txt')), '1girl, solo')
+  fs.appendFileSync(path.join(own, 'meta.jsonl'), JSON.stringify({ file: path.join(data, f), src: 'https://example.com/a.webp', page: 'https://example.com/post', time: new Date().toISOString() }) + '\n')
 }
 fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ lookup: false, autotag: false, quote: 'none', sites: [], aliases: true }))
 fs.mkdirSync(path.join(home, 'cache'))
 fs.writeFileSync(path.join(home, 'cache', 'tag-aliases.json'), JSON.stringify({ tags: { smile: 'smiling' }, artist: {}, character: {}, copyright: {} })) // fresh: no pull
 fs.writeFileSync(path.join(home, 'cache', 'danbooru-tags.json'), JSON.stringify({ '': new Date().toISOString(), solo: ['Only one character.', 0] })) // '': pulled just now
+// A project still in the layout before 0.1.2 (project/<name>/dataset): empty until Settings > General's Move.
+const old = path.join(home, 'project', 'old', 'dataset')
+fs.mkdirSync(old, { recursive: true }); fs.copyFileSync(path.join(import.meta.dirname, 'half.webp'), path.join(old, 'old.webp'))
+fs.writeFileSync(path.join(old, 'meta.jsonl'), JSON.stringify({ file: path.join(old, 'old.webp'), src: 'https://example.com/old', page: 'https://example.com/old', time: new Date().toISOString() }) + '\n')
 if (process.env.EPIPHANY_SMOKE_AT) { const [x, y] = process.env.EPIPHANY_SMOKE_AT.split(',').map(Number); fs.writeFileSync(path.join(home, 'window.json'), JSON.stringify({ bounds: { x, y, width: 1200, height: 800 } })) }
 if (models) fs.symlinkSync(path.resolve(models), path.join(home, 'models'), 'junction') // rmSync below unlinks it, the model stays
 
@@ -116,7 +120,7 @@ step('after a pick, the next pending one: the other, from either', async () => {
 })
 step('tags written by hand stay in the .txt, the sidecar untouched', async () => {
   await js(`await api.setCaption(items.find(i => i.file.endsWith('booru1.webp')), 'solo, smile')`)
-  assert.equal(fs.readFileSync(path.join(data, 'booru1.txt'), 'utf8'), 'solo, smile')
+  assert.equal(fs.readFileSync(path.join(own, 'booru1.txt'), 'utf8'), 'solo, smile')
   assert.equal(await js('return pendingUI.textContent'), '2 pending')
 })
 step('a field written by hand for several: the page and the heads follow, the tags stay', async () => {
@@ -134,7 +138,7 @@ step("Settings' button opens it, and closes it back to the page under it", async
   await js(`dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`); await until(`location.hash === '#projects'`, 'Esc closes it')
 })
 step('settings pages draw, Instruments lists the tools', async () => {
-  for (const h of ['general', 'profile', 'sites']) { await js(`location.hash = '#${h}'`); await until(`$('#${h} ul').children.length > 1`, h) }
+  for (const h of ['general', 'profile', 'sites']) { await js(`location.hash = '#${h}'`); await until(`$('#${h} ul:not(.move)').children.length > 1`, h) }
   await js(`location.hash = '#instruments'`); await until(`$('#instruments ul').children.length === 5`, 'instruments', 20000)
   await js(`location.hash = '#lobby'`)
 })
@@ -162,6 +166,41 @@ step('local server: only the extension, only web URLs', async () => {
 if (models) step('tagger tags a WebP', async () => {
   await js(`await api.tag([items.find(i => i.file.endsWith('saved.webp'))])`)
   await until(`items.find(i => i.file.endsWith('saved.webp')).tagged === 'tagger'`, 'tagged')
+})
+// A folder elsewhere, opened as a project the way Projects' Open folder does it; then out of the Lobby and back; then let go of.
+let outside, opened
+step('a folder opened as a project: its pictures in, .epiphany made, shown in the Lobby', async () => {
+  outside = fs.mkdtempSync(path.join(os.tmpdir(), 'epiphany-outside-'))
+  fs.copyFileSync(path.join(import.meta.dirname, 'half.webp'), path.join(outside, 'outside.webp'))
+  const lobby = await js(`return shown($('#lobby')).length`), d = JSON.stringify(outside)
+  opened = await js(`return api.openFolder(${d})`)
+  await js(`await openFolder(${d})`)
+  assert.ok(await js(`return projects.includes(${JSON.stringify(opened)}) && items.some(i => i.file === ${JSON.stringify(path.join(outside, 'outside.webp'))})`))
+  assert.ok(fs.existsSync(path.join(outside, '.epiphany', 'meta.jsonl')))
+  assert.equal(await js(`return shown($('#lobby')).length`), lobby + 1)
+})
+step('a project left out of the Lobby, and back', async () => {
+  const lobby = await js(`return shown($('#lobby')).length`), n = JSON.stringify(opened)
+  await js(`lobbyToggle(${n})`)
+  assert.equal(await js(`return shown($('#lobby')).length`), lobby - 1)
+  assert.equal(await js(`return $('#plist .away')?.dataset.p`), opened)
+  await js(`lobbyToggle(${n})`)
+  assert.equal(await js(`return shown($('#lobby')).length`), lobby)
+})
+step('an opened folder removed from Epiphany: the folder stays', async () => {
+  const n = JSON.stringify(opened)
+  await js(`await api.removeProject(${n})`)
+  await until(`!projects.includes(${n}) && !items.some(i => i.project === ${n})`, 'gone from the page')
+  assert.ok(fs.existsSync(path.join(outside, 'outside.webp')) && fs.existsSync(path.join(outside, '.epiphany', 'meta.jsonl')))
+  fs.rmSync(outside, { recursive: true, force: true, maxRetries: 5 })
+})
+step('an old library moved over by General\'s Move: its picture back, with its page', async () => {
+  assert.equal(await js(`return $('#general .move').hidden`), false)
+  const before = await js('return items.length')
+  await js(`$('#general .move button').click()`)
+  await until(`items.length === ${before + 1} && $('#general .move').hidden`, 'moved')
+  assert.equal(await js(`return items.find(i => i.project === 'old').page`), 'https://example.com/old')
+  assert.ok(fs.existsSync(path.join(home, 'project', 'old', 'old.webp')) && !fs.existsSync(old))
 })
 step('nothing left running, no page errors', async () => {
   await until('running.length === 0', 'tasks done')

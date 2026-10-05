@@ -19,6 +19,10 @@ const KEY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke=
 const settingsUI = profiles => {
   loadInstruments()
   const general = $('#general')
+  // 0.1.2 only: the old layout's library moved over (main.js migrate), then read anew.
+  const move = general.querySelector('.move')
+  api.oldLayout().then(old => move.hidden = !old)
+  move.querySelector('button').onclick = e => { e.target.disabled = true; api.migrate().then(reread).then(() => move.hidden = true) }
   api.quoteSources().then(names => {
     general.querySelector('[name=quote]').innerHTML = names.map(n => `<option ${n === s.quote ? 'selected' : ''}>${n}</option>`).join('')
   })

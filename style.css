@@ -238,6 +238,9 @@ dialog textarea { flex: 1; resize: none; line-height: 1.6 }
 #projects { grid-template-columns: 13rem minmax(0, 1fr) }
 main aside { display: flex; flex-direction: column; gap: .25rem; position: sticky; top: 0; align-self: start } /* start: a stretched grid item has no room to stick */
 #plist input { margin-top: .5rem }
+#plist button { padding: .4rem .75rem; border: 1px solid transparent; background: none; color: var(--muted); text-align: left; transition: color .15s } /* Open folder: as the field's placeholder reads */
+#plist button:hover { color: var(--fg) }
+#plist a.away { color: color-mix(in srgb, var(--muted) 50%, transparent) } /* left out of the Lobby */
 #settings > div { display: none }
 #settings > div:target { display: block; transition: opacity .15s; @starting-style { opacity: 0 } }
 #settings h2 { position: sticky; top: 0; z-index: 1; background: var(--bg); padding-bottom: .25rem }
@@ -263,8 +266,8 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem }
 #instruments [data-egg] { user-select: none } /* clicked over and over, it would select itself */
 
 /* One button, one field, one switch, everywhere. */
-:is(#sites .creds, #instruments) button, .meta .use { padding: .4rem .9rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--field); transition: background .15s }
-:is(#sites .creds, #instruments) button:hover, .meta .use:hover { background: var(--active) }
+:is(#sites .creds, #instruments, #general .move) button, .meta .use { padding: .4rem .9rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--field); transition: background .15s }
+:is(#sites .creds, #instruments, #general .move) button:hover, .meta .use:hover { background: var(--active) }
 .meta .use { color: var(--fg) }
 .meta .choose { display: flex; align-items: center; gap: .9rem } /* Use these tags, View post */
 .panel :is(input[type="text"], input[type="password"]), #plist input, dialog textarea { font: inherit; color: inherit; background: var(--field); border: 1px solid var(--rule); border-radius: 6px; padding: .4rem .75rem; outline: none; transition: border-color .15s }

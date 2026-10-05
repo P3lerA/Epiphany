@@ -32,6 +32,7 @@
       "thumbnail.js",
       "danbooru.js",
       "update.js",
+      "migrate.js",
       "share.js",
       "gdl.js",
       "sites.js",

@@ -30,8 +30,8 @@ const add = (root, item, front) => {
   img.loading = 'lazy'
   img.decoding = 'async'
   img.title = item.src
-  decorate(img, item)
   grid[front ? 'prepend' : 'append'](img)
+  decorate(img, item) // in its grid: hide asks whether it is the Lobby's
 }
 const decorate = (img, item) => {
   img.item = item
@@ -195,7 +195,8 @@ const saveF = () => localStorage.filters = JSON.stringify({ ...F, q: '', ...safe
 // A segment's filter: its choice, or '!' and the choice for everything but (right-click). A picture of no known rating is in none.
 const passes = (f, is) => !f || (f[0] === '!' ? !is(f.slice(1)) : is(f))
 // Piles' '!' kind: the pictures with none of it (no series...). Several choices (Ctrl in Statistics): any of them. Rating's are letters (gs), the others' comma-separated.
-const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || !passes(F.rating, v => !!img.dataset.rating && v.includes(img.dataset.rating)) || !passes(F.tagged, v => v.split(',').some(x => x === 'pending' ? pending(img.dataset.tagged) : img.dataset.tagged === x)) || (F.piles?.[0] === '!' && img.item[F.piles.slice(1)]) || (F.site && !F.site.split(',').includes(source(img.dataset.site))) || (F.q && !(Q().names.every(n => img.names.has(n)) && Q().text.every(t => img.dataset.q.includes(t)))))
+// The Lobby leaves out the projects Show in Lobby is off for (lobbyToggle).
+const hide = img => img.hidden = !!((!F.ai && img.dataset.ai) || (s.hideInLobby.includes(img.item.project) && img.closest('#lobby')) || !passes(F.rating, v => !!img.dataset.rating && v.includes(img.dataset.rating)) || !passes(F.tagged, v => v.split(',').some(x => x === 'pending' ? pending(img.dataset.tagged) : img.dataset.tagged === x)) || (F.piles?.[0] === '!' && img.item[F.piles.slice(1)]) || (F.site && !F.site.split(',').includes(source(img.dataset.site))) || (F.q && !(Q().names.every(n => img.names.has(n)) && Q().text.every(t => img.dataset.q.includes(t)))))
 const applyFilters = () => {
   document.querySelectorAll('.grid img').forEach(hide)
   filters.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => { const f = F[seg.dataset.name] || ''; b.classList.toggle('on', b.value === f); b.classList.toggle('not', f === '!' + b.value) }))
@@ -316,16 +317,27 @@ const tally = () => {
 // while it is hidden, so each time it comes up it is another one.
 const face = () => { for (const r of [$('#lobby'), pgrid]) if (!r.dataset.face || r.querySelector(r.classList.contains('piling') ? '.pile' : '.grid img:not([hidden])')) { r.dataset.face = FACES[Math.random() * FACES.length | 0]; delete r.dataset.say } }
 
-// Projects: sidebar picks the active project (where pulls land) and shows its grid.
+// Projects: sidebar picks the active project (where pulls land) and shows its grid. One the Lobby leaves out reads faint.
 const plist = $('#plist'), pgrid = $('#pgrid')
 const drawProjects = force => {
-  plist.innerHTML = projects.map(p => `<a href="#projects" data-p="${esc(p)}"${p === s.project ? ' class="on" title="New pictures land here"' : ''}>${p}</a>`).join('')
-    + '<input placeholder="+ New project" spellcheck="false">'
+  plist.innerHTML = projects.map(p => `<a href="#projects" data-p="${esc(p)}"${p === s.project ? ' class="on" title="New pictures land here"' : ''}>${esc(p)}</a>`).join('')
+    + '<input placeholder="+ New project" spellcheck="false"><button>Open folder</button>'
+  plist.querySelectorAll('a').forEach(a => a.classList.toggle('away', s.hideInLobby.includes(a.dataset.p)))
   if (force || pgrid.dataset.p !== s.project) { pgrid.dataset.p = s.project; render(pgrid, items.filter(i => i.project === s.project)) } // redrawing the same grid would only replay the fade-in
 }
 const openProject = p => { s.project = p; save(); drawProjects(); location.hash = '#projects' }
-plist.onclick = e => { if (e.target.dataset.p) openProject(e.target.dataset.p) }
+// Open folder: any folder as a project, its pictures where they are (main.js). Main wrote the settings: s is read anew, not saved over.
+// The library read anew, after main.js moved it about (a folder opened, the old layout moved over).
+const reread = async () => {
+  ;[items, projects, s] = await Promise.all([api.list().then(l => l.sort((a, b) => b.time.localeCompare(a.time))), api.projects(), api.getSettings()])
+  render($('#lobby'), items); applyFilters(); drawProjects(true)
+}
+const openFolder = d => api.openFolder(d).then(async name => { if (name) { await reread(); openProject(name) } })
+plist.onclick = e => { if (e.target.dataset.p) openProject(e.target.dataset.p); else if (e.target.tagName === 'BUTTON') openFolder() }
 plist.oncontextmenu = e => { if (e.target.dataset.p) api.projectMenu(e.target.dataset.p) }
+// Right-click > Show in Lobby (main.js projectMenu): the Lobby leaves a project's pictures out, or takes them back.
+const lobbyToggle = name => { s.hideInLobby = s.hideInLobby.includes(name) ? s.hideInLobby.filter(p => p !== name) : [...s.hideInLobby, name]; save(); applyFilters(); drawProjects() }
+api.onLobbyToggle(lobbyToggle)
 api.onProjectRemoved(async name => {
   items = items.filter(i => i.project !== name)
   document.querySelectorAll('.grid img').forEach(i => { if (i.item.project === name) { sel.delete(i.dataset.file); i.remove() } })
