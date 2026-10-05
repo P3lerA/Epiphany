@@ -57,7 +57,7 @@ const editTemplate = () => {
 const templateInfo = () => ({ text: profile().caption.split(',').map(x => x.trim()).filter(Boolean).join(', '), custom: template() != null })
 const resetTemplate = () => fs.existsSync(templateFile()) && shell.trashItem(templateFile())
 const gallery = require('./gdl')(HOME), { gdl, kill, oauth } = gallery
-const { UA, pullWikis, tagWiki, useAliases, renamed, aliasing } = require('./danbooru')({ home: HOME, readJson, settings })
+const { UA, pullWikis, tagWiki, useAliases, renamed, aliasing, artistOf } = require('./danbooru')({ home: HOME, readJson, settings })
 const GDL = gallery.CONFIG // site credentials live here, where gallery-dl reads them
 const PROJ = path.join(HOME, 'project')
 
@@ -84,8 +84,10 @@ const rating = j => {
 
 // Where a picture's tags come from: a booru match looked up for a non-booru source, the booru it was pulled from, or the tagger's guess.
 const source = j => j.booru ?? (j.tagger && !BOORU.has(j.category) ? tagger.post(j.tagger) : j)
-// Its caption fields: the source's, with series, characters and artists written by hand over them (j.edit, booru-style strings).
-const facts = j => ({ ...meta(source(j)), ...Object.fromEntries(Object.entries(j.edit ?? {}).map(([k, v]) => [k, words(v).join(k === 'artist' ? ', @' : ', ')])) })
+// Its caption fields: the source's; no booru post, the artist danbooru knows its account as (j.account), over the tagger's guess;
+// series, characters and artists written by hand over them (j.edit, booru-style strings).
+const facts = j => ({ ...meta(source(j)), ...!j.booru && j.account && { artist: meta({ tag_string_artist: j.account.artist }).artist },
+  ...Object.fromEntries(Object.entries(j.edit ?? {}).map(([k, v]) => [k, words(v).join(k === 'artist' ? ', @' : ', ')])) })
 // Rebuilds the .txt, the general tags, from the sidecar; what was written there by hand goes.
 const recaption = (item, j) => fs.writeFileSync(txt(item.file), tagLine(facts(j).tags))
 const info = (item, prof = profile()) => {
@@ -444,10 +446,21 @@ const resolve = async (item, j, say) => {
   // Pulled from a booru: its own tags are the caption, nothing to look up (this re-renders it under the current profile).
   if (BOORU.has(j.category)) { recaption(item, j); enrich(item).then(e => send('saved', { ...e, replace: true })); return j }
   const hit = await lookup(j, item.file, say)
-  if (hit) await adopt(item, j, hit)
-  else if (j.candidates) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
-  else if (!j.booru && !j.tagger && !BOORU.has(j.category) && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
+  if (hit) { await adopt(item, j, hit); return hit }
+  // No booru post: whose the account it came from is, if danbooru knows (facts puts it over the tagger's guess).
+  const at = ACCOUNT[j.category]?.(j), who = at && await artistOf(at)
+  if (who) j.account = { url: at, artist: who }
+  if (!j.candidates && !j.booru && !j.tagger && settings().autotag && tagger.has()) { say?.(tagger.onCpu() ? 'tagging on CPU' : 'tagging with the tagger'); await tagIt(item, j).catch(e => note(`Tagger: ${e.message}`, true)) } // no booru has it
+  else if (j.candidates || who) { writeJson(item.file + '.json', j); enrich(item).then(e => send('saved', { ...e, replace: true })) }
   return hit
+}
+// The account a picture was posted from, as a page of it danbooru's artist entries list (gallery-dl's fields per site).
+const ACCOUNT = {
+  pixiv: j => j.user?.id && `https://www.pixiv.net/users/${j.user.id}`,
+  twitter: j => j.author?.name && `https://x.com/${j.author.name}`,
+  fanbox: j => j.creatorId && `https://${j.creatorId}.fanbox.cc`,
+  bluesky: j => j.author?.handle && `https://bsky.app/profile/${j.author.handle}`,
+  deviantart: j => j.author?.username && `https://www.deviantart.com/${j.author.username}`
 }
 const relookup = async item => {
   const t = task('Looking up'), j = sidecar(item)

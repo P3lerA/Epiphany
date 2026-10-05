@@ -1,5 +1,5 @@
-// What danbooru knows about tags, kept in HOME/cache: what a tag means (its wiki), and old names for current ones (its alias
-// table). And how Epiphany introduces itself to the sites it asks (UA).
+// What danbooru knows about tags, kept in HOME/cache: what a tag means (its wiki), old names for current ones (its alias table),
+// and whose an account elsewhere is (its artists' pages). And how Epiphany introduces itself to the sites it asks (UA).
 const fs = require('fs')
 const path = require('path')
 const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
@@ -60,5 +60,20 @@ module.exports = ({ home, readJson, settings }) => {
     alias = settings().aliases ? readJson(ALIASES, null) : null // turned off meanwhile: off
   }
 
-  return { UA, pullWikis, tagWiki, useAliases, renamed, aliasing: () => alias !== null }
+  // An account's artist: an artist entry lists the artist's pages elsewhere (pixiv, X, fanbox...), and danbooru finds one by any
+  // spelling of its URL. Their names, space-separated as a post's tag_string_artist; '' for none. Kept in HOME/cache for good; a
+  // failed request isn't kept, so it is asked again next time.
+  const ARTISTS = path.join(home, 'cache', 'artist-urls.json')
+  let artists
+  const artistOf = async url => {
+    artists ??= readJson(ARTISTS, {})
+    if (Object.hasOwn(artists, url)) return artists[url]
+    const l = await fetch(`https://danbooru.donmai.us/artists.json?search[url_matches]=${encodeURIComponent(url)}&only=name,is_deleted`, { signal: AbortSignal.timeout(8000), ...UA })
+      .then(r => r.ok ? r.json() : null).catch(() => null)
+    if (!Array.isArray(l)) return null
+    artists[url] = l.filter(a => !a.is_deleted).map(a => a.name).join(' ')
+    fs.mkdirSync(path.dirname(ARTISTS), { recursive: true }); fs.writeFileSync(ARTISTS, JSON.stringify(artists))
+    return artists[url]
+  }
+  return { UA, pullWikis, tagWiki, useAliases, renamed, aliasing: () => alias !== null, artistOf }
 }
