@@ -121,32 +121,38 @@ $('.fab .theme-toggle').onclick = () => {
   $('#general [name=theme]').value = localStorage.theme
 }
 
-let updateChecked = false // Check pressed: what it found is said beside the version
-const drawInstruments = () => Promise.all([api.instruments(), api.checkUpdate()]).then(([v, u]) => {
+// Instruments: a line on what each is, its version (or none), its button. Check on Epiphany's says what it found in the task line
+// (true only: drawInstruments is also a then() callback, handed what came before). Its version, clicked seven times: a capybara
+// (capybara_s_playlist.json), the release notes' cat videos.
+const ABOUT = { 'gallery-dl': 'Pulls from the sites', extension: 'Pull button for Chrome', tagger: 'Tags what no booru has' }
+let taps = 0, tapped = 0
+const drawInstruments = say => Promise.all([api.instruments(), api.checkUpdate(say === true)]).then(([v, u]) => {
   const ul = $('#instruments ul')
-  const newer = u.latest && u.latest !== u.current, found = updateChecked && !newer ? (u.latest ? ', up to date' : ', no answer from GitHub') : ''
-  const rows = { Epiphany: { status: u.current + found, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v,
-    ...Object.fromEntries(INSTRUMENTS.map(n => [n, s[n] ? { status: 'installed', action: 'Remove' } : { status: 'not installed', action: 'Install' }])) }
+  const newer = u.latest && u.latest !== u.current
+  const rows = { Epiphany: { status: u.current, action: newer && u.how !== 'dev' ? `Update to ${u.latest}` : 'Check' }, ...v,
+    ...Object.fromEntries(INSTRUMENTS.map(i => [i.name, { action: s[i.name] ? 'Remove' : 'Install' }])) }
+  const about = { ...ABOUT, ...Object.fromEntries(INSTRUMENTS.map(i => [i.name, i.about])) }
   ul.innerHTML = Object.entries(rows).map(([name, { status, action }]) =>
-    `<li><span>${name}</span><span class="status">${status}</span><button data-act="${name}">${action}</button></li>`
+    `<li><span>${name}${about[name] ? `<small>${esc(about[name])}</small>` : ''}</span><span class="status"${name === 'Epiphany' ? ' data-egg' : ''}>${status ?? ''}</span><button data-act="${name}">${action}</button></li>`
   ).join('')
   ul.onclick = e => {
+    if (e.target.closest('[data-egg]')) { if (Date.now() - tapped > 1500) taps = 0; tapped = Date.now(); if (++taps === 7) { taps = 0; api.capybara() } }
     const n = e.target.dataset.act
     if (n && n !== 'extension') e.target.disabled = true // until drawn again: two Updates at once would wait on each other forever
     if (n === 'gallery-dl') api.installGdl().then(drawInstruments)
     if (n === 'extension') api.exportExtension()
     if (n === 'tagger') (e.target.textContent === 'Remove' ? api.removeTagger() : api.installTagger()).then(drawInstruments)
-    if (INSTRUMENTS.includes(n)) { s[n] = !s[n]; save(); dispatchEvent(new CustomEvent('instrument', { detail: n })); drawInstruments() }
-    if (n === 'Epiphany') { updateChecked = true; (newer && u.how !== 'dev' ? api.update() : Promise.resolve()).then(drawInstruments) }
+    if (INSTRUMENTS.some(i => i.name === n)) { s[n] = !s[n]; save(); dispatchEvent(new CustomEvent('instrument', { detail: n })); drawInstruments() }
+    if (n === 'Epiphany') newer && u.how !== 'dev' ? api.update().then(drawInstruments) : drawInstruments(true)
   }
 }) // first drawn once the instruments are in
 
 // The instruments' own folders (instruments/README.md): their page.js and page.css, once the library and settings are loaded.
-let INSTRUMENTS = []
-const loadInstruments = () => api.instrumentFiles().then(files => {
-  for (const f of files) document[f.endsWith('.css') ? 'head' : 'body'].append(f.endsWith('.css')
+let INSTRUMENTS = [] // { name, about, files }
+const loadInstruments = () => api.instrumentList().then(list => {
+  for (const f of list.flatMap(i => i.files)) document[f.endsWith('.css') ? 'head' : 'body'].append(f.endsWith('.css')
     ? Object.assign(document.createElement('link'), { rel: 'stylesheet', href: f }) : Object.assign(document.createElement('script'), { src: f }))
-  INSTRUMENTS = [...new Set(files.map(f => f.split('/')[1]))]
+  INSTRUMENTS = list
   drawInstruments()
 })
 

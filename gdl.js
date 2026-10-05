@@ -42,6 +42,8 @@ module.exports = home => {
     } else {
       const get = url => fetch(url, { signal: AbortSignal.timeout(120000) }).then(r => { if (!r.ok) throw new Error(`${r.status} ${url}`); return r })
       const rel = await get('https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest').then(r => r.json())
+      const now = fs.existsSync(EXE) && await gdl(['--version']).then(v => v.trim(), () => null)
+      if (now === rel.tag_name.replace(/^v/, '')) return now // up to date: nothing to fetch
       const asset = n => rel.assets.find(a => a.name === n)?.browser_download_url
       if (!asset('gallery-dl.exe')) throw new Error('no gallery-dl.exe in ' + rel.tag_name)
       const buf = Buffer.from(await get(asset('gallery-dl.exe')).then(r => r.arrayBuffer()))

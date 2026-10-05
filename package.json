@@ -40,6 +40,7 @@
       "glass.js",
       "instruments/**",
       "index.html",
+      "capybara_s_playlist.json",
       "style.css",
       "package.json",
       "build/icon.png",

@@ -25,10 +25,13 @@ module.exports = ({ task, note, busy }) => { // busy(): how many tasks the task 
   autoUpdater.on('error', e => { updating?.end(); updating = null; note(`Update: ${e.message}`, true) })
   let latestRelease, updateCall // the update under way: another click joins it (two would wait on each other forever)
 
-  const checkUpdate = async () => {
+  // say: Check was pressed, what it found goes to the task line, as gallery-dl's Update says its own
+  const checkUpdate = async say => {
     const current = require('./package.json').version // app.getVersion() is Electron's own when launched without a package.json
+    const t = say ? task('Checking for updates') : null
     latestRelease = await fetch(RELEASES, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null).catch(() => null)
     const latest = latestRelease?.tag_name?.replace(/^v/, '') ?? null
+    t?.end(!latest ? "GitHub didn't answer" : latest === current ? 'Epiphany up to date' : `Epiphany ${latest} out`)
     return { current, latest, how: PORTABLE ? 'portable' : app.isPackaged ? 'installed' : 'dev' }
   }
 

@@ -255,6 +255,7 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem }
 #sites .creds { flex-basis: 100%; display: flex; gap: .5rem; padding-bottom: .25rem; transition: opacity .15s; @starting-style { opacity: 0 } }
 #sites .creds input { flex: 1; min-width: 0 }
 #instruments .status { margin-left: auto; color: var(--muted); font-size: .85rem }
+#instruments [data-egg] { user-select: none } /* clicked over and over, it would select itself */
 
 /* One button, one field, one switch, everywhere. */
 :is(#sites .creds, #instruments) button, .meta .use { padding: .4rem .9rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--field); transition: background .15s }

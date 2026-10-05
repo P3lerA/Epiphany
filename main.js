@@ -382,6 +382,7 @@ const getCaption = item => ({ head: caption(profile(), facts(sidecar(item))), ta
 // The sidecar is the record; a caption written by hand lives in the .txt only, until the next rebuild from the sidecar.
 const setCaption = (item, text) => fs.writeFileSync(txt(item.file), text)
 const open = url => shell.openExternal(url)
+const capybara = () => { const l = readJson(path.join(__dirname, 'capybara_s_playlist.json'), []); if (l.length) open(l[Math.random() * l.length | 0]) }
 
 // Right-click on a picture. Delete goes to the Recycle Bin, so no confirm.
 const remove = async item => {
@@ -581,16 +582,17 @@ const { checkUpdate, update } = require('./update')({ task, note, busy: () => ru
 const instruments = async () => {
   const v = await gdl(['--version']).then(v => v.trim(), () => null)
   return {
-    'gallery-dl': { status: v ?? 'not found', action: v ? 'Update' : 'Install' },
+    'gallery-dl': { status: v, action: v ? 'Update' : 'Install' },
     extension: { status: `${readJson(path.join(EXT, 'manifest.json'), {}).version ?? '?'}, port ${PORT}${listening === false ? ' taken' : ''}`, action: 'Export' },
-    tagger: installing ? { status: 'downloading…', action: 'Install' } : tagger.has() ? { status: 'PixAI v1.0', action: 'Remove' } : { status: 'not installed', action: 'Install' }
+    tagger: installing ? { status: 'downloading…', action: 'Install' } : { action: tagger.has() ? 'Remove' : 'Install' }
   }
 }
 
-// The instruments' files for the window (instruments/README.md): each folder's page.js and page.css, as the page links them.
+// The instruments (instruments/README.md): each folder's instrument.json, and its page.js and page.css as the page links them.
 const INSTR = path.join(__dirname, 'instruments')
-const instrumentFiles = () => fs.readdirSync(INSTR, { withFileTypes: true }).filter(d => d.isDirectory())
-  .flatMap(d => ['page.css', 'page.js'].filter(f => fs.existsSync(path.join(INSTR, d.name, f))).map(f => `instruments/${d.name}/${f}`))
+const instrumentList = () => fs.readdirSync(INSTR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => ({
+  ...readJson(path.join(INSTR, d.name, 'instrument.json'), {}), name: d.name,
+  files: ['page.css', 'page.js'].filter(f => fs.existsSync(path.join(INSTR, d.name, f))).map(f => `instruments/${d.name}/${f}`) }))
 
 const exportExtension = async () => {
   const { filePaths: [d] } = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
@@ -602,13 +604,13 @@ const exportExtension = async () => {
 }
 
 const installGdl = async () => {
-  const t = task('Downloading gallery-dl')
-  try { const v = await gallery.install(); t.end(`gallery-dl ${v} installed`); return v } catch (e) { t.end(); note(e.message, true) }
+  const was = await gdl(['--version']).then(v => v.trim(), () => null), t = task(was ? 'Updating gallery-dl' : 'Downloading gallery-dl')
+  try { const v = await gallery.install(); t.end(v === was ? 'gallery-dl up to date' : `gallery-dl ${v} installed`); return v } catch (e) { t.end(); note(e.message, true) }
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => { writeJson(SETTINGS, v); if (!v.aliases !== !aliasing()) useAliases(v.aliases) }, profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
-  lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
-  checkUpdate, update, instruments, instrumentFiles, exportExtension, installGdl, export: exportItems,
+  capybara, lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
+  checkUpdate, update, instruments, instrumentList, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
   tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))

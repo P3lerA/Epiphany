@@ -8,6 +8,7 @@ instrument's (the Instruments row says it as it is). Nothing outside the folder 
   It builds what it shows itself: a Settings page is a link appended to `#settings aside` and a `<div id="name">` in
   `#settings`, hidden while it is off.
 - `page.css`: its styles, if any.
+- `instrument.json`, if any: `{ "about": "..." }`, a line under its name in Instruments (five words or so).
 
 On or off: `s[name]` in settings.json, off until installed. Removed, an instrument shows nothing and does nothing; its
 code is still loaded (it ships with the app).
