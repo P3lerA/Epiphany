@@ -45,7 +45,7 @@ const post = async body => {
 }
 
 // Next: the pulls behind the one out, and all of them while Epiphany isn't running (kept across browser restarts: they go with the
-// next pull Epiphany takes). Held here too, so a change is never lost between a read and a write of storage.
+// next pull Epiphany takes, or once the panel finds it back). Held here too, so a change is never lost between a read and a write of storage.
 // ponytail: a right-click save waits as a URL; an image URL that expires (signed CDN links) can 404 by then. Keep the bytes if that bites.
 let next = [], going
 const ready = Promise.all([chrome.storage.local.get({ waiting: [] }), chrome.storage.session.get({ out: [], done: {} })]).then(([l, s]) => {
@@ -84,8 +84,9 @@ const clear = async () => { await ready; next.forEach(b => ended(b, { why: 'Stop
 
 chrome.runtime.onInstalled.addListener(() => chrome.contextMenus.removeAll(() => chrome.contextMenus.create({ id: 'save', title: 'Save to Epiphany', contexts: ['image'] })))
 
-// The Pull button on listed sites (content.js) -> gallery-dl; its ✕ or the panel's stops one ({ stop }: its id), Clear all of Next.
-chrome.runtime.onMessage.addListener(msg => void ('stop' in msg ? stop(msg.stop) : 'clear' in msg ? clear() : send(msg)))
+// The Pull button on listed sites (content.js) -> gallery-dl; its ✕ or the panel's stops one ({ stop }: its id), Clear all of Next;
+// the panel, opened with Epiphany in reach, sends Next on its way ({ go }).
+chrome.runtime.onMessage.addListener(msg => void ('stop' in msg ? stop(msg.stop) : 'clear' in msg ? clear() : 'go' in msg ? go() : send(msg)))
 
 // Alt+S (its own command: the icon opens the panel) on any site -> gallery-dl. activeTab lends it the tab's URL off the listed sites.
 chrome.commands.onCommand.addListener((name, tab) => name === 'pull' && send({ page: tab.url, anim: anim(), id: crypto.randomUUID() }))

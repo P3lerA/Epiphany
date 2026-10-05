@@ -49,6 +49,8 @@ held.slow.end({ why: 'Stopped' }); await tick()
 assert.deepEqual(session.done.slow, { why: 'Stopped' }); assert.deepEqual(sent.slice(3), ['slow', 'd']) // then the next goes
 up = false; await pull('e'); await pull('f'); await msg({ clear: true }) // Clear: all of Next
 assert.deepEqual(next(), []); assert.deepEqual(session.done.f, { why: 'Stopped' })
+await pull('g'); up = true; await msg({ go: true }) // the panel opened with Epiphany back: Next goes, no pull needed
+assert.deepEqual(next(), []); assert.equal(sent.at(-1), 'g')
 up = true; await pull('slow2'); held.slow2.cut(); await tick() // Epiphany quit mid-pull: first in Next again
 assert.deepEqual(next(), ['slow2']); assert.deepEqual(session.out, [])
 session.out = [{ page: 'lost', id: 'lost' }]; eval(worker); await tick() // a worker Chrome stopped mid-pull, started again

@@ -35,5 +35,5 @@ const draw = async () => {
 }
 chrome.storage.onChanged.addListener(draw)
 draw()
-// Any answer is Epiphany there (a GET is turned away, harmlessly); a refused connection is it away.
-fetch('http://127.0.0.1:7676/').then(() => false, () => true).then(a => { away = a; draw() })
+// Any answer is Epiphany there (a GET is turned away, harmlessly); a refused connection is it away. There: what waits for it goes.
+fetch('http://127.0.0.1:7676/').then(() => false, () => true).then(a => { away = a; draw(); if (!a) chrome.runtime.sendMessage({ go: true }) })
