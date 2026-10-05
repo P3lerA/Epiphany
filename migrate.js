@@ -16,19 +16,18 @@ module.exports = proj => {
     move(path.join(dir, 'thumbs'), path.join(own, 'thumbs'))
     for (const f of fs.readdirSync(old)) if (f !== 'meta.jsonl') move(path.join(old, f), path.join(/\.(json|txt)$/.test(f) ? own : dir, f))
     // meta.jsonl's paths rebased by their folder's name, not the old path: a library copied from elsewhere (or from the other OS)
-    // comes out right too. Rewritten where it is, then moved: cut off between, the next run rewrites it again, to the same.
+    // comes out right too. One begun meanwhile (pulled to before the move; a picture that reached the root, its placeholder from
+    // list()) adds its lines for the pictures the old one doesn't name: the old record wins. Written whole, then the old one goes:
+    // cut off between, the next run writes the same again.
     const meta = path.join(old, 'meta.jsonl'), META = path.join(own, 'meta.jsonl'), tmp = META + '.tmp'
     if (fs.existsSync(meta)) {
       const rebase = l => {
         try { const o = JSON.parse(l), [file, parent] = o.file.split(/[\\/]/).reverse(); return parent === 'dataset' ? JSON.stringify({ ...o, file: path.join(dir, file) }) : l } catch { return l }
       }
-      const lines = fs.readFileSync(meta, 'utf8').split('\n').map(rebase)
-      if (!fs.existsSync(META)) { fs.writeFileSync(tmp, lines.join('\n')); fs.renameSync(tmp, meta); move(meta, META) }
-      else { // pulled to before the move: the old lines join the new, each picture once (cut off and run again, none twice)
-        const named = new Set(fs.readFileSync(META, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l).file } catch {} }))
-        fs.appendFileSync(META, lines.filter(l => { try { return !named.has(JSON.parse(l).file) } catch { return false } }).map(l => l + '\n').join(''))
-        fs.rmSync(meta)
-      }
+      const key = l => { try { return JSON.parse(l).file } catch { return l } } // a line that isn't JSON is kept, once
+      const lines = fs.readFileSync(meta, 'utf8').split('\n').filter(Boolean).map(rebase), named = new Set(lines.map(key))
+      const added = fs.existsSync(META) ? fs.readFileSync(META, 'utf8').split('\n').filter(l => l && !named.has(key(l))) : []
+      fs.writeFileSync(tmp, [...lines, ...added].map(l => l + '\n').join('')); fs.renameSync(tmp, META); fs.rmSync(meta)
     }
     try { fs.rmdirSync(old) } catch {} // something left (its name taken): it stays, and so does dataset/
   } catch (e) { console.error(`migrate ${name}: ${e.message}`) }

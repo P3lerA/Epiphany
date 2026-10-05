@@ -6,15 +6,17 @@ const path = require('path')
 const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
 
 module.exports = ({ home, readJson, settings }) => {
+  const cached = (f, none) => { try { return readJson(f, none) } catch { return none } } // one cut off mid-write is none: pulled or asked for again
   // danbooru's tags as their wikis tell them, kept in HOME/cache: { tag: [explanation, posts, ...other names] }. The explanation is
   // the first paragraph, DText links and markup turned to plain text (null: no wiki); the other names are the tag's in other
   // languages and spellings (初音ミク, 双马尾...). Pulled whole at the first start and again once it is a month old: every general,
   // artist, series and character tag on 100+ posts that has a wiki (~57k; 57 requests, ~60MB down, ~10MB kept). Anything rarer is
   // asked for when it comes up, and kept. '' (no tag has that name) is when the last pull was done.
   const TAGS = path.join(home, 'cache', 'danbooru-tags.json')
-  let tags
-  const load = () => tags ??= readJson(TAGS, {})
+  let tags, saving
+  const load = () => tags ??= cached(TAGS, {})
   const saveTags = () => { fs.mkdirSync(path.dirname(TAGS), { recursive: true }); fs.writeFileSync(TAGS, JSON.stringify(tags)) } // no indent
+  const saveSoon = () => { clearTimeout(saving); saving = setTimeout(saveTags, 5000) } // tags asked for one by one: the ~10MB once, after the last
   const plain = body => body.split(/\r?\n\s*\r?\n/).map(p => p.trim()).find(p => p && !/^(h\d\.|\*|!post|\[(table|expand|quote|spoiler))/i.test(p))
     ?.replace(/\[\[([^\]|]+)\|\]\]/g, (_, t) => t.replace(/\s*\(.*\)$/, '')) // [[poster (object)|]]: the pipe trick drops the qualifier
     .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/g, '$1').replace(/\[\[([^\]]+)\]\]/g, '$1')
@@ -45,7 +47,7 @@ module.exports = ({ home, readJson, settings }) => {
     const j = r.ok && await r.json().catch(() => null)
     if (r.ok && !j) return null // cut off mid-read: asked again next time
     tags[tag] = j ? entry(j) : [null]
-    saveTags()
+    saveSoon()
     return tags[tag][0]
   }
   // Old names to danbooru's current ones (clouds -> cloud, catgirl -> cat_girl; konachan still writes many), when Settings > General
@@ -56,7 +58,7 @@ module.exports = ({ home, readJson, settings }) => {
   let alias = null // { tags|artist|character|copyright: { old: new } }
   const renamed = (kind, t) => alias && Object.hasOwn(alias[kind], t) ? alias[kind][t] : t // own keys: a tag "constructor" is no alias
   const useAliases = async on => {
-    if (on && !(fs.existsSync(ALIASES) && Date.now() - fs.statSync(ALIASES).mtimeMs < 30 * 864e5)) {
+    if (on && !(cached(ALIASES, null) && Date.now() - fs.statSync(ALIASES).mtimeMs < 30 * 864e5)) {
       const all = { tags: {}, artist: {}, character: {}, copyright: {} }
       for (let page = 1; ; page++) {
         const l = await fetch(`https://danbooru.donmai.us/tag_aliases.json?search[status]=active&limit=1000&only=antecedent_name,consequent_name,consequent_tag[category]&page=${page}`, { signal: AbortSignal.timeout(30000), ...UA }).then(r => r.ok ? r.json() : null).catch(() => null)
@@ -65,7 +67,7 @@ module.exports = ({ home, readJson, settings }) => {
         if (l.length < 1000) { fs.mkdirSync(path.dirname(ALIASES), { recursive: true }); fs.writeFileSync(ALIASES, JSON.stringify(all)); break }
       }
     }
-    alias = settings().aliases ? readJson(ALIASES, null) : null // turned off meanwhile: off
+    alias = settings().aliases ? cached(ALIASES, null) : null // turned off meanwhile: off
   }
 
   // An account's artist: an artist entry lists the artist's pages elsewhere (pixiv, X, fanbox...), and danbooru finds one by any
@@ -74,7 +76,7 @@ module.exports = ({ home, readJson, settings }) => {
   const ARTISTS = path.join(home, 'cache', 'artist-urls.json')
   let artists
   const artistOf = async url => {
-    artists ??= readJson(ARTISTS, {})
+    artists ??= cached(ARTISTS, {})
     if (Object.hasOwn(artists, url)) return artists[url]
     const l = await fetch(`https://danbooru.donmai.us/artists.json?search[url_matches]=${encodeURIComponent(url)}&only=name,is_deleted`, { signal: AbortSignal.timeout(8000), ...UA })
       .then(r => r.ok ? r.json() : null).catch(() => null)

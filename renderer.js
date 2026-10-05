@@ -95,13 +95,16 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape' && sel.size) { sel.clear(); drawSel() }
   if ((e.ctrlKey || e.metaKey) && e.key === 'v') api.paste() // the clipboard's links, pulled (main.js)
 })
-// Dropped on the window: files from the file manager are imported, text (a link, a share line) goes as Ctrl+V's would (main.js). A
-// picture dragged within the page is no drop; without preventDefault, Chromium opens a dropped file in the app's place.
+// Dropped on the window: files from the file manager are imported, text (a link, a share line) goes as Ctrl+V's would (main.js), but
+// text dropped in a box is the box's. A picture dragged within the page is no drop; without preventDefault, Chromium opens a dropped
+// file in the app's place.
 let dragging = false
+const theirs = e => e.target.matches?.('input, textarea') && !e.dataTransfer.types.includes('Files')
 addEventListener('dragstart', () => dragging = true)
 addEventListener('dragend', () => dragging = false)
-addEventListener('dragover', e => e.preventDefault())
+addEventListener('dragover', e => theirs(e) || e.preventDefault()) // a box's own dragover places its caret
 addEventListener('drop', e => {
+  if (theirs(e)) return
   e.preventDefault()
   if (dragging) return
   const paths = [...e.dataTransfer.files].map(f => api.pathOf(f)).filter(Boolean) // a browser's picture can come as a file with no path: its link then
@@ -265,15 +268,17 @@ search.addEventListener('compositionend', askSaid) // an IME's word, committed
 search.addEventListener('blur', () => saidUI.hidePopover())
 scope.addEventListener('change', askSaid)
 search.onkeydown = e => {
+  if (e.isComposing) return // the IME's arrows and Enter
   const li = saidUI.matches(':popover-open') ? saidUI.children : []
   if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && li.length) {
     e.preventDefault()
     sayHi = e.key === 'ArrowDown' ? Math.min(sayHi + 1, li.length - 1) : Math.max(sayHi - 1, -1)
     ;[...li].forEach((x, i) => x.classList.toggle('on', i === sayHi))
-  } else if (e.key === 'Enter' && sayHi >= 0) { e.preventDefault(); sayTake(li[sayHi].dataset.tag) }
-  else if (e.key === 'Escape' && li.length) { e.stopPropagation(); saidUI.hidePopover() }
-  else if (e.key === 'Enter') scope.value ? search.value.trim() && api.search(scope.value, search.value.trim()).catch(() => {}) : applyQ()
+  } else if (e.key === 'Enter' && li[sayHi]) { e.preventDefault(); sayTake(li[sayHi].dataset.tag) } // a highlight only while the list is open; no search event then
+  else if (e.key === 'Escape' && li.length) { e.preventDefault(); e.stopPropagation(); saidUI.hidePopover() } // the list goes, the box keeps its text
 }
+// type=search's own: Enter, or Esc clearing the box.
+search.addEventListener('search', () => scope.value ? search.value.trim() && api.search(scope.value, search.value.trim()).catch(() => {}) : applyQ())
 const drawInputs = () => filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 drawInputs()
 // A segment's choice clicked again goes off: none chosen means any (piles: by tags). Choosing a kind of pile shows the piles.

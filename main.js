@@ -71,11 +71,12 @@ const migrate = () => { require('./migrate')(PROJ); note('Library moved') }
 // .epiphany, hidden on Windows as the dot hides it elsewhere. One opened from elsewhere (Projects > Open folder) is in settings.folders.
 const folder = p => settings().folders[p] ?? path.join(PROJ, p)
 const inner = d => path.join(d, '.epiphany')
-const dir = (p = settings().project) => {
-  const d = folder(p), e = inner(d)
+const made = d => { // d with its .epiphany
+  const e = inner(d)
   if (!fs.existsSync(e)) { fs.mkdirSync(e, { recursive: true }); if (process.platform === 'win32') execFile('attrib', ['+h', e], () => {}) }
   return d
 }
+const dir = (p = settings().project) => made(folder(p))
 // A picture's sidecar (x.jpg.json) and caption (x.txt), in its folder's .epiphany; a project's meta.jsonl.
 const json = f => path.join(inner(path.dirname(f)), path.basename(f) + '.json')
 const txt = f => path.join(inner(path.dirname(f)), path.basename(f).replace(/\.[^.]+$/, '.txt'))
@@ -125,7 +126,8 @@ const info = (item, prof = profile()) => {
 
 // Grid thumbnails live in the project's .epiphany, never among its pictures: the square the grid shows (the middle), 400 px, cached
 // as JPEG. A long picture's short side is 400 too (it came back thin, blurred in the square; on macOS squashed), no other is any bigger.
-// One made before (name.jpg, not name.sq.jpg) is shown until its square is made, one at a time behind the load, then removed.
+// One made before (name.jpg, not name.sq.jpg) is shown until its square is made, one at a time behind the load (once: asked again
+// meanwhile, it is there by its turn); the grid on show still points at it, so it goes at the next load (list), which shows the square.
 const thumbs = d => { const t = path.join(inner(d), 'thumbs'); fs.mkdirSync(t, { recursive: true }); return t } // d: the project's folder
 const thumbPath = item => path.join(thumbs(path.dirname(item.file)), path.basename(item.file) + '.sq.jpg')
 const square = async (file, t) => {
@@ -133,19 +135,19 @@ const square = async (file, t) => {
   fs.writeFileSync(t, img.crop({ x: (w - side) >> 1, y: (h - side) >> 1, width: side, height: side }).toJPEG(82))
 }
 let redoing = Promise.resolve()
-const thumb = async item => {
+const thumb = async (item, load) => { // load: list()'s, the grid drawn anew from what it hands out ('saved' keeps a tile's src)
   const t = thumbPath(item), old = t.replace(/\.sq\.jpg$/, '.jpg')
   if (!fs.existsSync(t)) {
-    if (fs.existsSync(old)) { redoing = redoing.then(() => square(item.file, t)).then(() => fs.rmSync(old, { force: true }), () => {}); return pathToFileURL(old).href }
+    if (fs.existsSync(old)) { redoing = redoing.then(() => fs.existsSync(t) || square(item.file, t)).catch(() => {}); return pathToFileURL(old).href }
     try { await square(item.file, t) } catch { return item.url }
-  }
+  } else if (load) fs.rmSync(old, { force: true })
   return pathToFileURL(t).href
 }
 
 // A picture's sidecar; a right-click save has none until a lookup writes one, and one cut off mid-write reads as none (the
 // library still loads; the next lookup writes it afresh).
 const sidecar = (item, none = { category: new URL(item.page).host, page: item.page }) => { try { return readJson(json(item.file), none) } catch { return none } }
-const enrich = async (item, prof) => { const e = withUrl({ ...item, ...info(item, prof) }); e.thumb = await thumb(e); return e }
+const enrich = async (item, prof, load) => { const e = withUrl({ ...item, ...info(item, prof) }); e.thumb = await thumb(e, load); return e }
 
 const record = (item, p = settings().project) => { // p: a pull's own project, though another be opened before its files land
   fs.appendFileSync(jsonl(p), JSON.stringify(item) + '\n')
@@ -197,22 +199,26 @@ const web = u => { if (!URL.canParse(u) || !/^https?:$/.test(new URL(u).protocol
 // Debug's ethereal mode: a pull or a save lands, is counted, and is gone, never in the library (the same page pulls again).
 const ethereal = () => !!(settings().debug && settings().ethereal)
 // Right-click: one image URL, fetched directly. On E-Hentai's viewer that is a resample: gallery-dl pulls the original instead.
+// A task while it fetches, so a host that stalls can be stopped (its ✕, or the extension's: from).
 async function save({ src, page, anim, id }) {
   web(src); web(page)
   if (EH.test(new URL(page).host) && new URL(page).pathname.startsWith('/s/')) return pull({ page, anim, id })
-  const res = await fetch(src, { headers: { Referer: page, 'User-Agent': 'Mozilla/5.0 Epiphany/0.1' } })
-  if (!res.ok) throw new Error(`${res.status} ${src}`)
-  let name = decodeURIComponent(path.basename(new URL(src).pathname)).replace(/[<>:"/\\|?*]/g, '_') || 'image'
-  if (!path.extname(name)) name += '.' + (res.headers.get('content-type')?.split('/')[1]?.split(';')[0] || 'bin')
-  if (fs.existsSync(path.join(dir(), name))) name = `${Date.now()}_${name}`
-  const file = path.join(dir(), name), buf = Buffer.from(await res.arrayBuffer())
-  if (ethereal()) return { file }
-  fs.writeFileSync(file, buf)
-  const item = record({ file, src, page, time: new Date().toISOString() })
-  // Same matching as a pull, after the reply; it reports its own errors. Not a field: the item is spread into every 'saved' after
-  // this, and IPC can't clone a Promise (importShared awaits it).
-  Object.defineProperty(item, 'looked', { value: settings().lookup && relookup(item).catch(() => {}) })
-  return item
+  const c = new AbortController(), t = task(`Saving from ${new URL(page).host}`, () => c.abort(), { anim, id })
+  try {
+    const res = await fetch(src, { signal: c.signal, headers: { Referer: page, 'User-Agent': 'Mozilla/5.0 Epiphany/0.1' } })
+    if (!res.ok) throw new Error(`${res.status} ${src}`)
+    let name = decodeURIComponent(path.basename(new URL(src).pathname)).replace(/[<>:"/\\|?*]/g, '_') || 'image'
+    if (!path.extname(name)) name += '.' + (res.headers.get('content-type')?.split('/')[1]?.split(';')[0] || 'bin')
+    if (fs.existsSync(path.join(dir(), name))) name = `${Date.now()}_${name}`
+    const file = path.join(dir(), name), buf = Buffer.from(await res.arrayBuffer())
+    if (ethereal()) return { file }
+    fs.writeFileSync(file, buf)
+    const item = record({ file, src, page, time: new Date().toISOString() })
+    // Same matching as a pull, after the reply; it reports its own errors. Not a field: the item is spread into every 'saved' after
+    // this, and IPC can't clone a Promise (importShared awaits it).
+    Object.defineProperty(item, 'looked', { value: settings().lookup && relookup(item).catch(() => {}) })
+    return item
+  } catch (e) { throw c.signal.aborted ? Object.assign(new Error('Stopped'), { quiet: true }) : e } finally { t.end() }
 }
 
 // gallery-dl metadata -> caption fields, old names renamed (aliases, below).
@@ -336,19 +342,22 @@ const importShared = async s => {
 }
 // Preview > More > Share: the line on the clipboard; the tags only if they were written by hand. Its source: the picture's own page
 // (sites.js), else where it came from: a right-click save's image, or the page it was pulled from (maybe several: the name finds it).
+// One not on the web (dropped, found at a project's root: a file: page) and on no booru has nothing another Epiphany could pull.
 const shareItem = async item => {
   const j = sidecar(item), t = tagsOf(item.file)
   const at = own(j, item.page) ?? { page: item.page, ...item.src !== item.page && { src: item.src }, name: path.basename(item.file) }
+  if (!/^https?:\/\//.test(at.page)) return note('Not on the web: nothing to share', true)
   await clipboard.writeText(share.make(at, j.edit, fs.existsSync(txt(item.file)) && t !== tagLine(facts(j).tags) ? t : undefined))
   note('Share line copied')
 }
 const pull = q => {
-  const host = URL.canParse(q.page) ? new URL(q.page).host : q.page, stop = {}
-  const t = task(`Waiting to pull from ${host}`, () => { stop.asked = true; stop.child ? kill(stop.child) : t.end() }, q) // still waiting: gone now
+  const host = URL.canParse(q.page) ? new URL(q.page).host : q.page, stop = {}, stopped = () => Object.assign(new Error('Stopped'), { quiet: true })
+  let now // still waiting: its answer at once (the extension's queue moves on), its turn does nothing
+  const t = task(`Waiting to pull from ${host}`, () => { stop.asked = true; stop.child ? kill(stop.child) : now(stopped()) }, q)
   const tick = (n, total) => { t.set(`Pulling from ${host}${total ? ` ${n}/${total}` : n > 1 ? ` ${n}` : ''}`); q.tick?.(n, total) } // no total: a count from 2
-  const run = () => { if (stop.asked) throw Object.assign(new Error('Stopped'), { quiet: true }); t.set(`Pulling from ${host}`); return pullOne(q, stop, tick) }
+  const run = () => { if (stop.asked) throw stopped(); t.set(`Pulling from ${host}`); return pullOne(q, stop, tick) }
   pulling = pulling.then(run, run)
-  return pulling.then(items => { t.end(`${items.length} from ${host}`); return items }, e => { t.end(); throw e })
+  return Promise.race([pulling, new Promise((_, no) => now = no)]).then(items => { t.end(`${items.length} from ${host}`); return items }, e => { t.end(); throw e })
 }
 async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: which of the page's pictures (a shared one)
   web(page)
@@ -400,22 +409,23 @@ async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: w
 
 // Each project's meta.jsonl, the lines whose picture is there. A picture at the folder's root no line names (put there by hand, or a
 // folder opened as a project) gets one, and shows pending. No line is dropped: a picture that comes back has its record again. An
-// opened folder that isn't there (a drive not plugged in) is left out, its .epiphany untouched.
-const list = () => Promise.all(projects().flatMap(p => {
+// opened folder that isn't there (a drive not plugged in) is left out, its .epiphany untouched. One that can't be read or written (a
+// folder denied, a meta.jsonl locked) shows empty, the rest load; a line cut off mid-write is passed over, left in the file.
+const list = async () => (await Promise.all(projects().map(async p => { try {
   if (!fs.existsSync(folder(p))) return []
   const d = dir(p), f = jsonl(p), prof = profile()
-  const lines = fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [], named = new Set(lines.map(l => l.file))
+  const lines = fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').flatMap(l => { try { return [JSON.parse(l)] } catch { return [] } }) : [], named = new Set(lines.map(l => l.file))
   for (const file of fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isFile() && PICTURE.test(e.name)).map(e => path.join(d, e.name))) if (!named.has(file)) {
     const l = { file, src: pathToFileURL(file).href, page: pathToFileURL(file).href, time: fs.statSync(file).mtime.toISOString() }
     fs.appendFileSync(f, JSON.stringify(l) + '\n')
     lines.push(l)
   }
-  return lines.filter(l => fs.existsSync(l.file)).map(l => enrich({ ...l, project: p }, prof))
-}))
+  return await Promise.all(lines.filter(l => fs.existsSync(l.file)).map(l => enrich({ ...l, project: p }, prof, true)))
+} catch (e) { console.error(`${p}: ${e.message}`); return [] } }))).flat()
 
 const newProject = name => { if (/^[\w-]+$/.test(name)) dir(name) }
 // Projects > Open folder: any folder as a project, its pictures where they are, named after it (Pictures 2 where Pictures is taken).
-// One that is a project already is only opened.
+// One that is a project already is only opened; one Epiphany can't write its .epiphany into isn't kept.
 const openFolder = async d => {
   d ??= (await dialog.showOpenDialog(win, { properties: ['openDirectory'] })).filePaths[0]
   if (!d) return null
@@ -424,8 +434,8 @@ const openFolder = async d => {
   if (known) return known
   let name = path.basename(d)
   for (let k = 2; ps.includes(name); k++) name = `${path.basename(d)} ${k}`
+  try { made(d) } catch (e) { note(`Can't open ${d}: ${e.message}`, true); return null }
   writeJson(SETTINGS, { ...s, folders: { ...s.folders, [name]: d } })
-  dir(name)
   return name
 }
 // The .txt, its old names read as the current ones while aliases are on (below), so its tags agree with the names above them.
@@ -447,7 +457,7 @@ const capybara = () => { const l = readJson(path.join(__dirname, 'capybara_s_pla
 const remove = async item => {
   for (const f of [item.file, json(item.file), txt(item.file)]) if (fs.existsSync(f)) await shell.trashItem(f)
   const m = jsonl(item.project)
-  fs.writeFileSync(m, fs.readFileSync(m, 'utf8').split('\n').filter(l => l && JSON.parse(l).file !== item.file).join('\n') + '\n')
+  fs.writeFileSync(m, fs.readFileSync(m, 'utf8').split('\n').filter(l => { try { return l && JSON.parse(l).file !== item.file } catch { return true } }).join('\n') + '\n') // one cut off stays
   fs.rmSync(thumbPath(item), { force: true })
   send('removed', item.file)
 }
@@ -725,7 +735,8 @@ app.whenReady().then(() => {
     req.on('data', c => body += c)
     req.on('end', () => {
       let q
-      try { q = JSON.parse(body) } catch { return res.writeHead(400).end() }
+      try { q = JSON.parse(body) } catch {}
+      if (typeof q !== 'object' || !q) return res.writeHead(400).end() // not JSON, or not an object (null)
       if (q.stop) { stopRequest(q.stop); return res.end('{}') } // the extension's ✕: as the task line's
       // The answer in lines as it goes: how far a pull is ({ n, total }), then { got } pictures, or { why } not.
       const line = o => res.write(JSON.stringify(o) + '\n')

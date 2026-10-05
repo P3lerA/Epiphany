@@ -29,6 +29,10 @@ put('c/dataset/meta.jsonl', [line(path.join(PROJ, 'c', 'dataset', 'x.jpg'), 1), 
 // d: pulled to before the move, its new meta.jsonl beside the old one
 put('d/new.jpg', 'n'); put('d/.epiphany/meta.jsonl', line(path.join(PROJ, 'd', 'new.jpg'), 3) + '\n')
 put('d/dataset/old.jpg', 'o'); put('d/dataset/meta.jsonl', line(path.join(PROJ, 'd', 'dataset', 'old.jpg'), 4) + '\n')
+// e: a Move cut off midway, then a start: list() wrote a placeholder for the picture that reached the root, its record still in the old one
+const e = f => path.join(PROJ, 'e', f), placeholder = JSON.stringify({ file: e('x.jpg'), src: 'file:///x.jpg', page: 'file:///x.jpg', time: '2026-01-01' })
+put('e/x.jpg', 'x'); put('e/.epiphany/meta.jsonl', placeholder + '\n' + line(e('new.jpg'), 6) + '\n')
+put('e/dataset/meta.jsonl', line(path.join(PROJ, 'e', 'dataset', 'x.jpg'), 5) + '\n')
 
 const b = Object.fromEntries(Object.entries(tree()).filter(([f]) => f.startsWith('b')))
 migrate(PROJ)
@@ -40,9 +44,11 @@ assert.deepStrictEqual(once, {
   'a/.epiphany/meta.jsonl': [line(path.join(PROJ, 'a', 'x.jpg'), 1), line(path.join(PROJ, 'a', 'y.png'), 2), '{', ''].join('\n'), // garbage kept
   ...b,
   c: null, 'c/x.jpg': 'x', 'c/y.png': 'y', 'c/.epiphany': null, 'c/.epiphany/x.jpg.json': '{}',
-  'c/.epiphany/meta.jsonl': [line(path.join(PROJ, 'c', 'x.jpg'), 1), line(path.join(PROJ, 'c', 'y.png'), 2)].join('\n'),
+  'c/.epiphany/meta.jsonl': [line(path.join(PROJ, 'c', 'x.jpg'), 1), line(path.join(PROJ, 'c', 'y.png'), 2), ''].join('\n'),
   d: null, 'd/new.jpg': 'n', 'd/old.jpg': 'o', 'd/.epiphany': null,
-  'd/.epiphany/meta.jsonl': line(path.join(PROJ, 'd', 'new.jpg'), 3) + '\n' + line(path.join(PROJ, 'd', 'old.jpg'), 4) + '\n', // merged
+  'd/.epiphany/meta.jsonl': line(path.join(PROJ, 'd', 'old.jpg'), 4) + '\n' + line(path.join(PROJ, 'd', 'new.jpg'), 3) + '\n', // merged
+  e: null, 'e/x.jpg': 'x', 'e/.epiphany': null,
+  'e/.epiphany/meta.jsonl': line(e('x.jpg'), 5) + '\n' + line(e('new.jpg'), 6) + '\n', // the record, not the placeholder
 })
 migrate(PROJ)
 assert.deepStrictEqual(tree(), once)
