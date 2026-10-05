@@ -281,15 +281,32 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
 // Toolbar button: a page URL, handed to gallery-dl. Pulls go one at a time, in the order they came (the extension sends one at a
 // time too: the rest wait in its Next).
 let pulling = Promise.resolve()
-// Ctrl+V on the page: every web address on the clipboard is pulled, as the extension's button would. A copied image carries its own.
-// Electron's clipboard is the W3C one: async, and HTML only through read().
-const paste = async () => {
-  const text = await clipboard.readText(), shared = share.read(text)
+// Ctrl+V on the page, or text dropped on it ({ text, html }): every web address in it is pulled, as the extension's button would; a
+// share line is imported. A copied image carries its own. Electron's clipboard is the W3C one: async, and HTML only through read().
+const paste = async dropped => {
+  const text = dropped?.text ?? await clipboard.readText(), shared = share.read(text)
   if (shared.length) return shared.forEach(s => importShared(s).catch(e => note(e.message, !e.quiet)))
-  const html = async () => (await (await clipboard.read()).find(i => i.types.includes('text/html'))?.getType('text/html'))?.text() ?? ''
+  const html = async () => dropped ? dropped.html : (await (await clipboard.read()).find(i => i.types.includes('text/html'))?.getType('text/html'))?.text() ?? ''
   const urls = text.match(/https?:\/\/[^\s"'<>，。、；！？）]+/g)?.map(u => u.replace(/[.,;:!?)]+$/, '')) ?? (await html()).match(/(?<=<img[^>]+src=")[^"]+/g)?.map(u => u.replace(/&amp;/g, '&'))
   if (!urls) return note('No link to pull')
   for (const page of new Set(urls)) pull({ page }).catch(e => note(e.message, !e.quiet))
+}
+// Pictures dropped from the file manager, or the pictures in a dropped folder (not its subfolders): copied into the project, then
+// as a right-click save is (save), each looked up as it lands. Its page: where it was, as a file: URL.
+const PICTURE = /\.(jpe?g|png|webp|gif|avif|bmp)$/i
+const importFiles = paths => {
+  const d = dir(), s = settings()
+  const files = paths.flatMap(p => fs.statSync(p).isDirectory() ? fs.readdirSync(p).map(f => path.join(p, f)) : [p])
+    .filter(f => PICTURE.test(f) && fs.statSync(f).isFile() && path.dirname(f) !== d) // one of the project's own: there already
+  if (!files.length) return note('No pictures there')
+  if (!ethereal()) for (const f of files) {
+    let name = path.basename(f)
+    for (let k = 1; fs.existsSync(path.join(d, name)); k++) name = `${k}_${path.basename(f)}`
+    fs.copyFileSync(f, path.join(d, name))
+    const item = record({ file: path.join(d, name), src: pathToFileURL(f).href, page: pathToFileURL(f).href, time: new Date().toISOString() }, s.project)
+    if (s.lookup) lookSoon(item)
+  }
+  note(`${files.length} imported`)
 }
 // A shared picture (share.js): pulled as its sharer got it, then what they wrote by hand, over what the lookups found.
 const importShared = async s => {
@@ -357,6 +374,7 @@ async function pullOne({ page, range: r }, stop = {}, tick = () => {}) { // r: w
   if (looking?.stopped) looking = null // lookups stopped by their ✕ stay so to the end of the pull (lookSoon)
   items.looked = lookups // a shared picture's own fields go on once these are done
   if (stop.asked) throw Object.assign(new Error(items.length ? `Stopped, ${items.length} kept` : 'Stopped'), { quiet: true })
+  if (failed && !items.length && /Unsupported URL/.test(failed.message)) throw new Error(`Can't pull from ${new URL(page).host}`) // no site gallery-dl knows
   if (failed) throw items.length ? new Error(`${items.length} kept, then: ${failed.message}`) : failed
   if (!items.length) throw new Error('Nothing new from ' + new URL(page).host)
   return items
@@ -609,7 +627,7 @@ const installGdl = async () => {
 }
 
 const HANDLERS = { list, projects, newProject, getSettings: settings, setSettings: v => { writeJson(SETTINGS, v); if (!v.aliases !== !aliasing()) useAliases(v.aliases) }, profiles: () => PROFILES, getCaption, setCaption, setField, open, editTemplate, templateInfo, resetTemplate,
-  capybara, lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, share: shareItem,
+  capybara, lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, importFiles, share: shareItem,
   checkUpdate, update, instruments, instrumentList, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
   tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved

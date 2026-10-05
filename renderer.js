@@ -95,6 +95,19 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape' && sel.size) { sel.clear(); drawSel() }
   if ((e.ctrlKey || e.metaKey) && e.key === 'v') api.paste() // the clipboard's links, pulled (main.js)
 })
+// Dropped on the window: files from the file manager are imported, text (a link, a share line) goes as Ctrl+V's would (main.js). A
+// picture dragged within the page is no drop; without preventDefault, Chromium opens a dropped file in the app's place.
+let dragging = false
+addEventListener('dragstart', () => dragging = true)
+addEventListener('dragend', () => dragging = false)
+addEventListener('dragover', e => e.preventDefault())
+addEventListener('drop', e => {
+  e.preventDefault()
+  if (dragging) return
+  const paths = [...e.dataTransfer.files].map(f => api.pathOf(f)).filter(Boolean) // a browser's picture can come as a file with no path: its link then
+  if (paths.length) return api.importFiles(paths)
+  api.paste({ text: e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list'), html: e.dataTransfer.getData('text/html') })
+})
 selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
 selUI.querySelector('.lookup').onclick = () => api.lookupAll(items.filter(i => sel.has(i.file))) // booru-pulled ones just re-render their caption
 selUI.querySelector('.tag').onclick = () => api.tag(items.filter(i => sel.has(i.file)))

@@ -9,6 +9,7 @@ import assert from 'assert'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { pathToFileURL } from 'url'
 
 const root = path.join(import.meta.dirname, '..'), args = process.argv.slice(2)
 const packed = args.includes('dist'), models = args.find(a => a !== 'dist')
@@ -136,6 +137,12 @@ step('an instrument: statistics installed, its page drawn from the library, remo
   await js(`location.hash = '#instruments'`); await until(`$('#instruments [data-act=statistics]')`, 'its row')
   await js(`$('#instruments [data-act=statistics]').click()`); await until(`!s.statistics && $('#settings aside a[href="#statistics"]').hidden`, 'removed')
   await js(`location.hash = '#lobby'`)
+})
+step('a picture dropped from the file manager is imported, its page where it was', async () => {
+  const file = path.join(import.meta.dirname, 'half.webp')
+  for (const type of ['dragEnter', 'dragOver', 'drop']) await send('Input.dispatchDragEvent', { type, x: 400, y: 400, data: { items: [], files: [file], dragOperationsMask: 1 } })
+  await until(`items.length === 5`, 'imported')
+  assert.equal(await js(`return items.find(i => i.file.endsWith('half.webp'))?.page`), pathToFileURL(file).href)
 })
 step('local server: only the extension, only web URLs', async () => {
   const post = (body, headers = {}) => fetch(`http://127.0.0.1:${server}/`, { method: 'POST', body: JSON.stringify(body), headers })
