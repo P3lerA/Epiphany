@@ -230,7 +230,47 @@ $('.search .clear-q').onclick = () => { search.value = ''; search.dispatchEvent(
 const drawScope = () => api.searchSites().then(names => {
   scope.innerHTML = '<option value="">local</option>' + [s.engine, ...names.filter(n => s.sites.includes(n) && n !== s.engine)].map(n => `<option>${n}</option>`).join('')
 })
-search.onkeydown = e => { if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {}) }
+// A word in Japanese, Chinese or Korean being typed (初音, 双马尾): danbooru's tags for it over the box, most used first (main.js
+// tagsFor); local, only the ones in the library. Arrows and Enter, or a click, put one in the word's place.
+const saidUI = $('#said'), CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+let saying = 0, sayHi = -1, sayAfter
+const sayTake = tag => {
+  search.value = [...search.value.split(',').slice(0, -1).map(t => t.trim()), tag.replace(/_/g, ' ')].join(', ')
+  saidUI.hidePopover()
+  search.dispatchEvent(new Event('input'))
+}
+const askSaid = () => {
+  const word = search.value.split(',').at(-1).trim(), n = ++saying
+  if (!CJK.test(word)) return saidUI.hidePopover()
+  api.tagsFor(word).then(list => {
+    if (n !== saying) return // typed on meanwhile
+    const have = !scope.value && new Set(items.flatMap(namesOf).map(x => x.replace(/ /g, '_')))
+    list = list.filter(c => !have || have.has(c.tag)).slice(0, 8)
+    sayHi = -1
+    saidUI.replaceChildren(...list.map(({ tag, said }) => {
+      const li = document.createElement('li')
+      li.append(tag.replace(/_/g, ' '), Object.assign(document.createElement('small'), { textContent: said }))
+      li.onmousedown = e => { e.preventDefault(); sayTake(tag) } // the box keeps the focus
+      li.dataset.tag = tag
+      return li
+    }))
+    saidUI.togglePopover(!!list.length && document.activeElement === search)
+  })
+}
+search.addEventListener('input', e => { clearTimeout(sayAfter); if (!e.isComposing) sayAfter = setTimeout(askSaid, 200) })
+search.addEventListener('compositionend', askSaid) // an IME's word, committed
+search.addEventListener('blur', () => saidUI.hidePopover())
+scope.addEventListener('change', askSaid)
+search.onkeydown = e => {
+  const li = saidUI.matches(':popover-open') ? saidUI.children : []
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && li.length) {
+    e.preventDefault()
+    sayHi = e.key === 'ArrowDown' ? Math.min(sayHi + 1, li.length - 1) : Math.max(sayHi - 1, -1)
+    ;[...li].forEach((x, i) => x.classList.toggle('on', i === sayHi))
+  } else if (e.key === 'Enter' && sayHi >= 0) { e.preventDefault(); sayTake(li[sayHi].dataset.tag) }
+  else if (e.key === 'Escape' && li.length) { e.stopPropagation(); saidUI.hidePopover() }
+  else if (e.key === 'Enter' && scope.value && search.value.trim()) api.search(scope.value, search.value.trim()).catch(() => {})
+}
 const drawInputs = () => filters.querySelectorAll('input').forEach(i => i.checked = F[i.name])
 drawInputs()
 // A segment's choice clicked again goes off: none chosen means any (piles: by tags). Choosing a kind of pile shows the piles.

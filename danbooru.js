@@ -1,5 +1,5 @@
 // What danbooru knows about tags, kept in HOME/cache: what a tag means (its wiki), old names for current ones (its alias table),
-// and whose an account elsewhere is (its artists' pages). And how Epiphany introduces itself to the sites it asks (UA).
+// whose an account elsewhere is (its artists' pages), and the tags a word in another language names (their other names). And how Epiphany introduces itself to the sites it asks (UA).
 const fs = require('fs')
 const path = require('path')
 const UA = { headers: { 'User-Agent': 'Epiphany/0.1' } }
@@ -75,5 +75,9 @@ module.exports = ({ home, readJson, settings }) => {
     fs.mkdirSync(path.dirname(ARTISTS), { recursive: true }); fs.writeFileSync(ARTISTS, JSON.stringify(artists))
     return artists[url]
   }
-  return { UA, pullWikis, tagWiki, useAliases, renamed, aliasing: () => alias !== null, artistOf }
+  // The tags a word in another language names: danbooru's autocomplete matches their other names too (初音: hatsune_miku, 双马尾:
+  // twintails), most used first. [{ tag, said }], said the name it matched; none when danbooru can't be reached.
+  const tagsFor = q => fetch(`https://danbooru.donmai.us/autocomplete.json?${new URLSearchParams({ 'search[query]': q, 'search[type]': 'tag_query', limit: 20 })}`,
+    { signal: AbortSignal.timeout(5000), ...UA }).then(r => r.ok ? r.json() : []).then(l => l.map(x => ({ tag: x.value, said: x.antecedent ?? '' })), () => [])
+  return { UA, pullWikis, tagWiki, useAliases, renamed, aliasing: () => alias !== null, artistOf, tagsFor }
 }

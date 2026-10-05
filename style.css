@@ -113,12 +113,12 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 @media (prefers-reduced-transparency: no-preference) {
   .glass { --ink: color-mix(in srgb, var(--fg) 75%, var(--muted)) }
   .glass .fab { --surface: var(--glass); --active: var(--platter) }
-  .glass #edit > * { background-color: var(--glass); --active: var(--platter) }
+  .glass :is(#edit > *, #said) { background-color: var(--glass); --active: var(--platter) }
   .glass .piles-toggle::before { background: var(--thumb); box-shadow: var(--thumb-edge) }
   :where(.glass) .fab > *, :where(.glass) .fab select, :where(.glass) .fab select::picker-icon, :where(.glass) .piles-toggle svg { color: var(--ink) }
-  .glass #edit { color: var(--ink) } /* not :where: #edit's own color: inherit would win; a picked name sets its own */
+  .glass :is(#edit, #said) { color: var(--ink) } /* not :where: #edit's own color: inherit would win; a picked name sets its own */
   :where(.glass) :is(.fab, #edit) input::placeholder { color: var(--ink); opacity: .75 }
-  .glass .fab > *, .glass #edit > * { border-color: transparent; background-image: var(--rim, none); background-size: 100% 100%; backdrop-filter: blur(2px) var(--lens,) saturate(1.6) brightness(1.04); box-shadow: 0 6px 18px rgb(0 0 0 / .14), 0 1px 3px rgb(0 0 0 / .1) }
+  .glass .fab > *, .glass #edit > *, .glass #said { border-color: transparent; background-image: var(--rim, none); background-size: 100% 100%; backdrop-filter: blur(2px) var(--lens,) saturate(1.6) brightness(1.04); box-shadow: 0 6px 18px rgb(0 0 0 / .14), 0 1px 3px rgb(0 0 0 / .1) }
 }
 
 /* Native popover: light dismiss and Esc for free; opens above its button, out of it as the lists do (::picker below). */
@@ -144,8 +144,12 @@ body:where(:has(#settings :target)) .fab a, body:where(:has(#filters:popover-ope
 #edit ul { position: absolute; top: calc(100% + .25rem); left: 0; right: 0; margin: 0; padding: .25rem; list-style: none; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
 #edit.up ul { top: auto; bottom: calc(100% + .25rem) } /* opened low: the list goes above */
 #edit ul:empty { display: none }
-#edit li { padding: .35rem .75rem; border-radius: 8px; cursor: pointer }
-#edit li:hover, #edit li.on { background: var(--active); color: var(--fg) }
+:is(#edit, #said) li { padding: .35rem .75rem; border-radius: 8px; cursor: pointer }
+:is(#edit, #said) li:hover, :is(#edit, #said) li.on { background: var(--active); color: var(--fg) }
+/* The search's names for a word in another language (renderer.js): Edit's list, over the box, as wide. */
+.fab .search { anchor-name: --search }
+#said { position-anchor: --search; inset: auto; bottom: anchor(top); left: anchor(left); width: anchor-size(width); margin: 0 0 .5rem; padding: .25rem; list-style: none; color: inherit; font-weight: 500; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .14) }
+#said small { margin-left: .5rem; font-weight: 400; color: var(--muted) } /* the name it matched */
 .seg { display: flex; gap: 2px; padding: 2px; background: var(--field); border: 1px solid var(--rule); border-radius: 6px }
 .seg button { flex: 1; padding: .25rem .5rem; border: none; border-radius: 4px; background: none; color: var(--muted); font-size: .85rem }
 .seg button:hover { color: var(--fg) }

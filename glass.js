@@ -52,7 +52,7 @@ const lens = (el, n) => {
   el.style.setProperty('--lens', `url(#lens${n})`)
   el.style.setProperty('--rim', `url(${rim})`)
 }
-const pieces = [...$('.fab').children, ...$('#edit').children] // Edit's field and names: drawn as they show (hidden, no size)
+const pieces = [...$('.fab').children, ...$('#edit').children, $('#said')] // Edit's field and names, the search's: drawn as they show (hidden, no size)
 const reshaped = new ResizeObserver(l => l.forEach(e => lens(e.target, pieces.indexOf(e.target))))
 pieces.forEach(p => reshaped.observe(p))
 // Glass turned on: drawn now (off, nothing is drawn as pieces change size).

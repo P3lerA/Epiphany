@@ -57,7 +57,7 @@ const editTemplate = () => {
 const templateInfo = () => ({ text: profile().caption.split(',').map(x => x.trim()).filter(Boolean).join(', '), custom: template() != null })
 const resetTemplate = () => fs.existsSync(templateFile()) && shell.trashItem(templateFile())
 const gallery = require('./gdl')(HOME), { gdl, kill, oauth } = gallery
-const { UA, pullWikis, tagWiki, useAliases, renamed, aliasing, artistOf } = require('./danbooru')({ home: HOME, readJson, settings })
+const { UA, pullWikis, tagWiki, useAliases, renamed, aliasing, artistOf, tagsFor } = require('./danbooru')({ home: HOME, readJson, settings })
 const GDL = gallery.CONFIG // site credentials live here, where gallery-dl reads them
 const PROJ = path.join(HOME, 'project')
 
@@ -643,7 +643,7 @@ const HANDLERS = { list, projects, newProject, getSettings: settings, setSetting
   capybara, lookup: relookup, lookupAll, pick, projectMenu, searchSites: () => Object.keys(SEARCH), search, tagMenu, menu, quoteSources: () => quotes.sources, quote: () => quotes.quote(settings().quote), getCreds, setCred, oauth, stopTask, paste, importFiles, share: shareItem,
   checkUpdate, update, instruments, instrumentList, exportExtension, installGdl, export: exportItems,
   safe: () => app.commandLine.hasSwitch('safe'), // launched with -safe (or --safe)
-  tagWiki, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
+  tagWiki, tagsFor, tag, installTagger, removeTagger: tagger.remove, devtools: () => win.webContents.toggleDevTools(), restart: () => { app.relaunch(); app.quitting = true; app.quit() } } // debug mode; quit, not exit, so the window's bounds are saved
 for (const [k, f] of Object.entries(HANDLERS)) ipcMain.handle(k, (_, ...a) => f(...a))
 ipcMain.on('theme', (_, t, bar) => { nativeTheme.themeSource = t; if (!MAC) win?.setTitleBarOverlay(bar) }) // native bits (select popups, title bar) follow nativeTheme, not our CSS
 
