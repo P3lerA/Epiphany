@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, Menu, shell, nativeImage, dialog, nativeThe
 const http = require('http')
 const fs = require('fs')
 const path = require('path')
-const { pathToFileURL } = require('url')
+const { pathToFileURL, fileURLToPath } = require('url')
 const crypto = require('crypto')
 const { execFile } = require('child_process')
 const { PROFILES, caption, exported, tagLine, quality } = require('./profiles')
@@ -306,13 +306,15 @@ const lookup = async (j, file, say = () => {}) => { // say: the step it is on, f
 // Toolbar button: a page URL, handed to gallery-dl. Pulls go one at a time, in the order they came (the extension sends one at a
 // time too: the rest wait in its Next).
 let pulling = Promise.resolve()
-// Ctrl+V on the page, or text dropped on it ({ text, html }): every web address in it is pulled, as the extension's button would; a
-// share line is imported. A copied image carries its own. Electron's clipboard is the W3C one: async, and HTML only through read().
-const paste = async dropped => {
-  const text = dropped?.text ?? await clipboard.readText(), shared = share.read(text)
+// Text pasted on the page (Ctrl+V) or dropped on it ({ text, html }, renderer.js bring): a share line is imported; a path or a file:
+// URL a line, the file manager's (Copy as path quotes it), as its files dropped would be; else every web address in it is pulled, as
+// the extension's button would. A copied image carries its own.
+const paste = ({ text, html }) => {
+  const shared = share.read(text)
   if (shared.length) return shared.forEach(s => importShared(s).catch(e => note(e.message, !e.quiet)))
-  const html = async () => dropped ? dropped.html : (await (await clipboard.read()).find(i => i.types.includes('text/html'))?.getType('text/html'))?.text() ?? ''
-  const urls = text.match(/https?:\/\/[^\s"'<>，。、；！？）]+/g)?.map(u => u.replace(/[.,;:!?)]+$/, '')) ?? (await html()).match(/(?<=<img[^>]+src=")[^"]+/g)?.map(u => u.replace(/&amp;/g, '&'))
+  const local = text.split(/\r?\n/).map(l => l.trim().replace(/^"(.*)"$/, '$1')).map(l => /^file:\/\//i.test(l) ? fileURLToPath(l) : l).filter(l => path.isAbsolute(l) && fs.existsSync(l))
+  if (local.length) return importFiles(local)
+  const urls = text.match(/https?:\/\/[^\s"'<>，。、；！？）]+/g)?.map(u => u.replace(/[.,;:!?)]+$/, '')) ?? html.match(/(?<=<img[^>]+src=")[^"]+/g)?.map(u => u.replace(/&amp;/g, '&'))
   if (!urls) return note('No link to pull')
   for (const page of new Set(urls)) pull({ page }).catch(e => note(e.message, !e.quiet))
 }

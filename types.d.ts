@@ -80,7 +80,7 @@ interface Api {
   onProjectRemoved(cb: (name: string) => void): void
   onTasks(cb: (running: { id: number | string; text: string; stop: boolean; anim?: string }[]) => void): void // every task's current line, oldest first; id: a string for the extension's
   stopTask(id: number | string): Promise<void> // a task with stop: true
-  paste(dropped?: { text: string; html: string }): Promise<void> // pulls the clipboard's (or the dropped text's) web addresses, or takes in shared pictures (share.js)
+  paste(text: { text: string; html: string }): Promise<void> // pasted or dropped text: takes in shared pictures (share.js), imports the files a path names, or pulls its web addresses
   importFiles(paths: string[]): Promise<void> // pictures dropped from the file manager
   share(item: Item): Promise<void> // the picture's share line, onto the clipboard
   onNote(cb: (note: { text: string; error: boolean }) => void): void

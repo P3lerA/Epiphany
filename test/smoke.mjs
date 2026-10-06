@@ -159,6 +159,11 @@ step('a picture dropped from the file manager is imported, its page where it was
   assert.equal(await js(`return items.find(i => i.file.endsWith('half.webp'))?.page`), pathToFileURL(file).href)
   assert.equal(JSON.parse(fs.readFileSync(path.join(own, 'meta.jsonl'), 'utf8').trim().split('\n').at(-1)).file, 'half.webp') // its line names it
 })
+step('a path pasted (Copy as path) is imported as the file dropped would be', async () => {
+  const dt = `const d = new DataTransfer(); d.setData('text/plain', ${JSON.stringify(`"${path.join(import.meta.dirname, 'half.webp')}"`)}); document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: d, bubbles: true }))`
+  await js(dt)
+  await until(`items.length === 6`, 'imported')
+})
 step('local server: only the extension, only web URLs', async () => {
   const post = (body, headers = {}) => fetch(`http://127.0.0.1:${server}/`, { method: 'POST', body: JSON.stringify(body), headers })
   assert.equal((await post({ page: 'https://example.com' })).status, 403)

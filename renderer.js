@@ -93,11 +93,17 @@ addEventListener('keydown', e => {
   if (dlg.open || e.target.matches?.('input, textarea')) return
   if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); if (!piling) { visible().forEach(i => sel.add(i.dataset.file)); drawSel() } } // the piles hide the grid it would select
   if (e.key === 'Escape' && sel.size) { sel.clear(); drawSel() }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'v') api.paste() // the clipboard's links, pulled (main.js)
 })
-// Dropped on the window: files from the file manager are imported, text (a link, a share line) goes as Ctrl+V's would (main.js), but
-// text dropped in a box is the box's. A picture dragged within the page is no drop; without preventDefault, Chromium opens a dropped
-// file in the app's place.
+// Dropped on the window or pasted (Ctrl+V): files from the file manager are imported (copied there, they come as the page's files,
+// every one with its path; Electron's own clipboard has only the first), text (a link, a share line, a path) goes to main.js
+// (paste). Text dropped or pasted in a box is the box's.
+const bring = d => {
+  const paths = [...d.files].map(f => api.pathOf(f)).filter(Boolean) // a browser's picture can come as a file with no path: its link then
+  if (paths.length) return api.importFiles(paths)
+  api.paste({ text: d.getData('text/plain') || d.getData('text/uri-list'), html: d.getData('text/html') })
+}
+addEventListener('paste', e => { if (!dlg.open && !e.target.matches?.('input, textarea')) bring(e.clipboardData) })
+// A picture dragged within the page is no drop; without preventDefault, Chromium opens a dropped file in the app's place.
 let dragging = false
 const theirs = e => e.target.matches?.('input, textarea') && !e.dataTransfer.types.includes('Files')
 addEventListener('dragstart', () => dragging = true)
@@ -106,10 +112,7 @@ addEventListener('dragover', e => theirs(e) || e.preventDefault()) // a box's ow
 addEventListener('drop', e => {
   if (theirs(e)) return
   e.preventDefault()
-  if (dragging) return
-  const paths = [...e.dataTransfer.files].map(f => api.pathOf(f)).filter(Boolean) // a browser's picture can come as a file with no path: its link then
-  if (paths.length) return api.importFiles(paths)
-  api.paste({ text: e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list'), html: e.dataTransfer.getData('text/html') })
+  if (!dragging) bring(e.dataTransfer)
 })
 selUI.querySelector('.clear').onclick = () => { sel.clear(); drawSel() }
 selUI.querySelector('.lookup').onclick = () => api.lookupAll(items.filter(i => sel.has(i.file))) // booru-pulled ones just re-render their caption
