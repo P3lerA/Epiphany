@@ -39,8 +39,9 @@ const sessions = new Map() // targetId -> sessionId
 const ours = async (sessionId, info) => {
   sessions.set(info.targetId, sessionId)
   await send('Runtime.enable', {}, sessionId)
-  await send('Fetch.enable', { patterns: [{ urlPattern: 'http://127.0.0.1:7676/*' }, { urlPattern: 'https://danbooru.donmai.us/*' }] }, sessionId).catch(() => {})
-  await send('Runtime.runIfWaitingForDebugger', {}, sessionId).catch(() => {})
+  // Not intercepted, it stays paused: it never reaches the app running on 7676 (the step waiting on it times out)
+  await send('Fetch.enable', { patterns: [{ urlPattern: 'http://127.0.0.1:7676/*' }, { urlPattern: 'https://danbooru.donmai.us/*' }] }, sessionId)
+    .then(() => send('Runtime.runIfWaitingForDebugger', {}, sessionId)).catch(() => {})
 }
 on('Target.attachedToTarget', p => ours(p.sessionId, p.targetInfo))
 const session = targetId => until('attached', () => sessions.get(targetId))
